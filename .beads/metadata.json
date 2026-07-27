@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "bluegull_aqi",
+  "project_id": "6530133f-5a22-47b8-ae26-91807793b62d"
+}
