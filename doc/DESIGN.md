@@ -129,6 +129,34 @@ this hasn't been explicitly confirmed yet.
   test on every push, deploy gated behind a manual trigger (`workflow_dispatch`) or
   tag push, not auto-deployed on merge, until the service is proven out.
 
+### Local development (no AWS required)
+
+**Requirement**: the proxy server must be runnable and testable entirely from a bash
+command line, manually or in CI, without ever deploying to AWS — matching how
+Plant-Tracer's Flask app runs natively against local service substitutes rather than
+through SAM/Docker emulation.
+
+- **Code structure**: the core lookup/cache logic lives in a plain Python
+  function/module, separate from the Lambda entry point (`lambda_handler.py` is a
+  thin wrapper around it). The DynamoDB client's `endpoint_url`/region come from env
+  vars, so the identical code path runs against production DynamoDB and against
+  DynamoDB Local — no separate "local mode" branch to keep in sync.
+- **Cache backend locally**: **DynamoDB Local**, not an in-memory stub — same
+  approach as Plant-Tracer's `bin/local_services.py` + vendored `DynamoDBLocal.jar`.
+  Chosen over an in-memory dict for higher fidelity (real DynamoDB semantics,
+  including the TTL behavior the production cache relies on) at the cost of needing
+  a JVM locally.
+- **Serving requests locally**: a **native runner** (Flask or plain
+  `http.server`/`wsgiref`) that calls the same core logic directly — e.g.
+  `make run-local` / `python bin/run_local.py`. Deliberately *not*
+  `sam local start-api`: that route needs Docker Desktop and is slower to iterate on,
+  and the goal here is zero AWS/Docker dependency for the everyday dev loop.
+- **Secrets locally**: the AirNow key comes from a local env var/`.env` file, not
+  Secrets Manager/SSM — nothing about local dev should require AWS credentials.
+- **CI**: starts DynamoDB Local before running tests (mirroring Plant-Tracer's
+  ci-cd.yml step), so the test suite never needs an AWS account or a deployment,
+  automatically or manually.
+
 ## Open questions (blocking or semi-blocking)
 
 - **Default data-source mode** for a fresh install (Service vs. Direct) — see above.
@@ -189,3 +217,6 @@ a readable snapshot, but it is not sync — if this repo gets a git remote, run
 - 2026-07-27 — Initial design captured from planning discussion.
 - 2026-07-27 — Renamed `docs/` to `doc/`. Initialized Beads task tracking with one
   epic per phase and issues/dependencies for every task in the phased build order.
+- 2026-07-27 — Added the local-development requirement: the proxy server must run
+  and be testable from a bash command line without ever deploying to AWS, using
+  DynamoDB Local for the cache backend and a native (non-Docker) local runner.
