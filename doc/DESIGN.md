@@ -276,7 +276,19 @@ through SAM/Docker emulation.
 
 ## Open questions (blocking or semi-blocking)
 
+- **⛔ Does AirNow's licensing permit Service mode at all?** — *gates all
+  implementation work* (`bluegull-aqi-8ef.10`, P0). Direct mode is plainly the
+  intended use: each user calls AirNow under their own key. Service mode is a
+  different relationship — our backend holds one project-owned key, caches responses,
+  and redistributes the data to end users who have no relationship with AirNow. Terms
+  written for individual API access may not cover redistribution, and may impose
+  attribution wording that has to appear in the UI rather than just the README. If
+  redistribution isn't permitted, this is an architectural finding rather than a
+  detail: Direct mode becomes the only viable path and the entire backend leaves the
+  project. Cheaper to learn before the SAM stack exists than after. Every scaffold
+  task is blocked on this review.
 - **Default data-source mode** for a fresh install (Service vs. Direct) — see above.
+  Note this is moot if the licensing review rules out Service mode.
 - **Domain name** for the backend's custom domain — need an actual registered domain
   / hosted zone to put in `template.yaml`.
 - **AWS account**: same account as Plant-Tracer, or a separate account for this
