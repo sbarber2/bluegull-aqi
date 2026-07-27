@@ -274,6 +274,114 @@ through SAM/Docker emulation.
   ci-cd.yml step), so the test suite never needs an AWS account or a deployment,
   automatically or manually.
 
+## Security & abuse resistance
+
+### Threat model
+
+The API is public and unauthenticated by design — anonymous, IP-based rate limiting,
+no accounts. That's a deliberate tradeoff, and it means the design has to assume any
+caller, not just our app.
+
+What's actually worth protecting, in priority order:
+
+1. **The AWS bill.** On a fully elastic stack this is the softest target and the one
+   with real personal consequences.
+2. **The AirNow key and its quota.** Losing it takes the whole service down and can't
+   be fixed by scaling.
+3. **User location privacy.** The most sensitive data the system touches.
+4. **Availability.** Genuinely last — this is a background widget refreshing hourly.
+   An outage means a stale AQI reading, not a broken workflow.
+
+What's *not* in the threat model, which is why the surface stays small: no user
+accounts, no credentials to steal, no writes, no stored user data, no PII beyond
+transient location. One read-only endpoint.
+
+### Denial of wallet
+
+**The primary threat on this architecture.** An attacker doesn't need to take the
+service down — Lambda, API Gateway, and on-demand DynamoDB all scale elastically,
+which means they all *bill* elastically. A sustained flood costs money at a rate
+nothing in the base design bounds. WAF's per-IP rate limiting does little against a
+botnet or a handful of cheap cloud instances, and WAF bills per request itself, so
+under attack it amplifies cost rather than capping it.
+
+Controls that actually bound the burn rate:
+
+- **Lambda reserved concurrency** — a hard ceiling on concurrent executions, and
+  therefore on cost per unit time. This is the primary circuit breaker, not merely a
+  noisy-neighbor courtesy.
+- **API Gateway stage throttling** — a hard request-rate cap, independent of WAF.
+- **AWS Budget alarms** — the difference between noticing in an hour and noticing on
+  the monthly invoice. Must exist before the first deploy.
+- **DynamoDB on-demand has no ceiling by design.** That elasticity is the point of the
+  billing mode and a liability here; the Lambda concurrency cap is what indirectly
+  bounds it.
+
+This also bears on the open AWS-account decision: sharing an account with Plant-Tracer
+means a cost attack here can disrupt that project too. Separate accounts is a
+blast-radius argument, not just bookkeeping.
+
+### Cache-cardinality attack
+
+Specific to this design, and the stampede mitigation does **not** cover it.
+
+The cache is keyed on rounded lat/long. An attacker requesting a million *distinct*
+coordinates produces a million cache misses, each triggering an upstream AirNow call —
+burning the AirNow quota (likely getting the key banned), filling DynamoDB with junk,
+and running up Lambda cost. Stale-while-revalidate plus single-flight collapses
+concurrent requests for the *same* key and does nothing here.
+
+Mitigations, cheapest first:
+
+- **Validate inputs and reject coordinates outside AirNow's coverage area** before any
+  upstream call. A request for the middle of the Pacific should cost a 400, not an
+  AirNow request.
+- **Snap to a coarse grid**, bounding total key cardinality to a finite number.
+- **Rate-limit cache misses specifically**, separately from overall request rate — the
+  stronger version, since misses are what cost money and quota.
+
+### Location privacy
+
+Not an attack — a design consequence, and much cheaper to prevent than to unwind.
+
+The service receives coordinates and logs requests, so CloudWatch logs would
+accumulate "IP X was at location Y at time Z" for the whole retention period. That is
+an inadvertent location-history database, and a poor fit for an app whose entire
+purpose is local environmental data.
+
+- **Round coordinates client-side before transmission.** AirNow resolves to the
+  nearest monitoring station regardless, so ~1km precision costs nothing in accuracy
+  and improves cache hit rates. The server never receives a precise location.
+- **Never log raw coordinates** — same discipline as the API-key redaction.
+- **The App Group cache holds the user's location history on disk.** Worth bounding
+  retention and reviewing file protection; the locations matter more than the AQI
+  values do.
+
+### Deliberately out of scope
+
+Recorded so these get re-argued rather than silently adopted:
+
+- **AWS Shield Advanced** (~$3,000/month) — absurd at this scale. Shield Standard is
+  automatic and free.
+- **User accounts / authenticated API** — already decided against; anonymous access is
+  the product choice.
+- **WAF managed rule sets** beyond rate limiting — one read-only endpoint taking two
+  numeric parameters has almost no injection surface.
+- **Multi-region, penetration testing** — not until scale justifies them.
+
+**Strong later candidate: CloudFront in front of the API.** The response is identical
+for everyone in a region and changes hourly, which is nearly an ideal CDN workload. It
+would absorb most traffic at the edge before reaching Lambda, cutting cost and attack
+surface together. Not worth the complexity pre-launch; the natural first move if scale
+materializes.
+
+### Unverified — confirm before relying on
+
+- Current minimum threshold and evaluation window for WAF rate-based rules.
+- Whether Apple's **App Attest** supports native macOS (well-established on iOS). If
+  it does, it's the real answer to "only our app may call this" — but nothing should
+  be designed around it until confirmed.
+
 ## Open questions (blocking or semi-blocking)
 
 - **⛔ Does AirNow's licensing permit Service mode at all?** — *gates all
@@ -554,6 +662,14 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-27 — Added a Security & abuse resistance section with an explicit threat
+  model. Three gaps the earlier design missed: **denial of wallet** (an elastic stack
+  bills elastically, and nothing bounded the burn rate), a **cache-cardinality
+  attack** that the stampede mitigation does not cover (distinct-key floods, not
+  same-key ones), and an inadvertent **location-history database** accumulating in
+  request logs. Also recorded what is deliberately out of scope, so it gets re-argued
+  rather than silently adopted. Filed 11 new issues, all labelled `security`
+  (`bd list --label security`); four are pre-launch blockers gating the dev deploy.
 - 2026-07-27 — Promoted the no-secrets-in-git rule from scattered implementation
   notes to a top-level policy section with a full credential inventory, named
   project-specific leak vectors (notably that AirNow passes its key as a URL query
