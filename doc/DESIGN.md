@@ -277,18 +277,45 @@ push.
 
 **Tracked metrics**
 
-| Metric | Gate | Notes |
+All latency figures are **server-side** — measured from API Gateway receiving the
+request to sending the response. Client-observed latency additionally includes DNS,
+TLS handshake, and physical distance (a California client hitting `us-east-1` pays
+~70ms of round-trip before our code runs), none of which any code change can fix.
+Client-observed latency is tracked for UX awareness — target <150ms same-region,
+<300ms cross-continent — but never gated.
+
+| Metric | Absolute ceiling | Regression gate |
 |---|---|---|
-| Warm cached round-trip (p50, p95) | 5% | The common path — most requests are cache hits |
-| Uncached round-trip, AirNow stubbed (p50, p95) | 5% | Isolates *our* overhead from AirNow's variability |
-| Lambda cold start (Init Duration, median) | ~15% | Inherently noisy; see below |
-| Throughput & error rate at 10 and 100 concurrent | 5% on p95 | The horizontal-scaling response curve |
-| Cache hit ratio under load | 5% | Catches stampede-mitigation regressions directly |
+| Warm cached round-trip | p95 < 50ms, p50 < 25ms | 5% |
+| Uncached round-trip, AirNow stubbed | p95 < 100ms | 5% |
+| Lambda cold start (Init Duration) | p50 < 600ms, investigate > 1s | ~15% |
+| p95 latency at 100 concurrent | within 2× the 10-concurrent p95 | 5% |
+| Error rate at 10 and 100 concurrent | < 0.1% | 5% |
+| Cache hit ratio under steady-state load | > 95% | 5% |
 
 Real end-to-end uncached latency (with a live AirNow call) is tracked as an
 observability metric but **not** gated — it substantially measures AirNow's
 performance, which we don't control, and gating on it would produce failures we can't
 act on.
+
+**Why both an absolute ceiling and a relative gate.** They catch different failures.
+The relative gate catches a sudden jump but is blind to the ratchet: drift 4% eleven
+times and you've doubled without ever failing a build. The absolute ceiling is what
+stops that.
+
+The justification for a *tight* cached-path ceiling is not user experience — the
+widget refreshes hourly in the background and nobody is watching a spinner. It's that
+latency is the first visible symptom of an access-pattern mistake: a `Scan` where a
+`GetItem` belongs, a synchronous call added inside the cache-hit path, serializing
+more than the current reading. Those are cheap to catch at 50ms and expensive to find
+in production. Where latency does reach the user — first launch and manual refresh —
+anything under ~500ms reads as instant, so there is ample margin.
+
+**These ceilings are component-level estimates, not measurements** (~5–10ms API
+Gateway HTTP API overhead, ~1–3ms warm invoke, ~8–15ms DynamoDB `GetItem` with a
+reused connection). The first dev-stage deploy establishes the real baseline; if
+actuals land well under the ceilings, tighten them, because a ceiling carrying 2.5×
+slack isn't doing much work.
 
 **Stubbing AirNow during load tests is mandatory, not an optimization.** Driving 100
 concurrent uncached requests at the live AirNow API would burn the project's quota and
@@ -448,6 +475,11 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-27 — Added absolute performance ceilings alongside the relative regression
+  gates (warm cached p95 < 50ms, cold start p50 < 600ms, etc.), since a relative-only
+  gate permits unbounded slow drift. Clarified that all gated latency is server-side;
+  client-observed latency is tracked but never gated. Ceilings are estimates pending
+  the first dev-stage deploy, with a task to tighten them against real numbers.
 - 2026-07-27 — **Corrected a design error**: an earlier revision listed load/perf
   testing as out of scope because the project was "single-user-scale." That was
   wrong — every App Store install polls the service hourly, so load scales with
