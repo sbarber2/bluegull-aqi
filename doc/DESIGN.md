@@ -185,6 +185,68 @@ through SAM/Docker emulation.
 6. **App Store prep** — sandbox entitlements (location, network client), privacy
    nutrition label, screenshots, review pass.
 
+## Testing strategy
+
+Coverage target: everything below the OS-integration boundary is automated; actual
+on-screen rendering, location permission prompts, and App Group data flow between two
+live processes are **not** — there is no macOS-app equivalent of an iOS simulator
+available in this workflow, so those need a manual on-device pass by whoever's
+driving the build. That gap is called out explicitly below rather than implied.
+
+### Backend service (`service/`)
+
+- **Unit**: core lookup/cache logic as plain Python functions, AirNow HTTP calls
+  stubbed (`responses`/`requests-mock`) — no live network.
+- **Integration**: cache read/write/TTL behavior tested against DynamoDB Local — real
+  DynamoDB semantics, not a mock approximation.
+- **Handler contract**: sample API Gateway HTTP API event fixtures (à la Plant-Tracer's
+  `events/event.json`) fed into the Lambda entry point, asserting on the wrapped JSON
+  response — proves the thin-handler-over-core-logic split actually holds.
+- **Template**: `sam validate`/`sam build` in CI catches infra config errors without a
+  real deploy.
+- Out of scope: AirNow's own uptime/behavior, load/perf testing (single-user-scale).
+- All of the above run with no AWS account or deployment, per the local-development
+  requirement above.
+
+### `BluegullAQIKit` (shared Swift package)
+
+Highest-leverage place for coverage, since both UI targets sit on top of it:
+
+- **Unit**: model decoding from fixture JSON; cache TTL logic with an injected fake
+  clock; Keychain round-trip (runs fine in CI on macOS runners).
+- **Contract test**: `AirNowDirectClient` and `BluegullServiceClient` fed
+  structurally-equivalent fixture payloads must decode to identical model instances —
+  verifies the "client code doesn't care which source answered" design claim instead
+  of just asserting it in prose.
+- **Networking**: both clients' networking stubbed via `URLProtocol` — no live AirNow
+  or backend calls in CI.
+- **LocationResolver**: exposed behind a protocol so tests can inject a fake
+  location/geocoder — CI can't exercise real GPS or live geocoding.
+
+### Menu bar app & widget extension
+
+Logic is pushed down into `BluegullAQIKit` wherever possible so these targets stay
+thin:
+
+- **TimelineProvider**: unit-tested by feeding it a fixture App Group cache state and
+  asserting on the produced timeline entries — doesn't require the widget to render.
+- **App Intents**: the configuration intent's `perform()` logic unit-tested directly.
+- **Visual**: SwiftUI previews across small/medium/large widget families and menu bar
+  states, for manual eyeballing. No automated visual-regression tooling planned
+  initially — would be a deliberate future addition, not default-included.
+- **CI**: `xcodebuild test` on a `macos-latest` GitHub runner covers everything above.
+- **Manual on-device smoke test** (not automatable): build and run in Xcode on a real
+  Mac at the end of Phase 3 and Phase 4 — location permission flow, both data-source
+  modes, pinned-location management, hourly refresh, and all three widget layouts
+  actually picking up what the container app wrote to the App Group cache.
+
+### CI layout
+
+Two GitHub Actions workflows, split by directory like the repo layout: one for
+`service/` (lint, pytest against DynamoDB Local, `sam validate`/`sam build` — no
+deploy), one for `mac-app/` (`xcodebuild test` on `macos-latest`). Neither requires
+an AWS account, an AWS deployment, or Docker.
+
 ## Task tracking
 
 Implementation work is tracked in [Beads](https://github.com/steveyegge/beads)
@@ -207,10 +269,11 @@ tracked as `decision`/`task` issues under the Phase 0 epic and block the downstr
 work that depends on them (e.g. the domain-name decision blocks the Route53/ACM
 template task).
 
-No Dolt remote is configured yet, so issues currently only live in this machine's
-local `.beads/embeddeddolt/`. `.beads/issues.jsonl` is auto-exported and committed as
-a readable snapshot, but it is not sync — if this repo gets a git remote, run
-`bd dolt remote add origin <url>` and `bd dolt push` for durable/cross-machine sync.
+The repo lives at [github.com/sbarber2/bluegull-aqi](https://github.com/sbarber2/bluegull-aqi)
+(public), with a Dolt remote configured against the same URL — `bd dolt push`/
+`bd dolt pull` sync issues cross-machine via `refs/dolt/data`, alongside the normal
+`main` branch. `.beads/issues.jsonl` is also auto-exported and committed as a
+human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
@@ -220,3 +283,11 @@ a readable snapshot, but it is not sync — if this repo gets a git remote, run
 - 2026-07-27 — Added the local-development requirement: the proxy server must run
   and be testable from a bash command line without ever deploying to AWS, using
   DynamoDB Local for the cache backend and a native (non-Docker) local runner.
+- 2026-07-27 — Created the GitHub repo (sbarber2/bluegull-aqi, public), pushed the
+  code, and wired a Dolt remote so Beads issues sync cross-machine.
+- 2026-07-27 — Added a Testing Strategy section covering all four deliverables, with
+  the explicit gap that on-screen/on-device behavior needs a manual smoke test since
+  no macOS-app simulator tooling is available in this workflow. Added 8 corresponding
+  Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
+  workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
+  menu bar app and widget).
