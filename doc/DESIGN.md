@@ -187,11 +187,15 @@ through SAM/Docker emulation.
 
 ## Testing strategy
 
-Coverage target: everything below the OS-integration boundary is automated; actual
-on-screen rendering, location permission prompts, and App Group data flow between two
-live processes are **not** — there is no macOS-app equivalent of an iOS simulator
-available in this workflow, so those need a manual on-device pass by whoever's
-driving the build. That gap is called out explicitly below rather than implied.
+Coverage target: automate everything that doesn't require a human to approve an OS
+permission dialog or wait out real system scheduling. There is no macOS equivalent of
+the iOS simulator, but that turns out to matter less than it first appears — widget
+*views* render headlessly, and the app *is* drivable from the command line. The
+genuinely manual residue is small and enumerated at the end of this section.
+
+The full toolchain (Xcode, `xcodebuild`, `swift`) is available locally and on GitHub's
+`macos-latest` runners, so every automated tier below runs from a bash command line
+with no GUI interaction.
 
 ### Backend service (`service/`)
 
@@ -226,26 +230,69 @@ Highest-leverage place for coverage, since both UI targets sit on top of it:
 ### Menu bar app & widget extension
 
 Logic is pushed down into `BluegullAQIKit` wherever possible so these targets stay
-thin:
+thin. What remains is tested in three tiers, ordered by value-per-unit-of-pain:
 
-- **TimelineProvider**: unit-tested by feeding it a fixture App Group cache state and
-  asserting on the produced timeline entries — doesn't require the widget to render.
-- **App Intents**: the configuration intent's `perform()` logic unit-tested directly.
-- **Visual**: SwiftUI previews across small/medium/large widget families and menu bar
-  states, for manual eyeballing. No automated visual-regression tooling planned
-  initially — would be a deliberate future addition, not default-included.
-- **CI**: `xcodebuild test` on a `macos-latest` GitHub runner covers everything above.
-- **Manual on-device smoke test** (not automatable): build and run in Xcode on a real
-  Mac at the end of Phase 3 and Phase 4 — location permission flow, both data-source
-  modes, pinned-location management, hourly refresh, and all three widget layouts
-  actually picking up what the container app wrote to the App Group cache.
+**Tier 1 — headless view rendering (highest value).** A WidgetKit widget's view is
+just a SwiftUI view that takes a timeline entry; it does not need the widget host to
+render. `ImageRenderer` (macOS 13+) rasterizes it to a PNG at any size, so the
+small/medium/large layouts are rendered from fixture entries directly in a test. Two
+uses:
+
+- *Snapshot regression tests* — golden PNGs committed to the repo and compared per
+  run. [swift-snapshot-testing](https://github.com/pointfreeco/swift-snapshot-testing)
+  supports SwiftUI on macOS and is the mature option; the dependency-free alternative
+  is a small `ImageRenderer` + PNG-comparison helper. Either way it's a test-only
+  dependency and does not ship in the App Store build.
+- *Direct visual inspection* — the same renderer can emit PNGs on demand for a human
+  (or an agent that can display images) to eyeball, without any test needing to fail
+  first.
+
+This tier catches the failure modes this widget is actually prone to: AQI 500 vs. 5
+changing the layout, a full pollutant breakdown overflowing the large widget,
+missing-data and stale-cache states, light/dark mode, and Dynamic Type sizes.
+
+**Tier 2 — XCUITest for the menu bar app.** `xcodebuild test` runs XCUITest, which
+launches the container app and drives it through the accessibility hierarchy;
+`NSStatusItem` menu bar extras are queryable. Covers settings flows, data-source mode
+toggling, and pinned-location management. Known cost: menu bar automation is finicky,
+and CI needs a logged-in GUI session plus TCC/accessibility permission for the test
+runner — the usual "passes locally, hangs in CI" trap. Budget frustration for it.
+
+**Tier 3 — driving the real widget in Notification Center** (`osascript` +
+`screencapture`). Deliberately **not** planned: it mostly exercises Apple's widget
+host rather than our code, and it's brittle. Revisit only if a bug appears that
+reproduces solely under the real host.
+
+Also unit-tested, independent of rendering:
+
+- **TimelineProvider**: fed a fixture App Group cache state, asserting on the produced
+  timeline entries.
+- **App Intents**: the configuration intent's `perform()` logic tested directly.
+
+### What stays manual
+
+Small, and genuinely not automatable:
+
+- The location permission (TCC) dialog — cannot be legitimately scripted away.
+- iCloud Keychain sync across two *physical* Macs.
+- Real WidgetKit background-refresh budget behavior, which plays out over hours of
+  system scheduling rather than in a test run.
+- App Review.
+
+*Unverified:* whether a supported CLI exists to force an installed widget to reload
+its timeline. Worth checking before relying on it; nothing in the plan currently
+depends on it.
 
 ### CI layout
 
 Two GitHub Actions workflows, split by directory like the repo layout: one for
 `service/` (lint, pytest against DynamoDB Local, `sam validate`/`sam build` — no
-deploy), one for `mac-app/` (`xcodebuild test` on `macos-latest`). Neither requires
-an AWS account, an AWS deployment, or Docker.
+deploy), one for `mac-app/` (`xcodebuild test` on `macos-latest`, covering unit,
+snapshot, and XCUITest suites). Neither requires an AWS account, an AWS deployment,
+or Docker.
+
+All of it wraps into `make` targets following Plant-Tracer's idiom — e.g.
+`make test-swift`, `make snapshots`, `make test` for everything.
 
 ## Task tracking
 
@@ -291,3 +338,11 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-27 — **Revised the above**: the "must be manual" claim was too pessimistic.
+  Widget views render headlessly via `ImageRenderer` (no widget host needed), and
+  XCUITest can drive the menu bar app from the command line — so snapshot regression
+  testing and UI automation are both in scope. The two manual checkpoints shrank to
+  the genuine residue: TCC permission dialogs, cross-Mac iCloud Keychain sync, and
+  real background-refresh scheduling. Added 5 Beads tasks (ImageRenderer harness,
+  snapshot tests, XCUITest suite, Makefile test targets, and a low-priority
+  investigation of the unverified widget-reload CLI question).
