@@ -74,13 +74,26 @@ removes it. Rotation, not deletion, is the only real remedy once it happens.
 A rule stated in a doc is not enforcement. Three layers, in order of what actually
 catches things:
 
-1. **GitHub push protection + secret scanning** — free on public repos, blocks a push
-   containing a recognized credential pattern before it reaches the remote. Enable in
-   repo settings.
+1. **GitHub push protection + secret scanning** — ✅ verified enabled (GitHub turns
+   both on by default for public repos). Blocks a push containing a *recognized*
+   credential pattern before it reaches the remote.
 2. **gitleaks as a pre-commit hook** — catches it locally before a commit exists,
    which is the cheapest possible point to catch it.
 3. **gitleaks in CI** — backstop for commits made without the hook installed (fresh
    clones, other machines, other agents).
+
+⚠️ **Pattern scanners will not catch the AirNow key on their own.** Push protection
+and gitleaks' default rules key on distinctive credential formats — AWS `AKIA…`,
+GitHub `ghp_…`, Stripe `sk_live_…`. The AirNow key carries no such prefix; like most
+government API keys it's a generic token, indistinguishable from any other opaque
+string. So layer 1 protects the AWS and Apple credentials in the inventory above but
+**not this project's primary secret**.
+
+Closing that hole requires a **custom gitleaks rule keyed on context rather than
+token shape**: assignments to `AIRNOW_API_KEY`/`API_KEY`, and high-entropy tokens
+appearing near `airnowapi.org`. Without it, the enforcement stack has a gap exactly
+where it matters most — which is precisely why layers 2 and 3 are not redundant with
+layer 1.
 
 `.gitignore` carries secret filename patterns as a safety net, but it only helps for
 files someone remembered to name conventionally. It is the weakest layer, not the
