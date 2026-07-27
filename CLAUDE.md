@@ -58,6 +58,23 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 <!-- END BEADS INTEGRATION -->
 
 
+## Secrets — hard rule
+
+**Never commit a credential, API key, token, certificate, or private key to this
+repository.** It is public; a leaked key in git history is leaked permanently, and
+rotation — not a follow-up deletion commit — is the only remedy.
+
+- Local secrets go in `.env` (gitignored). Commit `.env.example` with placeholders.
+- The service's AirNow key lives in SSM Parameter Store / Secrets Manager, resolved at
+  deploy time. Never in `template.yaml`, never in `samconfig.toml` overrides.
+- **AirNow passes its key as a URL query parameter** — redact request URLs before
+  logging them, or the key lands in CloudWatch Logs. This is the likeliest leak in
+  this project and it looks exactly like normal debug logging.
+- `.beads/issues.jsonl` is committed — never paste a key into a `bd` issue.
+- If a secret does reach the repo: rotate it first, then clean history.
+
+Full policy, inventory, and enforcement layers: `doc/DESIGN.md` § Secrets & credentials.
+
 ## Build & Test
 
 _Add your build and test commands here_

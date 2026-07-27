@@ -125,3 +125,20 @@ bd prime                # Refresh Beads context
 
 **Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
 <!-- END BEADS CODEX SETUP -->
+
+## Secrets — hard rule
+
+**Never commit a credential, API key, token, certificate, or private key to this
+repository.** It is public; a leaked key in git history is leaked permanently, and
+rotation — not a follow-up deletion commit — is the only remedy.
+
+- Local secrets go in `.env` (gitignored). Commit `.env.example` with placeholders.
+- The service's AirNow key lives in SSM Parameter Store / Secrets Manager, resolved at
+  deploy time. Never in `template.yaml`, never in `samconfig.toml` overrides.
+- **AirNow passes its key as a URL query parameter** — redact request URLs before
+  logging them, or the key lands in CloudWatch Logs. This is the likeliest leak in
+  this project and it looks exactly like normal debug logging.
+- `.beads/issues.jsonl` is committed — never paste a key into a `bd` issue.
+- If a secret does reach the repo: rotate it first, then clean history.
+
+Full policy, inventory, and enforcement layers: `doc/DESIGN.md` § Secrets & credentials.

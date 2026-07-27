@@ -1,4 +1,38 @@
 
+# ---------------------------------------------------------------------------
+# Secrets and credentials — NEVER commit these.
+# See doc/DESIGN.md "Secrets & credentials" for the full policy and inventory.
+# This list is a safety net, not the control: gitleaks (pre-commit + CI) and
+# GitHub push protection are what actually enforce the rule.
+# ---------------------------------------------------------------------------
+
+# Local environment files (commit .env.example instead, with placeholder values)
+.env
+.env.*
+!.env.example
+
+# Keys, certificates, provisioning profiles
+*.pem
+*.key
+*.p12
+*.pfx
+*.cer
+*.der
+*.jks
+*.keystore
+*.mobileprovision
+*.provisionprofile
+
+# Cloud / service credentials
+.aws/
+credentials.json
+secrets.json
+*-credentials.json
+*_rsa
+*_dsa
+*_ed25519
+*_ecdsa
+
 # Beads / Dolt files (added by bd init)
 .dolt/
 *.db

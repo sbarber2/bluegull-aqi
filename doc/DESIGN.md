@@ -36,6 +36,60 @@ GitHub Actions CI/CD, Route53/ACM custom domain.
 | AWS account | Existing AWS account will be used (same pattern as Plant-Tracer or a separate account — TBD which). AirNow API key for the service **not yet registered**. |
 | Apple Developer account | Already enrolled; bundle IDs / App Group still need to be created. |
 
+## Secrets & credentials
+
+**No credential, API key, token, certificate, or private key is ever committed to
+this repository.** This is a hard invariant, not a preference — the repo is public,
+and a leaked key in git history is leaked permanently even after a follow-up commit
+removes it. Rotation, not deletion, is the only real remedy once it happens.
+
+### Inventory — every secret in this project and where it lives
+
+| Secret | Home | Never |
+|---|---|---|
+| Service's AirNow API key | SSM Parameter Store (SecureString) or Secrets Manager, read by the Lambda execution role | In source, in `template.yaml`, or as a CloudFormation parameter default |
+| User's own AirNow API key (direct mode) | iCloud Keychain on the user's Mac | Bundled in the app binary or in any repo file |
+| Local dev AirNow key | `.env`, gitignored; `.env.example` committed with placeholders only | Committed, even "temporarily" |
+| AWS deploy credentials | GitHub Actions OIDC role assumption — no long-lived keys exist to leak | Long-lived access keys in GitHub secrets or `~/.aws` in CI |
+| Apple signing cert / App Store Connect API key | GitHub Actions encrypted secrets, imported to a temporary keychain at build time | Committed, or left in a persistent CI keychain |
+
+### Project-specific leak vectors worth naming
+
+- **AirNow passes its key as a URL query parameter** (`...&API_KEY=...`). Logging the
+  request URL therefore writes the key straight into CloudWatch Logs, where it is
+  readable by anyone with log access and persists for the retention period. Request
+  URLs must be redacted before logging. This is the single most likely way this
+  project leaks a key, and it looks like ordinary debug logging.
+- **Error responses and stack traces** must not echo the upstream URL or request
+  headers back to clients.
+- **`samconfig.toml` is committed** (following Plant-Tracer). Secrets must never
+  appear in its `parameter_overrides`; the template resolves them via SSM dynamic
+  references at deploy time instead.
+- **`.beads/issues.jsonl` is committed.** An API key pasted into a `bd` issue
+  description lands in git like any other file. Issue text is not a scratchpad.
+- **The design doc and README** — use obvious placeholders, never a real-looking key.
+
+### Enforcement
+
+A rule stated in a doc is not enforcement. Three layers, in order of what actually
+catches things:
+
+1. **GitHub push protection + secret scanning** — free on public repos, blocks a push
+   containing a recognized credential pattern before it reaches the remote. Enable in
+   repo settings.
+2. **gitleaks as a pre-commit hook** — catches it locally before a commit exists,
+   which is the cheapest possible point to catch it.
+3. **gitleaks in CI** — backstop for commits made without the hook installed (fresh
+   clones, other machines, other agents).
+
+`.gitignore` carries secret filename patterns as a safety net, but it only helps for
+files someone remembered to name conventionally. It is the weakest layer, not the
+control.
+
+If a secret does reach the repo: **rotate it first**, then clean history. Rewriting
+history without rotating is theater — assume anything pushed to a public repo was
+scraped within minutes.
+
 ## Architecture
 
 ### Repo layout
@@ -475,6 +529,12 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-27 — Promoted the no-secrets-in-git rule from scattered implementation
+  notes to a top-level policy section with a full credential inventory, named
+  project-specific leak vectors (notably that AirNow passes its key as a URL query
+  parameter, so unredacted request logging leaks it into CloudWatch), and three
+  enforcement layers. Added secret patterns to `.gitignore`, mirrored the rule into
+  `CLAUDE.md`/`AGENTS.md` so agent sessions inherit it, and filed 6 Beads tasks.
 - 2026-07-27 — Added absolute performance ceilings alongside the relative regression
   gates (warm cached p95 < 50ms, cold start p50 < 600ms, etc.), since a relative-only
   gate permits unbounded slow drift. Clarified that all gated latency is server-side;
