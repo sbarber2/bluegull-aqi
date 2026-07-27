@@ -123,11 +123,61 @@ this hasn't been explicitly confirmed yet.
 - **Custom domain**: Route53 hosted zone + ACM cert, same pattern as
   `planttracer.com` in Plant-Tracer's `template.yaml`. Needs an actual domain name
   (see Open Questions).
+- **Scaling**: see the dedicated section below — the service must scale horizontally
+  as installs grow, and that constrains the cache design, not just the infra config.
 - **CI/CD**: GitHub Actions mirroring Plant-Tracer's `ci-cd.yml` (lint, pytest,
   `sam validate`/`sam build`), plus a deploy workflow. Plant-Tracer's deploy workflows
   are currently manual/off (`deploy-*.yml-OFF`) — starting the same way here: build +
   test on every push, deploy gated behind a manual trigger (`workflow_dispatch`) or
   tag push, not auto-deployed on merge, until the service is proven out.
+
+### Scaling & performance
+
+**Requirement**: the service must scale horizontally as the number of clients grows.
+Every App Store install polls hourly, so load is a function of install count — this is
+not a single-user service, and performance is a design constraint rather than a
+post-hoc concern.
+
+**The dominant risk is the cache stampede, not Lambda capacity.** Lambda scales out
+on its own; DynamoDB in on-demand mode does too. What doesn't scale for free is the
+upstream: when a cache entry expires and N clients ask for the same location at the
+same moment, a naive design fires N concurrent AirNow calls. That is slow for clients
+and a direct route to getting the project's AirNow key throttled or banned.
+
+Mitigation, in two layers:
+
+- **Stale-while-revalidate + single-flight.** On a miss against an expired entry,
+  serve the stale value immediately, and let exactly one request win a DynamoDB
+  conditional-write lock to refresh it in the background. Clients get a warm-path
+  response almost always, and AirNow sees at most one call per location per TTL
+  regardless of concurrency. Cold-start-of-the-world (no entry at all) still blocks,
+  but that's a once-per-location event.
+- **Client-side refresh jitter.** Hourly refresh means every install would otherwise
+  wake at the top of the hour and synchronize into a spike. Each install derives a
+  stable offset within the hour (from a per-install value, so the interval stays
+  consistent rather than drifting) to spread load uniformly. Cache TTL should align
+  to AirNow's publish schedule rather than being a rolling hour from first request.
+
+Supporting choices:
+
+- **DynamoDB on-demand billing** — no capacity planning, scales automatically. Access
+  is keyed by location, which distributes well; a single overwhelmingly popular metro
+  is the only plausible hot-partition risk and is not a concern at expected scale.
+- **ARM64 (Graviton) Lambda** — cheaper and generally equal-or-better performance
+  than x86 for this workload.
+- **Cold start minimization** — keep the deployment package small (prefer the
+  runtime-provided `boto3` over vendoring a copy; keep dependencies light), and create
+  clients at module scope so they're built once during Init and reused across warm
+  invocations. Provisioned concurrency would eliminate cold starts entirely but bills
+  continuously; it's the escape hatch if Init Duration ever becomes user-visible, not
+  the default.
+- **Concurrency ceiling** — the account default is 1000 concurrent executions per
+  region. Worth an explicit reserved-concurrency setting so this service can't starve
+  anything else in the account (relevant if the AWS-account decision lands on sharing
+  with Plant-Tracer).
+- **Observability** — CloudWatch metrics for p50/p95 latency, error rate, concurrent
+  executions, throttles, and cache hit ratio. Cache hit ratio is the leading indicator
+  for everything else: if it drops, AirNow load and latency both rise.
 
 ### Local development (no AWS required)
 
@@ -208,9 +258,69 @@ with no GUI interaction.
   response — proves the thin-handler-over-core-logic split actually holds.
 - **Template**: `sam validate`/`sam build` in CI catches infra config errors without a
   real deploy.
-- Out of scope: AirNow's own uptime/behavior, load/perf testing (single-user-scale).
+- **Concurrency**: the stale-while-revalidate + single-flight logic tested directly
+  against DynamoDB Local — concurrent misses on the same key must produce exactly one
+  upstream call, and an expired entry must be served rather than blocked on.
+- Out of scope: AirNow's own uptime/behavior.
 - All of the above run with no AWS account or deployment, per the local-development
-  requirement above.
+  requirement above. Performance and load regression testing is a separate tier with
+  different requirements — see below.
+
+### Performance & load regression testing
+
+Performance is a tracked, gated metric, not a one-off measurement. This tier is
+deliberately separate from the functional suite above: **cold start can only be
+measured on real Lambda** (the native local runner has no Init phase at all), so
+these tests require a deployed dev stage. The "no AWS needed to test" requirement
+still holds in full for the functional suite, which remains local and runs on every
+push.
+
+**Tracked metrics**
+
+| Metric | Gate | Notes |
+|---|---|---|
+| Warm cached round-trip (p50, p95) | 5% | The common path — most requests are cache hits |
+| Uncached round-trip, AirNow stubbed (p50, p95) | 5% | Isolates *our* overhead from AirNow's variability |
+| Lambda cold start (Init Duration, median) | ~15% | Inherently noisy; see below |
+| Throughput & error rate at 10 and 100 concurrent | 5% on p95 | The horizontal-scaling response curve |
+| Cache hit ratio under load | 5% | Catches stampede-mitigation regressions directly |
+
+Real end-to-end uncached latency (with a live AirNow call) is tracked as an
+observability metric but **not** gated — it substantially measures AirNow's
+performance, which we don't control, and gating on it would produce failures we can't
+act on.
+
+**Stubbing AirNow during load tests is mandatory, not an optimization.** Driving 100
+concurrent uncached requests at the live AirNow API would burn the project's quota and
+plausibly violate its terms. The dev stage gets a test mode (env-gated, or a reserved
+synthetic location) that returns canned data in place of the upstream call.
+
+**Statistical approach.** Gates compare percentiles over N ≥ 100 samples, never single
+measurements — AWS fleet variance, DynamoDB p99 spikes, and runner noise all routinely
+exceed 5% run-to-run, so a naive single-sample comparison would produce a permanently
+red build. Cold start gets a wider band (~15%) because Init Duration variance is
+larger than the others by a good margin; holding it to 5% would flake regardless of
+sample count.
+
+**Baseline storage.** A `perf-baseline.json` committed to the repo, holding the
+metrics from the last release. Regressions therefore show up as a reviewable diff, and
+accepting an intentional regression is an explicit commit rather than a silent
+overwrite.
+
+**Cadence.** Release-gated (the actual pass/fail gate, against a deployed dev stage)
+plus nightly, so drift surfaces with a trend line instead of arriving all at once at
+release time.
+
+**Local proxy metric (no AWS).** Module import time and deployment package size are
+measurable locally with no deployment and correlate well with Init Duration. Gating
+these in the ordinary functional CI catches the most common cold-start regression —
+someone adding a heavy dependency — long before the nightly perf run does.
+
+**Tooling**: [k6](https://k6.io) for load generation. Its native threshold support
+(`http_req_duration: ['p(95)<...']`) expresses pass/fail gates directly, which maps
+onto the regression-gate requirement without much custom scripting. Cold start is read
+from the `Init Duration` field of CloudWatch Logs REPORT lines after forcing a cold
+start via fresh deploys.
 
 ### `BluegullAQIKit` (shared Swift package)
 
@@ -338,6 +448,15 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-27 — **Corrected a design error**: an earlier revision listed load/perf
+  testing as out of scope because the project was "single-user-scale." That was
+  wrong — every App Store install polls the service hourly, so load scales with
+  install count and horizontal scalability is a stated requirement. Added a Scaling &
+  Performance section (stale-while-revalidate + single-flight stampede mitigation,
+  client-side refresh jitter, on-demand DynamoDB, ARM64 Lambda, cold-start
+  minimization, CloudWatch observability) and a Performance & Load Regression Testing
+  section with gated metrics, a committed `perf-baseline.json`, and release-gated +
+  nightly cadence. Added 12 Beads tasks.
 - 2026-07-27 — **Revised the above**: the "must be manual" claim was too pessimistic.
   Widget views render headlessly via `ImageRenderer` (no widget host needed), and
   XCUITest can drive the menu bar app from the command line — so snapshot regression
