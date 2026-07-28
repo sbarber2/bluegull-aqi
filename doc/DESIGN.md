@@ -32,7 +32,7 @@ GitHub Actions CI/CD, Route53/ACM custom domain.
 | Location scope | Current location (CoreLocation) **and** user-pinned locations (zip/address, geocoded locally via `CLGeocoder`/MapKit — no backend geocoding endpoint needed). |
 | Refresh cadence | Hourly, matching AirNow's own publish cadence. |
 | Minimum macOS version | macOS 14 (Sonoma) — required for desktop WidgetKit widgets anyway. |
-| Backend custom domain | Three environments, one hosted zone. **Prod** = bare `aqi.bluegull.org`. **Dev** = `dev.aqi.bluegull.org`. **Staging** = `stage.aqi.bluegull.org`. All three are dot-subdomains of `aqi.bluegull.org`, so all three live under the single Route53 hosted zone delegated from `bluegull.org`'s existing DNS (which lives elsewhere and is untouched) — one NS delegation covers all of them, no per-environment delegation needed. Hosted zone in AWS account `843088391598`. Mirrors Plant-Tracer's `${StackName}.${BaseDomain}` pattern. |
+| Backend custom domain | Three environments, one hosted zone. **Prod** = bare `aqi.bluegull.org`. **Dev** = `dev.aqi.bluegull.org`. **Staging** = `stage.aqi.bluegull.org`. All three are dot-subdomains of `aqi.bluegull.org`, so all three live under the single Route53 hosted zone delegated from `bluegull.org`'s DNS at **Squarespace** (registrar; DNS records managed in Squarespace's domain panel, untouched by this delegation) — one NS delegation covers all of them, no per-environment delegation needed. Hosted zone in AWS account `843088391598`. Mirrors Plant-Tracer's `${StackName}.${BaseDomain}` pattern. |
 | AWS account | **`843088391598`**, dedicated to this project (not shared with Plant-Tracer) — gives the blast-radius isolation the Scaling & Performance section already assumed. AirNow API key for the service **not yet registered**. |
 | Apple Developer account | Already enrolled; bundle IDs / App Group still need to be created. |
 | AQI category colors | Official EPA AQI RGB palette only, sourced once in `BluegullAQIKit`'s shared models and used by both the menu bar and widget — never a custom palette. Compliance requirement from the AirNow Data Exchange Guidelines, not a style preference; see "AirNow terms review" below. |
@@ -210,9 +210,10 @@ this hasn't been explicitly confirmed yet.
 - **Custom domain**: three stacks, one hosted zone — `aqi.bluegull.org` (prod),
   `dev.aqi.bluegull.org` (dev), `stage.aqi.bluegull.org` (staging), all
   dot-subdomains of `aqi.bluegull.org` so all covered by one Route53 hosted zone,
-  delegated (not migrated) from wherever `bluegull.org`'s DNS otherwise lives, in AWS
-  account `843088391598`. ACM cert(s) DNS-validated once delegation propagates. Same
-  `${StackName}.${BaseDomain}` naming pattern as Plant-Tracer's `template.yaml`.
+  delegated (not migrated) from `bluegull.org`'s DNS at **Squarespace** (the
+  registrar; add the NS record for `aqi` in Squarespace's domain DNS settings), in
+  AWS account `843088391598`. ACM cert(s) DNS-validated once delegation propagates.
+  Same `${StackName}.${BaseDomain}` naming pattern as Plant-Tracer's `template.yaml`.
 - **Scaling**: see the dedicated section below — the service must scale horizontally
   as installs grow, and that constrains the cache design, not just the infra config.
 - **CI/CD**: GitHub Actions mirroring Plant-Tracer's `ci-cd.yml` (lint, pytest,
@@ -769,8 +770,8 @@ our per-request opportunistic caching is not.
 - **Default data-source mode** for a fresh install (Service vs. Direct) — see above.
   Note this is moot if the licensing review rules out Service mode.
 - ~~**Domain name** for the backend's custom domain~~ — **DECIDED:** `aqi.bluegull.org`,
-  delegated from `bluegull.org`'s existing DNS (which lives elsewhere and is
-  untouched) to a Route53 hosted zone created specifically for the subdomain.
+  delegated from `bluegull.org`'s DNS at **Squarespace** (registrar; untouched
+  otherwise) to a Route53 hosted zone created specifically for the subdomain.
 - ~~**Should stage deployments use subdomain prefixes?**~~ — **DECIDED:** three
   named stacks — prod (`aqi.bluegull.org`), dev (`dev.aqi.bluegull.org`), staging
   (`stage.aqi.bluegull.org`) — all as dot-subdomains under one hosted zone.
@@ -1061,6 +1062,11 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — Recorded where `bluegull.org` is actually registered: **Squarespace**.
+  Fills in the "wherever `bluegull.org`'s DNS otherwise lives" placeholder used
+  throughout the domain-delegation writeups with a concrete answer — the NS
+  delegation record for `aqi.bluegull.org` gets added in Squarespace's domain DNS
+  settings; the rest of `bluegull.org`'s DNS there is untouched.
 - 2026-07-28 — Decided three named backend stacks: **prod** `aqi.bluegull.org`,
   **dev** `dev.aqi.bluegull.org`, **staging** `stage.aqi.bluegull.org`. First-pass
   hyphenated names (`dev-aqi.bluegull.org`) were reconsidered once it came up that
