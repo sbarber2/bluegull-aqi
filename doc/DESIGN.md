@@ -32,7 +32,7 @@ GitHub Actions CI/CD, Route53/ACM custom domain.
 | Location scope | Current location (CoreLocation) **and** user-pinned locations (zip/address, geocoded locally via `CLGeocoder`/MapKit — no backend geocoding endpoint needed). |
 | Refresh cadence | Hourly, matching AirNow's own publish cadence. |
 | Minimum macOS version | macOS 14 (Sonoma) — required for desktop WidgetKit widgets anyway. |
-| Backend custom domain | Yes, custom domain via Route53 + ACM (domain name: **TBD**, see Open Questions). |
+| Backend custom domain | Yes — **`aqi.bluegull.org`**, via Route53 + ACM. Whether the `bluegull.org` hosted zone already exists in the target AWS account is unverified; `bluegull-aqi-q9r.6` confirms rather than assumes. |
 | AWS account | Existing AWS account will be used (same pattern as Plant-Tracer or a separate account — TBD which). AirNow API key for the service **not yet registered**. |
 | Apple Developer account | Already enrolled; bundle IDs / App Group still need to be created. |
 | AQI category colors | Official EPA AQI RGB palette only, sourced once in `BluegullAQIKit`'s shared models and used by both the menu bar and widget — never a custom palette. Compliance requirement from the AirNow Data Exchange Guidelines, not a style preference; see "AirNow terms review" below. |
@@ -207,9 +207,8 @@ this hasn't been explicitly confirmed yet.
 - **Secrets**: the service's own AirNow API key lives in SSM Parameter Store
   (SecureString) or Secrets Manager, referenced by the Lambda's execution role. Never
   committed to source.
-- **Custom domain**: Route53 hosted zone + ACM cert, same pattern as
-  `planttracer.com` in Plant-Tracer's `template.yaml`. Needs an actual domain name
-  (see Open Questions).
+- **Custom domain**: `aqi.bluegull.org`, via Route53 hosted zone + ACM cert, same
+  pattern as `planttracer.com` in Plant-Tracer's `template.yaml`.
 - **Scaling**: see the dedicated section below — the service must scale horizontally
   as installs grow, and that constrains the cache design, not just the infra config.
 - **CI/CD**: GitHub Actions mirroring Plant-Tracer's `ci-cd.yml` (lint, pytest,
@@ -763,8 +762,9 @@ our per-request opportunistic caching is not.
   Tracked as `bluegull-aqi-mtm.16`.
 - **Default data-source mode** for a fresh install (Service vs. Direct) — see above.
   Note this is moot if the licensing review rules out Service mode.
-- **Domain name** for the backend's custom domain — need an actual registered domain
-  / hosted zone to put in `template.yaml`.
+- ~~**Domain name** for the backend's custom domain~~ — **DECIDED:** `aqi.bluegull.org`.
+  Whether the `bluegull.org` hosted zone already exists in the target AWS account is
+  still unverified; `bluegull-aqi-q9r.6` confirms rather than assumes.
 - **AWS account**: same account as Plant-Tracer, or a separate account for this
   project? (Affects billing isolation and IAM boundaries, not the architecture.)
 - **AirNow API key for the service** — not yet registered; also worth confirming
@@ -1049,6 +1049,10 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — Domain decided: **`aqi.bluegull.org`**. Closes
+  `bluegull-aqi-8ef.3`, unblocking `bluegull-aqi-q9r.6` (Route53/ACM config in
+  `template.yaml`). Whether the `bluegull.org` hosted zone already exists in the
+  target AWS account is unverified and left for that task to confirm.
 - 2026-07-28 — **🔓 Gate lifted.** The AirNow terms review (`bluegull-aqi-8ef.10`, P0)
   is reviewed, approved, and closed: caching and redistributing AirNow data via a
   proxy server is permitted, so Service mode proceeds alongside Direct mode and **all
