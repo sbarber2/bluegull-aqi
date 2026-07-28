@@ -437,12 +437,29 @@ dependencies, not just a paragraph here.
 1. **Two-tier attribution, not just "data from AirNow."** The guidelines require
    credit to go *first* to "the appropriate source — federal, state, local, and
    tribal air quality agencies" and *then* to "the EPA AirNow program." The current
-   README credits only AirNow/EPA. Satisfying this properly may mean crediting the
-   specific reporting agency behind a given reading (if the API response identifies
-   one) rather than a single generic AirNow credit — worth checking what
-   `currentobservation/latLong` actually returns in its response fields.
-   Tracked as `bluegull-aqi-10h.15` (derive the text) and `bluegull-aqi-e70.10`
-   (surface it in an About/Settings screen); both gate App Store submission.
+   README credits only AirNow/EPA.
+
+   **Resolved, not just theorized** — confirmed live against airnow.gov
+   (2026-07-28, San Francisco): the official site shows a persistent small footer
+   reading **"Data courtesy of / Bay Area Air District"** — the actual local agency
+   name, not a generic class credit — alongside a separate **"EPA and PARTNERS"**
+   logo lockup. This is EPA's own product satisfying these same guidelines, so it's
+   direct precedent rather than a guess: per-reading agency attribution is both
+   expected *and* available (not merely theoretically derivable — AirNow's own system
+   computes and displays it for every location).
+
+   Two things I'd gotten wrong before checking: this is per-*reading-area* agency
+   attribution as the default case, not a fallback for when data happens to support
+   it; and it belongs in the **persistent primary UI**, not tucked into a
+   Settings/About screen — the reference implementation shows it right next to the
+   reading, always visible, small and unobtrusive.
+
+   Tracked as `bluegull-aqi-10h.15` (derive the "courtesy of {agency}" text — find
+   the response field or lookup that supplies it) and `bluegull-aqi-e70.10` (surface
+   it as a persistent footer in the primary UI, corrected from the original
+   About-screen placement); both gate App Store submission. Whether the widget
+   itself also needs this (vs. relying on the menu bar to carry it) is left as an
+   open call in `bluegull-aqi-e70.10` — small-widget space is genuinely tight.
 2. **A "preliminary data" disclaimer, in the product itself.** "If observational data
    are used for analyses, displayed on web pages, or used for other programs or
    products, the... products must indicate that these data are preliminary." This
@@ -779,6 +796,15 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — Steve pointed out that EPA's own AirNow iOS app implements
+  attribution, prompting a live check against airnow.gov rather than continuing to
+  theorize. Confirmed the exact pattern: a persistent small "Data courtesy of
+  {agency}" footer (e.g. "Bay Area Air District") plus a separate "EPA and PARTNERS"
+  logo, always visible next to the reading — not a Settings/About screen, and not a
+  generic class credit. Corrects both `bluegull-aqi-10h.15` and `bluegull-aqi-e70.10`,
+  which had been scoped on an untested assumption about placement and specificity.
+  Also confirmed the exact AQI category name string including the "(USG)"
+  abbreviation, added to `bluegull-aqi-10h.2`.
 - 2026-07-27 — Turned the other four terms-review findings into actual Beads tasks,
   matching the AQI-colors fix: two-tier attribution (`bluegull-aqi-10h.15` derives the
   text, `bluegull-aqi-e70.10` surfaces it), the in-product preliminary-data disclaimer
