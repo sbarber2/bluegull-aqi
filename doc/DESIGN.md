@@ -32,8 +32,8 @@ GitHub Actions CI/CD, Route53/ACM custom domain.
 | Location scope | Current location (CoreLocation) **and** user-pinned locations (zip/address, geocoded locally via `CLGeocoder`/MapKit — no backend geocoding endpoint needed). |
 | Refresh cadence | Hourly, matching AirNow's own publish cadence. |
 | Minimum macOS version | macOS 14 (Sonoma) — required for desktop WidgetKit widgets anyway. |
-| Backend custom domain | Yes — **`aqi.bluegull.org`**, via Route53 + ACM. Whether the `bluegull.org` hosted zone already exists in the target AWS account is unverified; `bluegull-aqi-q9r.6` confirms rather than assumes. |
-| AWS account | Existing AWS account will be used (same pattern as Plant-Tracer or a separate account — TBD which). AirNow API key for the service **not yet registered**. |
+| Backend custom domain | Yes — **`aqi.bluegull.org`**, via Route53 + ACM. `bluegull.org`'s own DNS lives elsewhere and stays there; `aqi.bluegull.org` is delegated to a dedicated Route53 hosted zone in AWS account `843088391598` via an NS record at the parent DNS host. Whether stage-specific hostnames (`dev.aqi.bluegull.org`, etc., mirroring Plant-Tracer's `${StackName}.${BaseDomain}` pattern) are used, or `aqi.bluegull.org` is the one deployed stage, is still **open** — see Open Questions. |
+| AWS account | **`843088391598`**, dedicated to this project (not shared with Plant-Tracer) — gives the blast-radius isolation the Scaling & Performance section already assumed. AirNow API key for the service **not yet registered**. |
 | Apple Developer account | Already enrolled; bundle IDs / App Group still need to be created. |
 | AQI category colors | Official EPA AQI RGB palette only, sourced once in `BluegullAQIKit`'s shared models and used by both the menu bar and widget — never a custom palette. Compliance requirement from the AirNow Data Exchange Guidelines, not a style preference; see "AirNow terms review" below. |
 
@@ -207,8 +207,11 @@ this hasn't been explicitly confirmed yet.
 - **Secrets**: the service's own AirNow API key lives in SSM Parameter Store
   (SecureString) or Secrets Manager, referenced by the Lambda's execution role. Never
   committed to source.
-- **Custom domain**: `aqi.bluegull.org`, via Route53 hosted zone + ACM cert, same
-  pattern as `planttracer.com` in Plant-Tracer's `template.yaml`.
+- **Custom domain**: `aqi.bluegull.org`, delegated (not migrated) from wherever
+  `bluegull.org`'s DNS otherwise lives, to a dedicated Route53 hosted zone in AWS
+  account `843088391598`. ACM cert DNS-validated once delegation propagates. Same
+  overall pattern as `planttracer.com` in Plant-Tracer's `template.yaml`, but a
+  subdomain delegation rather than owning the apex domain's DNS.
 - **Scaling**: see the dedicated section below — the service must scale horizontally
   as installs grow, and that constrains the cache design, not just the infra config.
 - **CI/CD**: GitHub Actions mirroring Plant-Tracer's `ci-cd.yml` (lint, pytest,
@@ -762,11 +765,15 @@ our per-request opportunistic caching is not.
   Tracked as `bluegull-aqi-mtm.16`.
 - **Default data-source mode** for a fresh install (Service vs. Direct) — see above.
   Note this is moot if the licensing review rules out Service mode.
-- ~~**Domain name** for the backend's custom domain~~ — **DECIDED:** `aqi.bluegull.org`.
-  Whether the `bluegull.org` hosted zone already exists in the target AWS account is
-  still unverified; `bluegull-aqi-q9r.6` confirms rather than assumes.
-- **AWS account**: same account as Plant-Tracer, or a separate account for this
-  project? (Affects billing isolation and IAM boundaries, not the architecture.)
+- ~~**Domain name** for the backend's custom domain~~ — **DECIDED:** `aqi.bluegull.org`,
+  delegated from `bluegull.org`'s existing DNS (which lives elsewhere and is
+  untouched) to a Route53 hosted zone created specifically for the subdomain.
+- **Should stage deployments use subdomain prefixes** (`dev.aqi.bluegull.org`,
+  mirroring Plant-Tracer's `${StackName}.${BaseDomain}` pattern), or does
+  `aqi.bluegull.org` name the one deployed stage with no prefix scheme? Either fits
+  within the single hosted zone already being created — no further DNS delegation
+  needed regardless of the answer. Tracked in `bluegull-aqi-q9r.6`.
+- ~~**AWS account**~~ — **DECIDED:** `843088391598`, dedicated to this project.
 - **AirNow API key for the service** — not yet registered; also worth confirming
   AirNow's actual published rate limits/ToS once registering, since that bounds how
   aggressive the DynamoDB cache TTL needs to be.
@@ -1049,6 +1056,13 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — AWS account decided: **`843088391598`**, dedicated to this project
+  (closes `bluegull-aqi-8ef.4`). `bluegull.org`'s existing DNS lives elsewhere and
+  stays there; `aqi.bluegull.org` will be delegated via NS record to a dedicated
+  Route53 hosted zone in that account rather than migrating the apex domain. Raised
+  a new open question: whether stage deployments get subdomain prefixes
+  (`dev.aqi.bluegull.org`, matching Plant-Tracer's pattern) or `aqi.bluegull.org` is
+  the one deployed stage — either fits the hosted zone already being created.
 - 2026-07-28 — Domain decided: **`aqi.bluegull.org`**. Closes
   `bluegull-aqi-8ef.3`, unblocking `bluegull-aqi-q9r.6` (Route53/ACM config in
   `template.yaml`). Whether the `bluegull.org` hosted zone already exists in the
