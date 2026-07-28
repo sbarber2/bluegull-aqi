@@ -632,11 +632,37 @@ TAD Table 1 bounds Hazardous at **301–500**. Above 500 is *"Beyond the AQI"*: 
 can still be computed "to indicate relative magnitude," using the Hazardous
 breakpoints, and users should "follow the recommendations for the Hazardous category."
 
-Note the divergence from EPA's own site: airnow.gov's legend shows "**301 +**" for
-Hazardous, collapsing the distinction. Per the evidence caveat above, that's how one
-EPA product chose to display it, not proof the TAD's own 301–500 bound may be ignored.
-Our category model currently has no representation for >500 at all. Tracked as
-`bluegull-aqi-10h.16`; the display question is in Open Questions below.
+*(Correction: an earlier revision of this section claimed airnow.gov diverged from
+the TAD by showing "301 +". That was wrong — an artifact of reading a collapsed text
+extraction of the legend. The site's expanded AQI Legend panel shows **301–500
+Hazardous** plus "Values above 500 are beyond the AQI scale," matching the TAD
+exactly. There is no divergence.)*
+
+**Is an AQI above 500 simply bad data?** No — it's rare but real, and EPA treats it as
+a defined condition rather than an error:
+
+- The TAD specifies how to compute it ("use the same linear relationship that is used
+  for the Hazardous category"), and separately confirms NowCast handles it no
+  differently. EPA would not document a computation for a value that could only be a
+  fault.
+- It has actually happened in official reporting. Oregon DEQ recorded Bend
+  [above 500 on 12 September 2020](https://deqblog.com/2020/09/16/wildfire-smoke-brings-record-poor-air-quality-to-oregon-new-data-shows/),
+  in their own words "beyond the AQI scale," with Newport "well over 500," during that
+  September's wildfires — an AirNow reporting agency publishing such values as
+  legitimate.
+- We never compute AQI ourselves (`bluegull-aqi-10h.17`), so anything we receive has
+  already passed AirNow's own QA. Whether a given reading is trustworthy is upstream
+  of us; our obligation is to disseminate as received.
+
+**So the failure mode to design against is the opposite one**: treating >500 as
+invalid and rendering a blank, an "unknown" category, or a crash — which would black
+out the app precisely during a catastrophic smoke event, the moment it's most needed.
+Our category model currently has no representation for >500 at all, so that's the
+current behavior by default. Tracked as `bluegull-aqi-10h.16`.
+
+Genuinely malformed values are a separate concern: negative AQI, non-numeric, or
+absurd magnitudes indicate a parse or transport fault rather than extreme air, and
+should be handled as an error state — distinctly from a legitimate off-scale reading.
 
 ### What the number *is*: NowCast, not a spot reading
 
@@ -712,14 +738,14 @@ our per-request opportunistic caching is not.
   terms review — research findings" above — but the sign-off is Steve's call, not a
   conclusion reached here. Every scaffold task stays blocked until he closes that
   issue.
-- **How should AQI > 500 ("Beyond the AQI") display?** TAD Table 1 bounds Hazardous at
-  301–500 and calls anything above it "Beyond the AQI," directing users to follow
-  Hazardous recommendations; airnow.gov's own legend instead shows "301 +". Options:
-  show `Hazardous` + maroon for everything ≥301 (matches EPA's site, simplest), or
-  show a distinct `Beyond the AQI` descriptor above 500 while keeping maroon and the
-  Hazardous health guidance (matches the TAD's text more literally). Affects the
-  category model in `bluegull-aqi-10h.16`. Rare in practice but reachable during
-  severe wildfire smoke — which is precisely when the app matters most.
+- ~~**How should AQI > 500 ("Beyond the AQI") display?**~~ — **no longer open.** The
+  apparent TAD-vs-airnow.gov conflict was my own extraction error; both agree on
+  301–500 Hazardous with values above 500 "beyond the AQI scale." Recommended (and
+  now reflected in `bluegull-aqi-10h.16`): display the actual value, keep maroon and
+  Hazardous health guidance per the TAD's explicit direction, and mark it as beyond
+  the scale using AirNow's own phrasing. Left here rather than deleted because the
+  real design point survives — the model must not treat >500 as invalid, since that
+  blanks the app during exactly the wildfire conditions that produce such readings.
 - **Do sensitive-groups and cautionary statements belong in v1?** TAD Tables 3 and 4
   supply authoritative per-pollutant health guidance ("People with heart or lung
   disease, older adults, children... should reduce prolonged or heavy exertion").
@@ -994,6 +1020,18 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — **Corrected a factual error from the same day's review**: I reported a
+  divergence between airnow.gov ("301 +") and the TAD (301–500 + "Beyond the AQI").
+  There is none — the "301 +" came from a collapsed text extraction; the site's
+  expanded legend panel matches the TAD exactly. Steve's screenshot caught it. Also
+  resolved the resulting open question in the right direction: an AQI above 500 is
+  **valid off-scale data, not bad data** — EPA documents how to compute it (including
+  under NowCast), and Oregon DEQ published readings above 500 during the September
+  2020 wildfires. The design point that survives is the inverse of the original
+  worry: the model must not treat >500 as invalid, since that would blank the app
+  during precisely the conditions producing such readings. `bluegull-aqi-10h.16`
+  updated accordingly, with malformed values (negative, non-numeric, absurd) kept as
+  a distinct error path.
 - 2026-07-28 — Reviewed the AQI Technical Assistance Document (EPA 454/B-18-007) and
   the AirNow API Fact Sheet, which Steve supplied. Biggest concrete win: the
   **authoritative AQI category table and exact RGB values** (Table 1/Table 2) are now
