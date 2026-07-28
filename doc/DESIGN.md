@@ -172,6 +172,12 @@ container app does the fetching and hands results to the widget via the App Grou
   Intents (`WidgetConfigurationIntent`).
 - `TimelineProvider` reads from the App Group cache written by the container app; does
   not fetch network or location itself.
+- **Tap-to-expand**: the whole widget is a tap target (`widgetURL`) that deep-links
+  into the container app, which opens a detail view — the same pattern Apple's own
+  Weather widget uses. v1 scope for that view is attribution + the preliminary-data
+  disclaimer (reusing the menu bar popover's content rather than a third separate
+  surface). A richer expanded view showing more than the widget face currently does
+  is deliberately deferred past v1 — see `bluegull-aqi-mtm.15`.
 
 ### Data flow / mode selection
 
@@ -486,11 +492,11 @@ dependencies, not just a paragraph here.
    open to Steve's final read of the guidelines text, not closed by what one app does.
 
    Tracked as `bluegull-aqi-10h.15` (derive the "courtesy of {agency}" text — find
-   the response field or lookup that supplies it) and `bluegull-aqi-e70.10` (surface
-   it as a persistent footer in the primary UI, corrected from the original
-   About-screen placement); both gate App Store submission. Whether the widget
-   itself also needs this (vs. relying on the menu bar to carry it) is left as an
-   open call in `bluegull-aqi-e70.10` — small-widget space is genuinely tight.
+   the response field or lookup that supplies it), `bluegull-aqi-e70.10` (surface it
+   in the menu bar popover), and `bluegull-aqi-mtm.14` (surface it in the widget, via
+   tap-to-expand — see below); all three gate App Store submission. **Resolved**: the
+   widget does need this too, not just the popover — see the tap-to-expand pattern
+   below.
 2. **A "preliminary data" disclaimer, in the product itself.** "If observational data
    are used for analyses, displayed on web pages, or used for other programs or
    products, the... products must indicate that these data are preliminary."
@@ -506,7 +512,22 @@ dependencies, not just a paragraph here.
    reasonably be read to want something less buried than a menu item. This placement
    question is Steve's to resolve against the actual text, not something the iOS
    app's behavior resolves on its own.
-   Tracked as `bluegull-aqi-dc2.4`; gates App Store submission.
+   Tracked as `bluegull-aqi-dc2.4` (popover) and `bluegull-aqi-mtm.14` (widget); both
+   gate App Store submission.
+
+**The widget's tap-to-expand pattern** (resolves the "does the widget need this too"
+question above): like Apple's own Weather widget, clicking/tapping the AQI widget
+opens the container app to a larger detail view, via WidgetKit's `widgetURL` — the
+whole widget is a tap target that deep-links into the app, which shows a proper
+view in response. That view is the natural home for the widget-side attribution and
+disclaimer, reusing content from the menu bar popover rather than maintaining two
+separate compliance surfaces. New task: `bluegull-aqi-mtm.15`.
+
+**Deferred, explicitly not for v1** (`bluegull-aqi-mtm.14`): that same expand-on-tap
+detail view is a natural place to eventually show richer data than the widget's face
+currently does — more like Apple Weather's expanded view than a compliance-only
+screen. Good scope creep, correctly out of scope for the first release; tracked so
+it isn't lost, not to imply it's imminent.
 3. **No alteration — including AQI colors.** Data "should not be altered in any way
    and should be disseminated as received," and observed/forecast values "should be
    disseminated in accordance with the AQI and corresponding RGB colors" per EPA's
@@ -837,6 +858,15 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — Closed the "does the widget need attribution/disclaimer too" question
+  left open earlier: yes, via a **tap-to-expand** detail view (`bluegull-aqi-mtm.14`)
+  reached through WidgetKit's `widgetURL`, the same pattern Apple's Weather widget
+  uses — a user may have the widget on their desktop without ever opening the menu
+  bar popover, so the widget needs its own path to the same compliance content.
+  Both `bluegull-aqi-e70.10` and `dc2.4` now target both surfaces. Also filed
+  `bluegull-aqi-mtm.15`, explicitly deferred past v1: that same detail view is a
+  natural place to eventually show richer data than the widget face does, more like
+  Apple Weather's expanded view — good scope creep, correctly not built yet.
 - 2026-07-28 — Refined the EPA-apps-as-evidence principle with the precise legal
   point: EPA is not bound by the Data Exchange Guidelines it imposes on third-party
   *recipients* of its data, so its own app isn't a party demonstrating compliance
