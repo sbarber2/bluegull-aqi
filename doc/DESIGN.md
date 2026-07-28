@@ -427,8 +427,12 @@ others.
 
 ### Concrete obligations the current design does not yet satisfy
 
-These aren't optional — the guidelines state them as "should"/"must," and none of the
-following exist in the design yet:
+These aren't optional — the guidelines state them as "should"/"must." All five are now
+tracked as Beads tasks (each cross-referenced below) rather than living only as prose
+in this section — a prior pass through this review documented the AQI-color item
+without turning it into an actioned task, and it went unnoticed until a later
+spot-check. Don't repeat that: a finding isn't done until it's a task with real
+dependencies, not just a paragraph here.
 
 1. **Two-tier attribution, not just "data from AirNow."** The guidelines require
    credit to go *first* to "the appropriate source — federal, state, local, and
@@ -437,25 +441,32 @@ following exist in the design yet:
    specific reporting agency behind a given reading (if the API response identifies
    one) rather than a single generic AirNow credit — worth checking what
    `currentobservation/latLong` actually returns in its response fields.
+   Tracked as `bluegull-aqi-10h.15` (derive the text) and `bluegull-aqi-e70.10`
+   (surface it in an About/Settings screen); both gate App Store submission.
 2. **A "preliminary data" disclaimer, in the product itself.** "If observational data
    are used for analyses, displayed on web pages, or used for other programs or
    products, the... products must indicate that these data are preliminary." This
    needs to land somewhere in the menu bar/widget UI (an About screen or footer text
    is the natural place), not just in documentation.
+   Tracked as `bluegull-aqi-dc2.4`; gates App Store submission.
 3. **No alteration — including AQI colors.** Data "should not be altered in any way
    and should be disseminated as received," and observed/forecast values "should be
    disseminated in accordance with the AQI and corresponding RGB colors" per EPA's
    AQI technical assistance document. This is a concrete widget-design constraint:
    use the official EPA AQI category colors, not a custom palette, and don't
    recompute or re-derive AQI values ourselves.
+   Tracked in the Decisions table above and wired into `bluegull-aqi-10h.2` (shared
+   mapping) plus all four UI display tasks (`mtm.4/5/6`, `e70.6`).
 4. **Notify AirNow that this product exists.** The guidelines state that
    "publications, analyses, products... that rely on these data must be made known to
    the relevant... agencies and the EPA AirNow program" — and the Data Exchange
    Guidelines document is literally structured as a form for exactly this
    notification, to be emailed to `dmc@airnowtech.org`. Reads as a real procedural
    step, not just a norm; cheap to do regardless of how the rest of this review lands.
+   Tracked as `bluegull-aqi-8ef.13`.
 5. **Keep contact information current with AirNow** — an ongoing obligation, not a
-   one-time item.
+   one-time item. Tracked as `bluegull-aqi-8ef.14`, filed as a standing reminder
+   rather than a task with a natural "done" state.
 
 ### A soft tension worth a judgment call, not a fix
 
@@ -768,6 +779,13 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-27 — Turned the other four terms-review findings into actual Beads tasks,
+  matching the AQI-colors fix: two-tier attribution (`bluegull-aqi-10h.15` derives the
+  text, `bluegull-aqi-e70.10` surfaces it), the in-product preliminary-data disclaimer
+  (`bluegull-aqi-dc2.4`), notifying AirNow the product exists (`bluegull-aqi-8ef.13`),
+  and keeping contact info current (`bluegull-aqi-8ef.14`, filed as a standing
+  reminder rather than a one-time task). The attribution and disclaimer tasks now
+  gate App Store submission, same as the terms review itself.
 - 2026-07-27 — Caught that the AQI-colors obligation from the terms review had been
   documented as a finding but never actually turned into a design decision or task —
   the widget/menu bar tasks still said nothing about it. Added it to the Decisions
