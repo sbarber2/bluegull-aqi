@@ -35,6 +35,7 @@ GitHub Actions CI/CD, Route53/ACM custom domain.
 | Backend custom domain | Yes, custom domain via Route53 + ACM (domain name: **TBD**, see Open Questions). |
 | AWS account | Existing AWS account will be used (same pattern as Plant-Tracer or a separate account — TBD which). AirNow API key for the service **not yet registered**. |
 | Apple Developer account | Already enrolled; bundle IDs / App Group still need to be created. |
+| AQI category colors | Official EPA AQI RGB palette only, sourced once in `BluegullAQIKit`'s shared models and used by both the menu bar and widget — never a custom palette. Compliance requirement from the AirNow Data Exchange Guidelines, not a style preference; see "AirNow terms review" below. |
 
 ## Secrets & credentials
 
@@ -767,6 +768,12 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-27 — Caught that the AQI-colors obligation from the terms review had been
+  documented as a finding but never actually turned into a design decision or task —
+  the widget/menu bar tasks still said nothing about it. Added it to the Decisions
+  table and to `bluegull-aqi-10h.2` (shared models) plus all four UI display tasks
+  (`mtm.4/5/6`, `e70.6`), so it's a single shared mapping in `BluegullAQIKit` rather
+  than something each UI target could reinvent inconsistently.
 - 2026-07-27 — Completed primary-source research for the AirNow terms review
   (fetched the actual EPA Data Exchange Guidelines PDF and the account registration
   page). Reassuring on the big question — nothing prohibits Service-mode
