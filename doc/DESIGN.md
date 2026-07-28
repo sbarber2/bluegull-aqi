@@ -27,7 +27,7 @@ GitHub Actions CI/CD, Route53/ACM custom domain.
 | Widget type | Both: a WidgetKit desktop widget (macOS 14+) **and** a menu bar app, sharing one core library. |
 | Distribution | Mac App Store. Apple Developer Program membership already active. |
 | Web service client auth / rate limiting | Anonymous / IP-based (via AWS WAF rate-based rule on the API Gateway). No per-install keys, no login. |
-| Menu bar app data scope | Current overall AQI only. |
+| Menu bar app data scope | The menu bar extra (status item) itself shows current overall AQI only — no room for more. Clicking it opens a `.window`-style popover with full detail (pollutant breakdown, attribution, preliminary-data disclaimer), matching the widget's content. This is the guaranteed access point for compliance content regardless of whether the user has placed the desktop widget. |
 | Widget data scope | Current AQI **and** full per-pollutant breakdown (PM2.5, PM10, ozone, etc.). |
 | Location scope | Current location (CoreLocation) **and** user-pinned locations (zip/address, geocoded locally via `CLGeocoder`/MapKit — no backend geocoding endpoint needed). |
 | Refresh cadence | Hourly, matching AirNow's own publish cadence. |
@@ -145,11 +145,24 @@ logic and both agree on the same models regardless of data source:
 
 ### Menu bar app (container app)
 
-- `MenuBarExtra`-based, shows current overall AQI as text/icon.
-- Owns: location permission flow, settings UI (data-source mode toggle, AirNow key
-  entry, pinned-locations list management), and the actual network fetch (WidgetKit
-  extensions have restricted background networking, so the container app does the
-  fetching and hands results to the widget via the App Group).
+Two distinct pieces, both from SwiftUI's `MenuBarExtra`:
+
+- **The menu bar extra (status item)** — the small always-visible sliver in the
+  system menu bar. Shows current overall AQI as text/icon; there's no real estate
+  for anything more, including attribution or the disclaimer.
+- **The popover** (`.menuBarExtraStyle(.window)`, not the plain `.menu` list style) —
+  clicking the status item opens a real SwiftUI view with proper layout space,
+  functionally similar in content to the widget: current AQI, full pollutant
+  breakdown, the persistent "Data courtesy of {agency}" attribution footer, and the
+  preliminary-data disclaimer. This is the guaranteed access point for both
+  compliance elements — reachable with one click regardless of whether the user has
+  ever placed the desktop widget, which the widget alone cannot guarantee.
+
+The container app also owns: location permission flow, settings UI (data-source mode
+toggle, AirNow key entry, pinned-locations list management — likely reached from
+within the popover, e.g. a gear icon, rather than a separate window), and the actual
+network fetch (WidgetKit extensions have restricted background networking, so the
+container app does the fetching and hands results to the widget via the App Group).
 
 ### Widget extension (WidgetKit)
 
@@ -429,14 +442,17 @@ others.
 
 Where the sections below cite what the official AirNow website or iOS app actually
 does, that is **corroborating evidence of customary practice, not a substitute for
-the written guidelines**. The Data Exchange Guidelines text is what controls; an app
-implementation can suggest a reasonable, EPA-sanctioned way to satisfy a requirement,
-but it cannot independently establish that a given placement or wording *is*
-compliant — EPA's own products could be exceeding what's required, or could
-themselves be non-compliant with their own guidelines, and neither possibility is
-something an app screenshot can rule out. Steve's read of the actual text governs;
-app precedent below is offered as suggestive input to that judgment, not as a
-finding in itself.
+the written guidelines**. Precisely stated: **EPA is not bound by the Data Exchange
+Guidelines it imposes on third-party users** — the guidelines govern how *recipients*
+of the data must handle it, not EPA's own use of data it produced or collected in the
+first place. So EPA's app is not a party demonstrating its own compliance with a rule
+that binds it; it's simply the rule-writer's product. That makes its choices useful
+evidence of what EPA would likely *find* compliant enough from someone else — a
+reasonable signal of intent and tolerance — but not proof, since EPA could easily go
+further than it requires of others, and nothing about its own app is bound by the
+document at all. The written guidelines are what actually control; Steve's reading of
+that text governs, and app precedent below is offered as input to that judgment, not
+as a finding in itself.
 
 ### Concrete obligations the current design does not yet satisfy
 
@@ -821,6 +837,16 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — Refined the EPA-apps-as-evidence principle with the precise legal
+  point: EPA is not bound by the Data Exchange Guidelines it imposes on third-party
+  *recipients* of its data, so its own app isn't a party demonstrating compliance
+  with a rule that binds it — its choices are informative about what EPA would
+  likely find acceptable from someone else, not proof of a compliant floor. Also
+  designed the concrete UI home for attribution and the disclaimer: the menu bar
+  status item has no room for either, so both live in a `.window`-style **popover**
+  (`bluegull-aqi-e70.11`, new) reachable by clicking the status item — guaranteed
+  available regardless of whether the user ever places the desktop widget, unlike
+  relying on the widget alone. Retargeted `bluegull-aqi-e70.10` and `dc2.4` at it.
 - 2026-07-28 — **Corrected an overclaim**: the previous entry's "resolved, not just
   theorized" language treated a live check of airnow.gov as settling the attribution
   question. Steve corrected this — app implementations may *suggest* compliant
