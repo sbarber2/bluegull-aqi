@@ -425,6 +425,19 @@ accommodating third-party redistribution, provided the obligations below are met
 did not find anything resembling a prohibition on one party fetching on behalf of
 others.
 
+### On using EPA's own apps as evidence
+
+Where the sections below cite what the official AirNow website or iOS app actually
+does, that is **corroborating evidence of customary practice, not a substitute for
+the written guidelines**. The Data Exchange Guidelines text is what controls; an app
+implementation can suggest a reasonable, EPA-sanctioned way to satisfy a requirement,
+but it cannot independently establish that a given placement or wording *is*
+compliant — EPA's own products could be exceeding what's required, or could
+themselves be non-compliant with their own guidelines, and neither possibility is
+something an app screenshot can rule out. Steve's read of the actual text governs;
+app precedent below is offered as suggestive input to that judgment, not as a
+finding in itself.
+
 ### Concrete obligations the current design does not yet satisfy
 
 These aren't optional — the guidelines state them as "should"/"must." All five are now
@@ -439,20 +452,22 @@ dependencies, not just a paragraph here.
    tribal air quality agencies" and *then* to "the EPA AirNow program." The current
    README credits only AirNow/EPA.
 
-   **Resolved, not just theorized** — confirmed live against airnow.gov
-   (2026-07-28, San Francisco): the official site shows a persistent small footer
-   reading **"Data courtesy of / Bay Area Air District"** — the actual local agency
-   name, not a generic class credit — alongside a separate **"EPA and PARTNERS"**
-   logo lockup. This is EPA's own product satisfying these same guidelines, so it's
-   direct precedent rather than a guess: per-reading agency attribution is both
-   expected *and* available (not merely theoretically derivable — AirNow's own system
-   computes and displays it for every location).
+   **Corroborated by precedent, not settled by it** (see caveat above) — checked
+   live against airnow.gov (2026-07-28, San Francisco): the site shows a persistent
+   small footer reading **"Data courtesy of / Bay Area Air District"** — the actual
+   local agency name, not a generic class credit — alongside a separate
+   **"EPA and PARTNERS"** logo lockup. This is one EPA product's approach to these
+   guidelines, and it's useful evidence that per-reading agency attribution is at
+   least *available* in AirNow's own data (their system computes and displays a
+   specific agency name per location, so the field exists) — it does not by itself
+   establish that this placement or wording is what the written guidelines require.
 
-   Two things I'd gotten wrong before checking: this is per-*reading-area* agency
-   attribution as the default case, not a fallback for when data happens to support
-   it; and it belongs in the **persistent primary UI**, not tucked into a
-   Settings/About screen — the reference implementation shows it right next to the
-   reading, always visible, small and unobtrusive.
+   Two things this precedent changed in how the task was scoped, subject to the
+   caveat above: it's now framed as per-*reading-area* agency attribution being the
+   expected case rather than a fallback for when data happens to support it; and
+   placement moved to the **persistent primary UI** rather than a Settings/About
+   screen, since that's where the reference implementation puts it. Both remain
+   open to Steve's final read of the guidelines text, not closed by what one app does.
 
    Tracked as `bluegull-aqi-10h.15` (derive the "courtesy of {agency}" text — find
    the response field or lookup that supplies it) and `bluegull-aqi-e70.10` (surface
@@ -462,9 +477,19 @@ dependencies, not just a paragraph here.
    open call in `bluegull-aqi-e70.10` — small-widget space is genuinely tight.
 2. **A "preliminary data" disclaimer, in the product itself.** "If observational data
    are used for analyses, displayed on web pages, or used for other programs or
-   products, the... products must indicate that these data are preliminary." This
-   needs to land somewhere in the menu bar/widget UI (an About screen or footer text
-   is the natural place), not just in documentation.
+   products, the... products must indicate that these data are preliminary."
+
+   Steve reports the official AirNow **iOS app** places this in an About page,
+   reached from the app's dropdown menu — not the persistent-footer treatment
+   attribution gets. He has not located an equivalent disclaimer on airnow.gov itself
+   (and isn't asking for further digging on that point; happy to assume it's there
+   somewhere). Per the caveat above, an About-page placement in one app is evidence
+   that EPA's own team considered menu-accessible placement acceptable for this
+   specific requirement — it is not confirmation that it's the only compliant
+   option, or even that it clears the bar, since "products must indicate" could
+   reasonably be read to want something less buried than a menu item. This placement
+   question is Steve's to resolve against the actual text, not something the iOS
+   app's behavior resolves on its own.
    Tracked as `bluegull-aqi-dc2.4`; gates App Store submission.
 3. **No alteration — including AQI colors.** Data "should not be altered in any way
    and should be disseminated as received," and observed/forecast values "should be
@@ -796,6 +821,18 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — **Corrected an overclaim**: the previous entry's "resolved, not just
+  theorized" language treated a live check of airnow.gov as settling the attribution
+  question. Steve corrected this — app implementations may *suggest* compliant
+  practice, but the written Data Exchange Guidelines are what actually control, and
+  his reading of that text is the real gate, not my inference from what one EPA
+  product happens to do. Added an explicit "On using EPA's own apps as evidence"
+  caveat and reworded the attribution and disclaimer findings (and their Beads tasks,
+  `bluegull-aqi-10h.15`/`e70.10`/`dc2.4`) to frame app precedent as corroborating,
+  not dispositive. Also recorded a new fact without over-concluding from it: the
+  iOS app's preliminary-data disclaimer lives in an About page via dropdown menu,
+  distinct from attribution's persistent-footer treatment; no equivalent found yet on
+  airnow.gov itself.
 - 2026-07-28 — Steve pointed out that EPA's own AirNow iOS app implements
   attribution, prompting a live check against airnow.gov rather than continuing to
   theorize. Confirmed the exact pattern: a persistent small "Data courtesy of
