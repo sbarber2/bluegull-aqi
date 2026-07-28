@@ -382,19 +382,124 @@ materializes.
   it does, it's the real answer to "only our app may call this" — but nothing should
   be designed around it until confirmed.
 
+## AirNow terms review — research findings (pending sign-off)
+
+Primary-source research for `bluegull-aqi-8ef.10`, done 2026-07-27. This is fact-
+gathering and a first read, not a legal conclusion — the actual sign-off is Steve's
+call (he formerly practiced copyright law), and this section is written to support
+that judgment, not substitute for it. **The P0 gate stays in place until he closes
+this issue.**
+
+### What the operative agreement actually is
+
+There is no separate "API Terms of Service" distinct from the
+[**AirNow Data Exchange Guidelines**](https://docs.airnowapi.org/docs/DataUseGuidelines.pdf)
+(EPA document, last updated August 2025). The account-registration page confirms this
+guidelines document is what a registrant agrees to — confirmed by fetching both the
+registration page and the PDF directly. It applies uniformly across AirNow.gov,
+AirNow-Tech, and the AirNow API. Structurally, it's a short set of principles
+presented as a form to be signed and emailed to `dmc@airnowtech.org`, not a
+clickthrough EULA.
+
+### The big question: does it permit Service mode? — Reassuring, not certain
+
+**Nothing in the guidelines prohibits redistribution**, and the API FAQ page
+affirmatively encourages exactly our caching pattern:
+
+> "cache daily or hourly air quality observation or forecast data retrieved via web
+> services" … one acceptable method is to "populate your own database"
+
+The one caveat in that same FAQ: web services are "designed for end users to make
+requests for forecasts or data for a selected area, not for looping through all zip
+codes to populate a database" — bulk backfill should use AirNow's file products
+instead. Our design doesn't do that: we cache opportunistically per real user
+request, not by proactively enumerating locations, so this caveat reads as
+inapplicable rather than as a partial conflict — but that reading is exactly the kind
+of thing worth Steve's independent eye rather than taking my parsing of it at face
+value.
+
+The guidelines' language throughout ("end users who receive these data," "products,
+publications... or any other related distribution") reads as assuming and
+accommodating third-party redistribution, provided the obligations below are met. I
+did not find anything resembling a prohibition on one party fetching on behalf of
+others.
+
+### Concrete obligations the current design does not yet satisfy
+
+These aren't optional — the guidelines state them as "should"/"must," and none of the
+following exist in the design yet:
+
+1. **Two-tier attribution, not just "data from AirNow."** The guidelines require
+   credit to go *first* to "the appropriate source — federal, state, local, and
+   tribal air quality agencies" and *then* to "the EPA AirNow program." The current
+   README credits only AirNow/EPA. Satisfying this properly may mean crediting the
+   specific reporting agency behind a given reading (if the API response identifies
+   one) rather than a single generic AirNow credit — worth checking what
+   `currentobservation/latLong` actually returns in its response fields.
+2. **A "preliminary data" disclaimer, in the product itself.** "If observational data
+   are used for analyses, displayed on web pages, or used for other programs or
+   products, the... products must indicate that these data are preliminary." This
+   needs to land somewhere in the menu bar/widget UI (an About screen or footer text
+   is the natural place), not just in documentation.
+3. **No alteration — including AQI colors.** Data "should not be altered in any way
+   and should be disseminated as received," and observed/forecast values "should be
+   disseminated in accordance with the AQI and corresponding RGB colors" per EPA's
+   AQI technical assistance document. This is a concrete widget-design constraint:
+   use the official EPA AQI category colors, not a custom palette, and don't
+   recompute or re-derive AQI values ourselves.
+4. **Notify AirNow that this product exists.** The guidelines state that
+   "publications, analyses, products... that rely on these data must be made known to
+   the relevant... agencies and the EPA AirNow program" — and the Data Exchange
+   Guidelines document is literally structured as a form for exactly this
+   notification, to be emailed to `dmc@airnowtech.org`. Reads as a real procedural
+   step, not just a norm; cheap to do regardless of how the rest of this review lands.
+5. **Keep contact information current with AirNow** — an ongoing obligation, not a
+   one-time item.
+
+### A soft tension worth a judgment call, not a fix
+
+The guidelines say end users "should be provided with the most current data
+available," and separately that "the AirNow program updates all data feeds several
+times per hour." Our design caches for a full hour (matching AirNow's own
+*observation* cadence, which is the standard granularity consumer AQI apps use). This
+isn't a clear conflict — hourly is a defensible reading of what's "current" for
+hourly-published observations — but it's soft language ("should"), not a hard rule,
+and it's the kind of interpretive question that's genuinely Steve's to weigh rather
+than mine to resolve by asserting a reading.
+
+### Not found / would need registration to check further
+
+- **No specific numeric rate limit** appears in the public docs — the FAQ says limits
+  are per-service, enforced by blocking the key for the rest of the hour on
+  violation, and are non-negotiable. The actual number likely only appears on the
+  account dashboard after registering (`bluegull-aqi-8ef.1` already covers getting
+  this once we register).
+- **No explicit commercial-use clause, no App Store-specific restriction.** Absence of
+  a restriction isn't the same as an affirmative permission, and the registration flow
+  might surface additional text once an account actually exists (a step I haven't
+  taken).
+
+### Questions for Steve's sign-off
+
+- Does "nothing prohibits it" + the FAQ's explicit caching endorsement read to you as
+  sufficient permission for Service mode, or does the absence of an explicit
+  redistribution *grant* (as opposed to absence of a prohibition) change your read?
+- Is the "make known to... the EPA AirNow program" obligation satisfied by informal
+  registration, or does it warrant actually completing and returning the Data
+  Exchange Guidelines acknowledgment form as a discrete step?
+- Does the two-tier attribution obligation require dynamically crediting the specific
+  reporting agency per reading, or is a generic "state, local, and tribal air quality
+  agencies, and the EPA AirNow program" credit sufficient?
+- Any read on the "most current data available" language that should change the
+  1-hour cache TTL, or is hourly clearly fine?
+
 ## Open questions (blocking or semi-blocking)
 
 - **⛔ Does AirNow's licensing permit Service mode at all?** — *gates all
-  implementation work* (`bluegull-aqi-8ef.10`, P0). Direct mode is plainly the
-  intended use: each user calls AirNow under their own key. Service mode is a
-  different relationship — our backend holds one project-owned key, caches responses,
-  and redistributes the data to end users who have no relationship with AirNow. Terms
-  written for individual API access may not cover redistribution, and may impose
-  attribution wording that has to appear in the UI rather than just the README. If
-  redistribution isn't permitted, this is an architectural finding rather than a
-  detail: Direct mode becomes the only viable path and the entire backend leaves the
-  project. Cheaper to learn before the SAM stack exists than after. Every scaffold
-  task is blocked on this review.
+  implementation work* (`bluegull-aqi-8ef.10`, P0). Research is done — see "AirNow
+  terms review — research findings" above — but the sign-off is Steve's call, not a
+  conclusion reached here. Every scaffold task stays blocked until he closes that
+  issue.
 - **Default data-source mode** for a fresh install (Service vs. Direct) — see above.
   Note this is moot if the licensing review rules out Service mode.
 - **Domain name** for the backend's custom domain — need an actual registered domain
@@ -662,6 +767,16 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-27 — Completed primary-source research for the AirNow terms review
+  (fetched the actual EPA Data Exchange Guidelines PDF and the account registration
+  page). Reassuring on the big question — nothing prohibits Service-mode
+  redistribution, and AirNow's own FAQ endorses the caching pattern already designed
+  — but surfaced five concrete obligations the design doesn't yet satisfy
+  (two-tier attribution, an in-product preliminary-data disclaimer, official AQI
+  colors, notifying AirNow the product exists, keeping contact info current) and one
+  soft interpretive tension (hourly cache vs. "most current data available"). This is
+  research to support Steve's sign-off, not a conclusion — the P0 gate on all
+  implementation stays in place until he closes `bluegull-aqi-8ef.10`.
 - 2026-07-27 — Added a Security & abuse resistance section with an explicit threat
   model. Three gaps the earlier design missed: **denial of wallet** (an elastic stack
   bills elastically, and nothing bounded the burn rate), a **cache-cardinality
