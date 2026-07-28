@@ -584,6 +584,127 @@ than mine to resolve by asserting a reading.
 - Any read on the "most current data available" language that should change the
   1-hour cache TTL, or is hourly clearly fine?
 
+## AQI Technical Assistance Document & API Fact Sheet — review findings
+
+Reviewed 2026-07-28: [AQI Technical Assistance Document](https://www.airnow.gov/sites/default/files/2020-05/aqi-technical-assistance-document-sept2018.pdf)
+(EPA 454/B-18-007, September 2018, 22pp) and the AirNow API Fact Sheet (3pp).
+
+### How much of the TAD actually binds us
+
+Steve's framing is right as to most of it: the TAD is guidance for **local agencies
+reporting AQI** under 40 CFR 58.50, not for downstream apps redistributing published
+data. The reporting *obligations* — who must report, how often (MSAs >350,000, five
+days a week), what a compliant agency report contains — do not apply to us.
+
+**But one part reaches us by incorporation.** The Data Exchange Guidelines, which
+*do* bind data recipients, say values "should be disseminated in accordance with the
+AQI and corresponding RGB colors **as directed in the Technical Assistance
+Document**." That clause pulls TAD **Table 1** (category names and ranges) and
+**Table 2** (RGB values) into the document that governs us. So those two tables are
+effectively binding-by-reference, while the rest of the TAD is a specification we may
+consult but aren't obligated by. *(This is my reading — flagged for Steve, since it
+refines his framing rather than simply agreeing with it.)*
+
+### Table 1 + Table 2 — the authoritative values, verbatim
+
+These replace every prior hand-wave about "official EPA colors" in this document.
+
+| AQI range | Descriptor | Color | RGB | Hex |
+|---|---|---|---|---|
+| 0–50 | Good | Green | 0, 228, 0 | `#00E400` |
+| 51–100 | Moderate | Yellow | 255, 255, 0 | `#FFFF00` |
+| 101–150 | Unhealthy for Sensitive Groups | Orange | 255, 126, 0 | `#FF7E00` |
+| 151–200 | Unhealthy | Red | 255, 0, 0 | `#FF0000` |
+| 201–300 | Very Unhealthy | Purple | 143, 63, 151 | `#8F3F97` |
+| 301–500 | Hazardous | Maroon | 126, 0, 35 | `#7E0023` |
+
+Two things a naive implementation gets wrong: **Green is `0,228,0`, not `0,255,0`**,
+and **Maroon is `126,0,35`**, not a generic dark red. The TAD also gives CMYK values,
+irrelevant for screen output.
+
+*Implementation note:* specify these in **sRGB explicitly**. On a wide-gamut Display
+P3 Mac, a color literal interpreted in the display's native space would render
+noticeably different values than EPA specified.
+
+### "Beyond the AQI" — an edge case our model doesn't handle yet
+
+TAD Table 1 bounds Hazardous at **301–500**. Above 500 is *"Beyond the AQI"*: a value
+can still be computed "to indicate relative magnitude," using the Hazardous
+breakpoints, and users should "follow the recommendations for the Hazardous category."
+
+Note the divergence from EPA's own site: airnow.gov's legend shows "**301 +**" for
+Hazardous, collapsing the distinction. Per the evidence caveat above, that's how one
+EPA product chose to display it, not proof the TAD's own 301–500 bound may be ignored.
+Our category model currently has no representation for >500 at all. Tracked as
+`bluegull-aqi-10h.16`; the display question is in Open Questions below.
+
+### What the number *is*: NowCast, not a spot reading
+
+Both documents are emphatic, and this matters for how we label things:
+
+> "The Air Quality Index is based on daily air quality summaries... **It is not valid
+> to use shorter-term (e.g. hourly) data to calculate an AQI value.** However,
+> real-time reporting requires shorter-term data... The NowCast is EPA's endorsed
+> method for relating short-term data to the Air Quality Index for the purposes of
+> real-time reporting."
+
+NowCast uses a **variable averaging window** — longer when air quality is stable,
+shorter when it's changing fast (PM2.5: ~12 hours stable, ~3 hours variable; ozone:
+~8 hours stable, ~1 hour variable). So the value we display is a weighted average
+designed to track lived experience, **not** an instantaneous sensor reading, and not
+the daily AQI either. UI copy shouldn't imply otherwise. Tracked as
+`bluegull-aqi-10h.18`.
+
+### Hard constraint: never compute AQI ourselves
+
+The TAD supplies the breakpoint table (Table 5) and the linear-interpolation formula
+(Equation 1). For this project those are **documentation of what not to do**. The
+Data Exchange Guidelines require data be "disseminated as received" without
+alteration, and the TAD independently warns that deriving AQI from short-term
+concentrations is invalid. So: display AirNow's AQI values as returned; never convert
+a concentration into an AQI, never re-derive, never interpolate. If the API returns
+raw concentrations for some pollutant without an accompanying AQI, show the
+concentration labeled as such — do not compute an index from it. Tracked as
+`bluegull-aqi-10h.17`, including a test asserting no AQI derivation exists in the
+codebase.
+
+### Endpoint taxonomy (Fact Sheet) — affects which call we actually make
+
+The Fact Sheet enumerates the web services, and the distinctions matter for our
+widget's "full pollutant breakdown" scope and for attribution:
+
+- **Current Observations by Reporting Area** — "Real-time air quality observations
+  (NowCast AQI) for each pollutant measured by reporting areas – cities or other
+  reporting areas **defined by air quality agencies**." This is the one that appears
+  to match our needs: NowCast, per-pollutant, and reporting-area-scoped.
+- **Observations by Monitoring Site** — site-level rather than aggregated.
+- **Forecasts**, **Historical Observations by Reporting Area**, **Contour Maps**
+  (AQI-colored spatial polygons) — not v1.
+
+The phrase "reporting areas defined by air quality agencies" is likely where the
+agency attribution in `bluegull-aqi-10h.15` comes from — airnow.gov displayed
+"San Francisco Reporting Area" and "Data courtesy of Bay Area Air District" together,
+consistent with that. Endpoint selection is tracked as `bluegull-aqi-10h.19`.
+
+Also reconfirms the caching posture: file products are recommended "when an AirNow
+user needs to extract data across a large time period and/or geographic area" — which
+our per-request opportunistic caching is not.
+
+### Smaller findings
+
+- **"Particle pollution" over "particulate matter."** Per EPA focus-group testing,
+  "people better understand and prefer the term 'particle pollution.'" A copy
+  preference, not a requirement. Tracked as `bluegull-aqi-10h.20`.
+- **Sensitive groups (Table 3) and cautionary statements (Table 4)** are required
+  content for *agency* reports when AQI > 100, not for us. But the TAD supplies
+  authoritative text for both, and this is exactly the health-protective content that
+  gives the app its point. Whether v1 or deferred is in Open Questions.
+- **EPA distributes its own AirNow app and widget** (TAD Figure 6). Useful prior art,
+  and consistent with the earlier finding that EPA's own products are evidence of
+  accepted practice rather than a compliance floor.
+- **Account activation** requires an emailed confirmation code; the key then appears
+  on the Web Services page. Operational detail for `bluegull-aqi-8ef.1`.
+
 ## Open questions (blocking or semi-blocking)
 
 - **⛔ Does AirNow's licensing permit Service mode at all?** — *gates all
@@ -591,6 +712,21 @@ than mine to resolve by asserting a reading.
   terms review — research findings" above — but the sign-off is Steve's call, not a
   conclusion reached here. Every scaffold task stays blocked until he closes that
   issue.
+- **How should AQI > 500 ("Beyond the AQI") display?** TAD Table 1 bounds Hazardous at
+  301–500 and calls anything above it "Beyond the AQI," directing users to follow
+  Hazardous recommendations; airnow.gov's own legend instead shows "301 +". Options:
+  show `Hazardous` + maroon for everything ≥301 (matches EPA's site, simplest), or
+  show a distinct `Beyond the AQI` descriptor above 500 while keeping maroon and the
+  Hazardous health guidance (matches the TAD's text more literally). Affects the
+  category model in `bluegull-aqi-10h.16`. Rare in practice but reachable during
+  severe wildfire smoke — which is precisely when the app matters most.
+- **Do sensitive-groups and cautionary statements belong in v1?** TAD Tables 3 and 4
+  supply authoritative per-pollutant health guidance ("People with heart or lung
+  disease, older adults, children... should reduce prolonged or heavy exertion").
+  Required of reporting agencies above AQI 100, not of us. It's the most
+  health-protective content available and arguably the point of the app, but it's
+  also real scope. Tracked as `bluegull-aqi-mtm.16`, currently parked at P4/deferred
+  pending this call.
 - **Default data-source mode** for a fresh install (Service vs. Direct) — see above.
   Note this is moot if the licensing review rules out Service mode.
 - **Domain name** for the backend's custom domain — need an actual registered domain
@@ -858,6 +994,18 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — Reviewed the AQI Technical Assistance Document (EPA 454/B-18-007) and
+  the AirNow API Fact Sheet, which Steve supplied. Biggest concrete win: the
+  **authoritative AQI category table and exact RGB values** (Table 1/Table 2) are now
+  recorded verbatim and loaded into `bluegull-aqi-10h.2`, replacing every prior
+  hand-wave about "official EPA colors" — including two values a naive implementation
+  gets wrong (Green is `0,228,0`, Maroon is `126,0,35`). Also refines Steve's framing
+  of the TAD's applicability: the reporting obligations don't bind us, but the Data
+  Exchange Guidelines *incorporate* TAD Tables 1–2 by reference, so those do. Six new
+  tasks (`10h.16`–`10h.20`, `mtm.16`), and a `compliance` label backfilled across all
+  13 AirNow-obligation issues so the set is visible as a whole
+  (`bd list --label compliance`). Two new open questions: how to display AQI > 500
+  ("Beyond the AQI"), and whether health/cautionary content belongs in v1.
 - 2026-07-28 — Closed the "does the widget need attribution/disclaimer too" question
   left open earlier: yes, via a **tap-to-expand** detail view (`bluegull-aqi-mtm.14`)
   reached through WidgetKit's `widgetURL`, the same pattern Apple's Weather widget
