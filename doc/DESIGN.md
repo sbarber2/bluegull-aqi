@@ -402,13 +402,18 @@ materializes.
   it does, it's the real answer to "only our app may call this" — but nothing should
   be designed around it until confirmed.
 
-## AirNow terms review — research findings (pending sign-off)
+## AirNow terms review — research findings
 
-Primary-source research for `bluegull-aqi-8ef.10`, done 2026-07-27. This is fact-
-gathering and a first read, not a legal conclusion — the actual sign-off is Steve's
-call (he formerly practiced copyright law), and this section is written to support
-that judgment, not substitute for it. **The P0 gate stays in place until he closes
-this issue.**
+Primary-source research for `bluegull-aqi-8ef.10`, done 2026-07-27. This was
+fact-gathering to support a decision, not a legal conclusion in itself.
+
+**Resolved 2026-07-28**: after reviewing the Data Exchange Guidelines, the AirNow API
+FAQ and Fact Sheet, and the AQI Technical Assistance Document, the project owner
+determined that caching AirNow data and redistributing it to end users via a proxy
+server is permitted — Service mode proceeds alongside Direct mode. The P0 gate on all
+implementation is lifted. The compliance *obligations* catalogued below are unaffected
+by that determination and remain tracked (`bd list --label compliance`); they gate App
+Store submission, not the start of implementation.
 
 ### What the operative agreement actually is
 
@@ -570,19 +575,23 @@ than mine to resolve by asserting a reading.
   might surface additional text once an account actually exists (a step I haven't
   taken).
 
-### Questions for Steve's sign-off
+### Questions raised for sign-off — and how they resolved
 
-- Does "nothing prohibits it" + the FAQ's explicit caching endorsement read to you as
-  sufficient permission for Service mode, or does the absence of an explicit
-  redistribution *grant* (as opposed to absence of a prohibition) change your read?
-- Is the "make known to... the EPA AirNow program" obligation satisfied by informal
-  registration, or does it warrant actually completing and returning the Data
-  Exchange Guidelines acknowledgment form as a discrete step?
-- Does the two-tier attribution obligation require dynamically crediting the specific
-  reporting agency per reading, or is a generic "state, local, and tribal air quality
-  agencies, and the EPA AirNow program" credit sufficient?
-- Any read on the "most current data available" language that should change the
-  1-hour cache TTL, or is hourly clearly fine?
+- *Is the FAQ's caching endorsement plus the absence of a prohibition sufficient
+  permission for Service mode?* — **Yes.** Reviewed and approved 2026-07-28; caching
+  and proxy redistribution proceed.
+- *Does the 1-hour cache TTL sit badly with "most current data available"?* — **No.**
+  Hourly matches AirNow's own observation publish cadence; the approval covers the
+  caching design as specified.
+- *Is "make known to... the EPA AirNow program" satisfied by registration, or does it
+  warrant returning the acknowledgment form?* — Still an implementation detail rather
+  than a blocker; `bluegull-aqi-8ef.13` covers returning the form, which is the more
+  conservative reading and cheap to do regardless.
+- *Does two-tier attribution need per-reading agency crediting or a generic class
+  credit?* — Practically settled by evidence: airnow.gov displays the specific agency
+  ("Data courtesy of Bay Area Air District"), so the field exists and the specific
+  form is achievable. `bluegull-aqi-10h.15` implements it, with a generic class credit
+  as the fallback only where the API supplies no agency.
 
 ## AQI Technical Assistance Document & API Fact Sheet — review findings
 
@@ -733,11 +742,12 @@ our per-request opportunistic caching is not.
 
 ## Open questions (blocking or semi-blocking)
 
-- **⛔ Does AirNow's licensing permit Service mode at all?** — *gates all
-  implementation work* (`bluegull-aqi-8ef.10`, P0). Research is done — see "AirNow
-  terms review — research findings" above — but the sign-off is Steve's call, not a
-  conclusion reached here. Every scaffold task stays blocked until he closes that
-  issue.
+- ~~**⛔ Does AirNow's licensing permit Service mode at all?**~~ — **RESOLVED
+  2026-07-28, gate lifted.** Reviewed and approved: caching AirNow data and
+  redistributing it via a proxy server is permitted. Service mode proceeds alongside
+  Direct mode, and all implementation is unblocked (`bluegull-aqi-8ef.10` closed).
+  The compliance obligations catalogued in the terms review stand unchanged and gate
+  App Store submission — `bd list --label compliance`.
 - ~~**How should AQI > 500 ("Beyond the AQI") display?**~~ — **no longer open.** The
   apparent TAD-vs-airnow.gov conflict was my own extraction error; both agree on
   301–500 Hazardous with values above 500 "beyond the AQI scale." Recommended (and
@@ -1039,6 +1049,12 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — **🔓 Gate lifted.** The AirNow terms review (`bluegull-aqi-8ef.10`, P0)
+  is reviewed, approved, and closed: caching and redistributing AirNow data via a
+  proxy server is permitted, so Service mode proceeds alongside Direct mode and **all
+  implementation is unblocked**. Compliance obligations are unaffected and still gate
+  App Store submission. Also scrubbed a personal detail about the project owner that
+  had no business in a public repo.
 - 2026-07-28 — Decided: health guidance (TAD Tables 3–4 sensitive groups and
   cautionary statements) is **deferred past v1** — `bluegull-aqi-mtm.16`, kept open
   at P4 and linked to the post-v1 richer detail view. Defensible specifically because
