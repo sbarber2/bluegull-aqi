@@ -746,13 +746,11 @@ our per-request opportunistic caching is not.
   the scale using AirNow's own phrasing. Left here rather than deleted because the
   real design point survives — the model must not treat >500 as invalid, since that
   blanks the app during exactly the wildfire conditions that produce such readings.
-- **Do sensitive-groups and cautionary statements belong in v1?** TAD Tables 3 and 4
-  supply authoritative per-pollutant health guidance ("People with heart or lung
-  disease, older adults, children... should reduce prolonged or heavy exertion").
-  Required of reporting agencies above AQI 100, not of us. It's the most
-  health-protective content available and arguably the point of the app, but it's
-  also real scope. Tracked as `bluegull-aqi-mtm.16`, currently parked at P4/deferred
-  pending this call.
+- ~~**Do sensitive-groups and cautionary statements belong in v1?**~~ — **decided
+  2026-07-28: deferred past v1.** See "Deferred past v1" below. Deferrable precisely
+  because it isn't an obligation on us — TAD Tables 3–4 bind reporting *agencies*
+  above AQI 100, not downstream redistributors, so v1 ships compliant without it.
+  Tracked as `bluegull-aqi-mtm.16`.
 - **Default data-source mode** for a fresh install (Service vs. Direct) — see above.
   Note this is moot if the licensing review rules out Service mode.
 - **Domain name** for the backend's custom domain — need an actual registered domain
@@ -779,6 +777,27 @@ our per-request opportunistic caching is not.
    budget tuning.
 6. **App Store prep** — sandbox entitlements (location, network client), privacy
    nutrition label, screenshots, review pass.
+
+### Deferred past v1
+
+Explicitly out of scope for the first release — deferred, not rejected. Each is a
+live issue at P3/P4 so it resurfaces rather than being lost. Recorded here so the v1
+boundary is one visible list instead of scattered across epics:
+
+| Deferred | Issue | Why it's safe to defer |
+|---|---|---|
+| Sensitive-groups & cautionary statements (health guidance) | `bluegull-aqi-mtm.16` | TAD Tables 3–4 bind reporting *agencies* above AQI 100, not downstream redistributors — v1 ships compliant without it |
+| Richer widget detail view (trends, forecast, more pollutants) | `bluegull-aqi-mtm.15` | The v1 tap-to-expand view is deliberately scoped to compliance content only |
+| Forecast data | — | The data-scope decision chose current observations only; forecast would be a natural companion to the richer detail view above |
+| CloudFront in front of the API | `bluegull-aqi-q9r.33` | Cost/DoS benefit doesn't justify the complexity until real traffic exists |
+| App Attest device attestation | `bluegull-aqi-10h.14` | Unverified whether it's even supported on native macOS; nothing depends on it |
+| Branch protection on `main` | `bluegull-aqi-8ef.9` | Friction without benefit until CI produces status checks worth gating on |
+
+Note what is *not* on this list: attribution (`e70.10`, `mtm.14`), the
+preliminary-data disclaimer (`dc2.4`), official AQI colors, and the never-derive-AQI
+constraint (`10h.17`) are all **v1 obligations** and gate App Store submission. The
+distinction throughout is between what the AirNow guidelines actually require of us
+and what is merely good product.
 
 ## Testing strategy
 
@@ -1020,6 +1039,15 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — Decided: health guidance (TAD Tables 3–4 sensitive groups and
+  cautionary statements) is **deferred past v1** — `bluegull-aqi-mtm.16`, kept open
+  at P4 and linked to the post-v1 richer detail view. Defensible specifically because
+  it isn't an obligation on us. Also added a **"Deferred past v1"** table to the
+  build-order section, collecting all six deferred items in one place with the reason
+  each is safe to defer, and naming what is deliberately *not* deferrable (attribution,
+  the preliminary-data disclaimer, official AQI colors, never-derive-AQI) — the line
+  throughout being what the AirNow guidelines require of us versus what is good
+  product.
 - 2026-07-28 — **Corrected a factual error from the same day's review**: I reported a
   divergence between airnow.gov ("301 +") and the TAD (301–500 + "Beyond the AQI").
   There is none — the "301 +" came from a collapsed text extraction; the site's
