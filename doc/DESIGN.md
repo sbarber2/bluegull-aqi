@@ -50,7 +50,7 @@ removes it. Rotation, not deletion, is the only real remedy once it happens.
 
 | Secret | Home | Never |
 |---|---|---|
-| Service's AirNow API key | SSM Parameter Store (SecureString) or Secrets Manager, read by the Lambda execution role | In source, in `template.yaml`, or as a CloudFormation parameter default |
+| Service's AirNow API key | SSM Parameter Store, SecureString, `/bluegull-aqi/airnow-api-key` (one key shared across dev/stage/prod), read by the Lambda execution role | In source, in `template.yaml`, or as a CloudFormation parameter default |
 | User's own AirNow API key (direct mode) | iCloud Keychain on the user's Mac | Bundled in the app binary or in any repo file |
 | Local dev AirNow key | `.env`, gitignored; `.env.example` committed with placeholders only | Committed, even "temporarily" |
 | AWS deploy credentials | GitHub Actions OIDC role assumption — no long-lived keys exist to leak | Long-lived access keys in GitHub secrets or `~/.aws` in CI |
@@ -1065,6 +1065,14 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — AirNow API key for the service obtained. Per the credential-handling
+  rule, the key was never pasted into chat — added `service/.env.example`
+  (`AIRNOW_API_KEY` + local-dev vars, no real value) and gave exact commands to run
+  directly for the two places the real key goes: a local `.env` (gitignored) and AWS
+  SSM Parameter Store. Decided the SSM parameter name: `/bluegull-aqi/airnow-api-key`
+  (SecureString), one key shared across all three stacks rather than per-environment.
+  Closes `bluegull-aqi-8ef.1` and `q9r.28`, unblocking `q9r.2` (handler) and `q9r.4`
+  (SSM wiring) — 26 issues ready, `q9r.2` chief among them.
 - 2026-07-28 — **Scaffolding started.** `service/` (SAM: `template.yaml` with a bare
   HTTP API + placeholder Lambda, `pyproject.toml`, `Makefile`, tests — all verified:
   `poetry install`, `pytest`, `pylint` 10/10, `sam validate`, `sam build`) and
