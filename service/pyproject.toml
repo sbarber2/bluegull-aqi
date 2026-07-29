@@ -26,6 +26,17 @@ pylint = "^3.0"
 [tool.poetry.requires-plugins]
 poetry-plugin-export = ">=1.8"
 
+[tool.pylint.messages_control]
+# Mirrors Plant-Tracer's pyproject.toml pylint config (same rationale: well-named
+# identifiers and short test names don't need a docstring restating them).
+disable = [
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "missing-function-docstring",
+    "line-too-long",
+    "unused-argument",
+]
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

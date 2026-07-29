@@ -2,14 +2,14 @@
 # BlueGull AQI backend -- a rate-limited caching proxy in front of the AirNow
 # API. See /doc/DESIGN.md for the full design.
 #
-# This is the bare scaffold (bluegull-aqi-q9r.1): one HTTP API, one Lambda
-# function with a placeholder handler, and the IAM role/log group it needs.
-# Deliberately NOT here yet, each its own tracked task:
-#   - DynamoDB cache table                  (bluegull-aqi-q9r.3)
-#   - SSM-stored AirNow API key              (bluegull-aqi-q9r.4)
-#   - WAFv2 per-IP rate-based rule            (bluegull-aqi-q9r.5)
-#   - Route53 + ACM custom domain             (bluegull-aqi-q9r.6)
-#   - Reserved concurrency / scale config     (bluegull-aqi-q9r.17)
+# Covers bluegull-aqi-q9r.2 (handler), q9r.3 (DynamoDB cache table), and q9r.4
+# (SSM-stored AirNow API key). Deliberately NOT here yet, each its own tracked
+# task:
+#   - WAFv2 per-IP rate-based rule                    (bluegull-aqi-q9r.5)
+#   - Route53 + ACM custom domain                     (bluegull-aqi-q9r.6)
+#   - Reserved concurrency / scale config              (bluegull-aqi-q9r.17)
+#   - Stale-while-revalidate + single-flight cache      (bluegull-aqi-q9r.15)
+#   - Coordinate validation / coverage-area rejection   (bluegull-aqi-q9r.30)
 # -----------------------------------------------------------------------------
 
 AWSTemplateFormatVersion: '2010-09-09'
@@ -24,11 +24,42 @@ Parameters:
     AllowedValues: [CRITICAL, ERROR, WARNING, INFO, DEBUG, NOTSET]
     Description: Default LOG_LEVEL environment value for the function.
 
+  AirNowApiKeySsmParameter:
+    Type: String
+    Default: /bluegull-aqi/airnow-api-key
+    Description: >
+      SSM SecureString parameter name holding the service's own AirNow API key.
+      Read at runtime by the Lambda (not a CloudFormation dynamic reference --
+      never baked into the deployed template or the function's environment
+      variables). See doc/DESIGN.md "Secrets & credentials".
+
+  CacheTtlSeconds:
+    Type: Number
+    Default: 3600
+    Description: >
+      Cache entry lifetime. ~1 hour to match AirNow's own NowCast publish
+      cadence -- see bluegull-aqi-q9r.15 for the stale-while-revalidate
+      refinement that will sit on top of this basic TTL.
+
 Resources:
   AqiHttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
       StageName: prod
+
+  AqiCacheTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: LocationKey
+          AttributeType: S
+      KeySchema:
+        - AttributeName: LocationKey
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ExpiresAt
+        Enabled: true
 
   AqiFunctionLogGroup:
     Type: AWS::Logs::LogGroup
@@ -50,6 +81,28 @@ Resources:
             Action: "sts:AssumeRole"
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: AqiCacheTableAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:GetItem
+                  - dynamodb:PutItem
+                Resource: !GetAtt AqiCacheTable.Arn
+        - PolicyName: AirNowApiKeyAccess
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                Resource: !Sub "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter${AirNowApiKeySsmParameter}"
+              - Effect: Allow
+                Action:
+                  - kms:Decrypt
+                Resource: !Sub "arn:${AWS::Partition}:kms:${AWS::Region}:${AWS::AccountId}:alias/aws/ssm"
 
   AqiFunction:
     Type: AWS::Serverless::Function
@@ -69,6 +122,9 @@ Resources:
       Environment:
         Variables:
           LOG_LEVEL: !Ref LogLevel
+          CACHE_TABLE_NAME: !Ref AqiCacheTable
+          CACHE_TTL_SECONDS: !Ref CacheTtlSeconds
+          AIRNOW_API_KEY_SSM_PARAMETER: !Ref AirNowApiKeySsmParameter
       Events:
         AqiRequest:
           Type: HttpApi

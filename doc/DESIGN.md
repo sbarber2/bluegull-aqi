@@ -53,7 +53,7 @@ removes it. Rotation, not deletion, is the only real remedy once it happens.
 |---|---|---|
 | Service's AirNow API key | SSM Parameter Store, SecureString, `/bluegull-aqi/airnow-api-key` (one key shared across dev/stage/prod), read by the Lambda execution role | In source, in `template.yaml`, or as a CloudFormation parameter default |
 | User's own AirNow API key (direct mode) | iCloud Keychain on the user's Mac | Bundled in the app binary or in any repo file |
-| Local dev AirNow key | `.env`, gitignored; `.env.example` committed with placeholders only | Committed, even "temporarily" |
+| Local dev AirNow key | `.env`, gitignored; `.env.example` committed with placeholders only. `.envrc` (direnv) is an equally common place to stash it as a plain `export` and needs its own `.gitignore` line — `.env.*` does **not** match that filename | Committed, even "temporarily" |
 | AWS deploy credentials | GitHub Actions OIDC role assumption — no long-lived keys exist to leak | Long-lived access keys in GitHub secrets or `~/.aws` in CI |
 | Apple signing cert / App Store Connect API key | GitHub Actions encrypted secrets, imported to a temporary keychain at build time | Committed, or left in a persistent CI keychain |
 
@@ -1128,6 +1128,26 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   the right screen — no DNSSEC or trailing-dot issue in the end. ACM DNS validation
   for `aqi.bluegull.org` (and the dev/stage subdomains once their records exist) can
   now proceed.
+- 2026-07-29 — **`bluegull-aqi-q9r.2` implemented and verified end-to-end**, along
+  with the tightly-coupled `q9r.3` (DynamoDB cache table), `q9r.4` (SSM key
+  wiring), `q9r.11` (DynamoDB Local), and `q9r.12` (native local runner) —
+  `GET /aqi?lat=&lon=` now really works: cache check, AirNow fallback, cache
+  write, all confirmed live against the real AirNow API through
+  `bin/run_local.py` (cache miss with real San Francisco readings including
+  `reportingAgency`, then a cache hit with zero additional AirNow calls). 14
+  tests pass (cache tests against real DynamoDB Local, not moto), pylint
+  10/10, `sam build` confirmed to actually bundle dependencies. Deliberately
+  not in scope: stale-while-revalidate (`q9r.15`), coordinate/coverage-area
+  validation (`q9r.30`), log redaction hardening (`q9r.27`) — each stays a
+  separate layer on top of this, not folded in.
+- 2026-07-29 — **Closed a real gitignore gap, caught before any leak occurred.**
+  While staging the `q9r.2` implementation, found a `.envrc` (direnv) file at the
+  repo root holding the real AirNow API key as a plain `export` — and `.gitignore`
+  didn't cover it: `.env.*` doesn't match a filename with no dot before `rc`.
+  Verified via `git log --all` that it had never been committed, then added
+  `.envrc` explicitly to `.gitignore` and recorded the pattern in the secrets
+  inventory. The key's value was never written anywhere (chat, commit, or issue) —
+  only its filename/location was ever referenced.
 - 2026-07-28 — Recorded where `bluegull.org` is actually registered: **Squarespace**.
   Fills in the "wherever `bluegull.org`'s DNS otherwise lives" placeholder used
   throughout the domain-delegation writeups with a concrete answer — the NS
