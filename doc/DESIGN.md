@@ -35,7 +35,7 @@ GitHub Actions CI/CD, Route53/ACM custom domain.
 | Refresh cadence | Hourly, matching AirNow's own publish cadence. |
 | Minimum macOS version | macOS 14 (Sonoma) — required for desktop WidgetKit widgets anyway. |
 | Backend custom domain | Three environments, one hosted zone. **Prod** = bare `aqi.bluegull.org`. **Dev** = `dev.aqi.bluegull.org`. **Staging** = `stage.aqi.bluegull.org`. All three are dot-subdomains of `aqi.bluegull.org`, so all three live under the single Route53 hosted zone in AWS account `843088391598`, delegated from `bluegull.org`'s DNS at **Squarespace** (registrar; everything else there untouched). **✅ Delegation confirmed live 2026-07-28.** Mirrors Plant-Tracer's `${StackName}.${BaseDomain}` pattern. |
-| AWS account | **`843088391598`**, dedicated to this project (not shared with Plant-Tracer) — gives the blast-radius isolation the Scaling & Performance section already assumed. AirNow API key for the service **not yet registered**. |
+| AWS account | **`843088391598`**, dedicated to this project (not shared with Plant-Tracer) — gives the blast-radius isolation the Scaling & Performance section already assumed. Standalone account, its own IAM Identity Center instance (not part of Plant-Tracer's org). CLI access: `aws sts get-caller-identity --profile AdministratorAccess-843088391598` — an assumed role via `AWSReservedSSO_AdministratorAccess`, not root; re-authenticate with `aws sso login --profile AdministratorAccess-843088391598` when the session expires. |
 | Apple Developer account | Already enrolled; bundle IDs / App Group still need to be created. |
 | AQI category colors | Official EPA AQI RGB palette only, sourced once in `BluegullAQIKit`'s shared models and used by both the menu bar and widget — never a custom palette. Compliance requirement from the AirNow Data Exchange Guidelines, not a style preference; see "AirNow terms review" below. |
 
@@ -1065,6 +1065,12 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — Local AWS CLI access set up for `843088391598`: standalone account
+  (not part of Plant-Tracer's AWS Organization), so IAM Identity Center was enabled
+  fresh in it, using root only for that one bootstrapping step — the documented
+  legitimate root use case, since no other identity exists yet in a new account.
+  Verified profile `AdministratorAccess-843088391598` resolves to an assumed role
+  through `AWSReservedSSO_AdministratorAccess`, not root, in the correct account.
 - 2026-07-28 — AirNow API key for the service obtained. Per the credential-handling
   rule, the key was never pasted into chat — added `service/.env.example`
   (`AIRNOW_API_KEY` + local-dev vars, no real value) and gave exact commands to run
