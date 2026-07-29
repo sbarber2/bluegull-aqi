@@ -3,10 +3,12 @@
 A macOS menu bar app and desktop widget that shows local air quality, using data from
 the US EPA's [AirNow](https://www.airnow.gov) program.
 
-> **Status: design phase.** There is no application code in this repository yet —
-> only the design record and the task graph. The structure described below is largely
-> planned rather than present. See [doc/DESIGN.md](doc/DESIGN.md) for the full design
-> and [Task tracking](#task-tracking) for what's queued up.
+> **Status: early scaffolding.** The backend (`service/`) and the shared Swift
+> package (`mac-app/BluegullAQIKit/`) exist as bare, tested skeletons — no real
+> AQI-fetching logic yet. The menu bar app, widget extension, and most of the
+> backend's actual behavior are still just design and task graph. See
+> [doc/DESIGN.md](doc/DESIGN.md) for the full design and
+> [Task tracking](#task-tracking) for what's queued up.
 
 ## What it will do
 
@@ -43,11 +45,11 @@ know or care which one answered.
 bluegull-aqi/
 ├── doc/
 │   └── DESIGN.md          # the design record — start here
-├── mac-app/               # (planned) Xcode project
-│   ├── BluegullAQI/        #   menu bar container app
-│   ├── BluegullAQIWidget/  #   WidgetKit extension
-│   └── BluegullAQIKit/     #   shared Swift package: models, clients, cache
-├── service/               # (planned) AWS SAM backend — the caching proxy
+├── mac-app/
+│   ├── BluegullAQI/        # (planned) menu bar container app
+│   ├── BluegullAQIWidget/  # (planned) WidgetKit extension
+│   └── BluegullAQIKit/     # shared Swift package: models, clients, cache -- scaffolded
+├── service/                # AWS SAM backend — the caching proxy -- scaffolded
 │   ├── template.yaml
 │   ├── src/
 │   └── tests/
@@ -57,7 +59,9 @@ bluegull-aqi/
 └── LICENSE
 ```
 
-Only `doc/`, `.beads/`, and the agent instruction files exist today.
+"Scaffolded" means a real, buildable, tested skeleton with no actual behavior yet —
+`service/`'s Lambda handler returns a placeholder response, `BluegullAQIKit` exports
+a version constant. `(planned)` means the directory doesn't exist yet.
 
 The `mac-app/` split exists so that the menu bar app and the widget extension share
 one core library rather than duplicating logic. It also reflects a platform

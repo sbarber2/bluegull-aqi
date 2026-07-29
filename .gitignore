@@ -38,3 +38,18 @@ secrets.json
 *.db
 .beads-credential-key
 .beads/proxieddb/
+
+# Python / Poetry / SAM build artifacts
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+.aws-sam/
+poetry.toml
+
+# Swift Package Manager / Xcode build artifacts
+.build/
+.swiftpm/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/

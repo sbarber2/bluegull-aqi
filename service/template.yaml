@@ -1,0 +1,83 @@
+# -----------------------------------------------------------------------------
+# BlueGull AQI backend -- a rate-limited caching proxy in front of the AirNow
+# API. See /doc/DESIGN.md for the full design.
+#
+# This is the bare scaffold (bluegull-aqi-q9r.1): one HTTP API, one Lambda
+# function with a placeholder handler, and the IAM role/log group it needs.
+# Deliberately NOT here yet, each its own tracked task:
+#   - DynamoDB cache table                  (bluegull-aqi-q9r.3)
+#   - SSM-stored AirNow API key              (bluegull-aqi-q9r.4)
+#   - WAFv2 per-IP rate-based rule            (bluegull-aqi-q9r.5)
+#   - Route53 + ACM custom domain             (bluegull-aqi-q9r.6)
+#   - Reserved concurrency / scale config     (bluegull-aqi-q9r.17)
+# -----------------------------------------------------------------------------
+
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  BlueGull AQI backend: a rate-limited caching proxy in front of the AirNow API.
+
+Parameters:
+  LogLevel:
+    Type: String
+    Default: INFO
+    AllowedValues: [CRITICAL, ERROR, WARNING, INFO, DEBUG, NOTSET]
+    Description: Default LOG_LEVEL environment value for the function.
+
+Resources:
+  AqiHttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: prod
+
+  AqiFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${AqiFunction}"
+      RetentionInDays: 30
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+
+  AqiFunctionExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: "sts:AssumeRole"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+
+  AqiFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: python3.14
+      BuildProperties:
+        RequirementsFile: requirements.txt
+    Properties:
+      Role: !GetAtt AqiFunctionExecutionRole.Arn
+      Runtime: python3.14
+      Architectures: [arm64]
+      PackageType: Zip
+      CodeUri: src/
+      Handler: bluegull_aqi_service.lambda_handler.lambda_handler
+      Timeout: 30
+      MemorySize: 256
+      Environment:
+        Variables:
+          LOG_LEVEL: !Ref LogLevel
+      Events:
+        AqiRequest:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref AqiHttpApi
+            Path: /aqi
+            Method: GET
+
+Outputs:
+  ApiEndpoint:
+    Description: Default (execute-api) endpoint for the HTTP API -- superseded by the custom domain once bluegull-aqi-q9r.6 lands.
+    Value: !Sub "https://${AqiHttpApi}.execute-api.${AWS::Region}.amazonaws.com/"

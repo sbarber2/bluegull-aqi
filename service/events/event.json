@@ -1,0 +1,22 @@
+{
+  "version": "2.0",
+  "routeKey": "GET /aqi",
+  "rawPath": "/aqi",
+  "rawQueryString": "lat=37.7749&lon=-122.4194",
+  "headers": {
+    "accept": "application/json"
+  },
+  "queryStringParameters": {
+    "lat": "37.7749",
+    "lon": "-122.4194"
+  },
+  "requestContext": {
+    "http": {
+      "method": "GET",
+      "path": "/aqi",
+      "protocol": "HTTP/1.1",
+      "sourceIp": "203.0.113.1"
+    }
+  },
+  "isBase64Encoded": false
+}

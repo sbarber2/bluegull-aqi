@@ -1,8 +1,10 @@
 # BlueGull AQI — Design
 
-Status: **draft, pre-implementation**. This file is the living design document for the
-project; update it as decisions change instead of letting the chat history be the
-source of truth.
+Status: **early implementation**. `service/` and `mac-app/BluegullAQIKit/` are
+scaffolded (buildable, tested, no real behavior yet); everything else is still
+design and task graph. This file is the living design document for the project;
+update it as decisions change instead of letting the chat history be the source of
+truth.
 
 ## Goal
 
@@ -1063,6 +1065,18 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — **Scaffolding started.** `service/` (SAM: `template.yaml` with a bare
+  HTTP API + placeholder Lambda, `pyproject.toml`, `Makefile`, tests — all verified:
+  `poetry install`, `pytest`, `pylint` 10/10, `sam validate`, `sam build`) and
+  `mac-app/BluegullAQIKit/` (SPM package, macOS 14 minimum, builds and tests clean).
+  Closes `bluegull-aqi-q9r.1` and `bluegull-aqi-10h.1`. Targets **Python 3.14**, not
+  3.12 — Plant-Tracer's 3.12 pin turned out to be for VM-distribution compatibility
+  (a constraint we don't have, being Lambda-only from day one), and their own
+  [tracked follow-up](https://github.com/Plant-Tracer/webapp/issues/1114) confirms
+  Lambda now supports 3.14. Also discovered empirically that SAM's `RequirementsFile`
+  resolves relative to `CodeUri` (`src/`), not the template root — Plant-Tracer's own
+  `.gitignore` confirms they don't commit it either, generating it fresh at build
+  time from `poetry.lock`. 26 issues now ready, up from 16.
 - 2026-07-28 — **Delegation confirmed live**: `dig NS aqi.bluegull.org` returns the 4
   expected `awsdns` nameservers. Squarespace's NS-record UI worked once pointed at
   the right screen — no DNSSEC or trailing-dot issue in the end. ACM DNS validation

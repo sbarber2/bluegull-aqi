@@ -1,0 +1,31 @@
+[project]
+name = "bluegull-aqi-service"
+version = "0.1.0"
+description = "BlueGull AQI backend: a rate-limited caching proxy in front of the AirNow API"
+readme = "README.md"
+license = "MIT"
+authors = [
+    { name = "Steve Barber", email = "sbarber2@gmail.com" }
+]
+requires-python = ">=3.14,<3.15"
+dynamic = ["dependencies"]
+
+[tool.poetry]
+packages = [
+    { include = "bluegull_aqi_service", from = "src" },
+]
+
+[tool.poetry.dependencies]
+python = ">=3.14,<3.15"
+boto3 = "^1.34"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pylint = "^3.0"
+
+[tool.poetry.requires-plugins]
+poetry-plugin-export = ">=1.8"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
