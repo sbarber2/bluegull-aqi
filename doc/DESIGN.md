@@ -53,7 +53,7 @@ removes it. Rotation, not deletion, is the only real remedy once it happens.
 |---|---|---|
 | Service's AirNow API key | SSM Parameter Store, SecureString, `/bluegull-aqi/airnow-api-key` (one key shared across dev/stage/prod), read by the Lambda execution role | In source, in `template.yaml`, or as a CloudFormation parameter default |
 | User's own AirNow API key (direct mode) | iCloud Keychain on the user's Mac | Bundled in the app binary or in any repo file |
-| Local dev AirNow key | `.env`, gitignored; `.env.example` committed with placeholders only. `.envrc` (direnv) is an equally common place to stash it as a plain `export` and needs its own `.gitignore` line — `.env.*` does **not** match that filename | Committed, even "temporarily" |
+| Local dev AirNow key | **1Password** (Personal vault, item "BlueGull AQI - AirNow API Key", API Credential type, `credential` field), referenced from `.env` as `op://Personal/BlueGull AQI - AirNow API Key/credential` and resolved only at invocation via `op run --env-file=.env -- <command>` — never written to disk as a literal, never persists in the shell beyond that one process. `.env` itself stays gitignored regardless (see `.env.example`). `.envrc` (direnv) is an equally tempting place to stash a secret as a plain `export`, and needed its own explicit `.gitignore` line — `.env.*` does **not** match that filename; found holding this key as a literal mid-project and corrected (see changelog). | Committed, even "temporarily"; resolved into a persistent shell env var (`.envrc`-style) rather than a single process's lifetime |
 | AWS deploy credentials | GitHub Actions OIDC role assumption — no long-lived keys exist to leak | Long-lived access keys in GitHub secrets or `~/.aws` in CI |
 | Apple signing cert / App Store Connect API key | GitHub Actions encrypted secrets, imported to a temporary keychain at build time | Committed, or left in a persistent CI keychain |
 
@@ -1074,6 +1074,17 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-29 — Moved the local-dev AirNow key from a plaintext `.env`/`.envrc`
+  literal to a 1Password reference: Personal vault, item "BlueGull AQI - AirNow
+  API Key" (API Credential type, `credential` field), invoked via
+  `op run --env-file=.env -- <command>` so the real value only ever exists in a
+  single process's environment, never on disk or in a persistent shell. Verified
+  the `op run --env-file` syntax against 1Password's own docs before recommending
+  it. Updated `.env.example`, `service/README.md`, and the secrets inventory
+  accordingly; also fixed a stale `AWS_REGION=us-east-1` in `.env.example` left
+  over from before the region switch to us-east-2. The actual `.env`/`.envrc`
+  edits were left to Steve to do himself, since making them would have required
+  reading his real key.
 - 2026-07-27 — Initial design captured from planning discussion.
 - 2026-07-27 — Renamed `docs/` to `doc/`. Initialized Beads task tracking with one
   epic per phase and issues/dependencies for every task in the phased build order.

@@ -32,5 +32,19 @@ curl "http://localhost:8080/aqi?lat=37.7749&lon=-122.4194"
 start-api`, which needs Docker and is slower to iterate on -- see
 doc/DESIGN.md.
 
+**Recommended**: store the key in 1Password rather than as a literal in
+`.env` -- put an `op://` reference there instead (see `.env.example`) and
+run via:
+
+```bash
+op run --env-file=.env -- make run-local
+```
+
+`op run` resolves the reference and injects the real value into the
+process's environment for its lifetime only; the file on disk never holds
+the actual key. A bare `make run-local` (no `op run` prefix) will pass the
+literal `op://...` string to AirNow and get a confusing 401 -- the prefix is
+what makes the reference resolve.
+
 Deploying requires AWS credentials for account `843088391598` and is not yet
 wired up as a Makefile target -- see `bluegull-aqi-q9r.8`.
