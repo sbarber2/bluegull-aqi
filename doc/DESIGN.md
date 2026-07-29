@@ -35,6 +35,7 @@ GitHub Actions CI/CD, Route53/ACM custom domain.
 | Refresh cadence | Hourly, matching AirNow's own publish cadence. |
 | Minimum macOS version | macOS 14 (Sonoma) — required for desktop WidgetKit widgets anyway. |
 | Backend custom domain | Three environments, one hosted zone. **Prod** = bare `aqi.bluegull.org`. **Dev** = `dev.aqi.bluegull.org`. **Staging** = `stage.aqi.bluegull.org`. All three are dot-subdomains of `aqi.bluegull.org`, so all three live under the single Route53 hosted zone in AWS account `843088391598`, delegated from `bluegull.org`'s DNS at **Squarespace** (registrar; everything else there untouched). **✅ Delegation confirmed live 2026-07-28.** Mirrors Plant-Tracer's `${StackName}.${BaseDomain}` pattern. |
+| AWS region | **`us-east-2`** (Ohio), chosen for cost over the Plant-Tracer-matching default of us-east-1. `service/samconfig.toml` deploys here. No conflict with the custom domain: `AWS::Serverless::HttpApi` custom domains are regional-only (unlike REST API v1's edge-optimized option), so the ACM cert for `aqi.bluegull.org` just needs to be in this same region. The one exception: if CloudFront (`bluegull-aqi-q9r.33`, deferred) is ever adopted, its ACM cert must be in **us-east-1** specifically — a hard CloudFront-wide rule, independent of the API's own region. |
 | AWS account | **`843088391598`**, dedicated to this project (not shared with Plant-Tracer) — gives the blast-radius isolation the Scaling & Performance section already assumed. Standalone account, its own IAM Identity Center instance (not part of Plant-Tracer's org). CLI access: `aws sts get-caller-identity --profile AdministratorAccess-843088391598` — an assumed role via `AWSReservedSSO_AdministratorAccess`, not root; re-authenticate with `aws sso login --profile AdministratorAccess-843088391598` when the session expires. |
 | Apple Developer account | Already enrolled; bundle IDs / App Group still need to be created. |
 | AQI category colors | Official EPA AQI RGB palette only, sourced once in `BluegullAQIKit`'s shared models and used by both the menu bar and widget — never a custom palette. Compliance requirement from the AirNow Data Exchange Guidelines, not a style preference; see "AirNow terms review" below. |
@@ -869,7 +870,7 @@ push.
 
 All latency figures are **server-side** — measured from API Gateway receiving the
 request to sending the response. Client-observed latency additionally includes DNS,
-TLS handshake, and physical distance (a California client hitting `us-east-1` pays
+TLS handshake, and physical distance (a California client hitting `us-east-2` pays
 ~70ms of round-trip before our code runs), none of which any code change can fix.
 Client-observed latency is tracked for UX awareness — target <150ms same-region,
 <300ms cross-continent — but never gated.
@@ -1065,6 +1066,15 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   Beads tasks (handler contract tests, kit contract/network-stub tests, Swift CI
   workflow, widget unit tests, and manual on-device smoke-test checkpoints for the
   menu bar app and widget).
+- 2026-07-28 — Switched the deploy region from us-east-1 (the Plant-Tracer-matching
+  default) to **us-east-2**, for cost. Added a Decisions table row for region (there
+  wasn't one before), updated `service/samconfig.toml`, and recorded a real technical
+  finding while checking for conflicts: `AWS::Serverless::HttpApi` custom domains are
+  regional-only, so the ACM cert for `aqi.bluegull.org` just follows the API into
+  us-east-2 with no special handling. The one exception is CloudFront
+  (`bluegull-aqi-q9r.33`, deferred) — its cert must be in us-east-1 always,
+  regardless of the origin's region — noted on that task so it isn't a surprise if
+  it's ever picked up.
 - 2026-07-28 — Local AWS CLI access set up for `843088391598`: standalone account
   (not part of Plant-Tracer's AWS Organization), so IAM Identity Center was enabled
   fresh in it, using root only for that one bootstrapping step — the documented

@@ -9,4 +9,4 @@ capabilities = "CAPABILITY_IAM"
 image_repositories = []
 
 [default.global.parameters]
-region = "us-east-1"
+region = "us-east-2"
