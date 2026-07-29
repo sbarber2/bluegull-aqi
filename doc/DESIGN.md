@@ -200,6 +200,28 @@ this hasn't been explicitly confirmed yet.
 - **Compute**: plain Lambda + API Gateway HTTP API. (Not using Plant-Tracer's
   Flask + Lambda Web Adapter pattern — this service is a thin JSON caching proxy, not
   a multi-route web app, so that layer would be pure overhead here.)
+- **AirNow endpoint**: `GET https://www.airnowapi.org/aq/observation/current/ziplatlong/`
+  (`?format=application/json&latitude={lat}&longitude={lon}&API_KEY={key}`).
+  **Not** the "classic" `/aq/observation/latLong/current/` endpoint most tutorials and
+  training data reference — EPA is retiring that one (and five siblings) on
+  **September 30, 2026**, per their official migration notice (found via a dated,
+  merged `pyairnow` PR migrating for the same reason, then confirmed directly against
+  EPA's own PDF and a live test query). Response is a JSON array, one object per
+  pollutant, confirmed against a real query:
+  ```json
+  {
+    "dateObserved": "2026-07-29", "hourObserved": "14:00", "localTimeZone": "PDT",
+    "reportingAreaName": "San Francisco", "siteID": "060750005", "siteName": "San Francisco",
+    "parameterName": "PM2.5", "nowcastAQI": 31, "aqiCategoryName": "Good",
+    "reportingAgency": "Bay Area Air District",
+    "lookupBehavior": "Closest Reading By Pollutant", "consideredMonitors": "All",
+    "lookupBoundary": "50 Miles"
+  }
+  ```
+  `reportingAgency` answers `bluegull-aqi-10h.15`'s attribution question directly — no
+  fallback needed for the common case. Error shape:
+  `{"WebServiceError": [{"Message": "..."}]}`, empty array if no data. Never derive
+  `nowcastAQI` ourselves — display as received, per `bluegull-aqi-10h.17`.
 - **Cache**: single DynamoDB table, keyed by rounded lat/long (or zip), with a TTL
   attribute (~1 hour). This is the main protection for AirNow's own rate limit — many
   clients asking about the same area collapse into one upstream AirNow call.
