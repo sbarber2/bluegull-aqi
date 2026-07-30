@@ -16,6 +16,7 @@ targets:
       - path: BluegullAQI
     dependencies:
       - package: BluegullAQIKit
+        product: BluegullAQIKit
       - target: BluegullAQIWidget
         embed: true
     settings:
@@ -62,6 +63,9 @@ targets:
       - path: BluegullAQIWidget
     dependencies:
       - package: BluegullAQIKit
+        product: BluegullAQIKit
+      - package: BluegullAQIKit
+        product: BluegullAQIWidgetViews
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: solutions.bluegull.aqi.widget

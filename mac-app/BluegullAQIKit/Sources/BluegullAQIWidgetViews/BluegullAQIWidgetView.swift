@@ -1,17 +1,35 @@
 import SwiftUI
+import WidgetKit
 import BluegullAQIKit
 
 /// Real per-family layouts (bluegull-aqi-mtm.4 small, mtm.5 medium, mtm.6
-/// large), replacing the `Text(NowCastCopy.headline)` placeholder
-/// mtm.1/mtm.2/mtm.3 deliberately left in place while the timeline plumbing
-/// was being built. `entry.reading` already flows from the App Group cache
-/// via `WidgetTimelineComputer`, respecting the widget's configured
-/// location (mtm.2/mtm.3) -- this type's only job is rendering it.
-struct BluegullAQIWidgetView: View {
-    @Environment(\.widgetFamily) private var family
+/// large). Lives in this separate `BluegullAQIWidgetViews` library target,
+/// not the `BluegullAQIWidget` app-extension target itself, specifically so
+/// an ImageRenderer harness/test target can import and render it directly
+/// (bluegull-aqi-mtm.10) -- an app-extension build product can't be linked
+/// by a separate target (see `WidgetTimelineComputer`'s own doc comment for
+/// the confirmed build error this works around).
+public struct BluegullAQIWidgetView: View {
+    @Environment(\.widgetFamily) private var environmentFamily
     let entry: BluegullAQIWidgetEntry
 
-    var body: some View {
+    // WidgetKit's own `\.widgetFamily` environment key is get-only (the
+    // real widget host is the only thing allowed to set it) -- confirmed
+    // against the SDK's own .swiftinterface, not assumed. A headless
+    // renderer (bluegull-aqi-mtm.10's harness/tests) has no widget host to
+    // inject it, so this override is the only way to force a specific
+    // family outside one. nil (the normal widget-host path) defers to
+    // whatever the environment actually provides.
+    private let familyOverride: WidgetFamily?
+
+    public init(entry: BluegullAQIWidgetEntry, familyOverride: WidgetFamily? = nil) {
+        self.entry = entry
+        self.familyOverride = familyOverride
+    }
+
+    private var family: WidgetFamily { familyOverride ?? environmentFamily }
+
+    public var body: some View {
         if let reading = entry.reading,
            let headline = reading.headlinePollutant,
            let aqi = headline.nowcastAQI,
@@ -47,7 +65,7 @@ struct BluegullAQIWidgetView: View {
 
 /// bluegull-aqi-mtm.4: compact -- AQI number, official EPA category color,
 /// descriptor. Nothing else fits `.systemSmall` legibly.
-private struct SmallWidgetLayout: View {
+struct SmallWidgetLayout: View {
     let aqi: Int
     let category: AQICategory
 
@@ -72,7 +90,7 @@ private struct SmallWidgetLayout: View {
 /// highest-AQI entries besides the headline itself, so what's shown next to
 /// the headline is "what else matters," using the same NowCast ranking
 /// `headlinePollutant` itself uses, not an arbitrary subset.
-private struct MediumWidgetLayout: View {
+struct MediumWidgetLayout: View {
     let aqi: Int
     let category: AQICategory
     let reading: AQIReading
@@ -130,7 +148,7 @@ private struct MediumWidgetLayout: View {
 /// same list shown in the menu bar popover (`AQIPopoverView`'s
 /// `pollutantList`), since "full breakdown" means the same thing in both
 /// places.
-private struct LargeWidgetLayout: View {
+struct LargeWidgetLayout: View {
     let aqi: Int
     let category: AQICategory
     let reading: AQIReading

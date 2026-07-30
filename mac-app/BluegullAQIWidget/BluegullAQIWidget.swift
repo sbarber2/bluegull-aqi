@@ -1,30 +1,7 @@
 import WidgetKit
 import SwiftUI
 import BluegullAQIKit
-
-struct BluegullAQIWidgetEntry: TimelineEntry {
-    let date: Date
-    let reading: AQIReading?
-
-    // The location this widget instance is configured for -- nil for
-    // "current location" (see `LocationOptionEntity`'s own doc comment).
-    // Carried on the entry (not just used to compute `reading`) so the
-    // `widgetURL` tap target (bluegull-aqi-mtm.14) can encode the same
-    // location the widget is actually showing.
-    let configuredLocation: Location?
-
-    init(date: Date, reading: AQIReading?, configuredLocation: Location? = nil) {
-        self.date = date
-        self.reading = reading
-        self.configuredLocation = configuredLocation
-    }
-
-    init(_ snapshot: WidgetTimelineSnapshot, configuredLocation: Location? = nil) {
-        date = snapshot.date
-        reading = snapshot.reading
-        self.configuredLocation = configuredLocation
-    }
-}
+import BluegullAQIWidgetViews
 
 /// Thin `AppIntentTimelineProvider` glue -- the actual cache-reading/
 /// reload-policy logic lives in `BluegullAQIKit.WidgetTimelineComputer`

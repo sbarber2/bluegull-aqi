@@ -1201,6 +1201,51 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-mtm.10 (ImageRenderer harness to
+  render widget views to PNG):
+  - New `BluegullAQIWidgetViews` library target added to the
+    `BluegullAQIKit` Swift package (a second product alongside
+    `BluegullAQIKit` itself, which stays UI-framework-free) -- moved
+    `BluegullAQIWidgetView` (and its small/medium/large layout structs),
+    `BluegullAQIWidgetEntry`, and the widget's `AQIColor.swiftUIColor`
+    conversion out of the `BluegullAQIWidget` app-extension target into it.
+    Same reasoning as `WidgetTimelineComputer`'s original extraction
+    (`mtm.2`/`mtm.7`): an app-extension build product can't be linked by a
+    separate test or harness target, confirmed by a real link error at the
+    time. `BluegullAQIWidget.swift` is now genuinely thin
+    `AppIntentTimelineProvider`/`Widget` glue importing the package.
+  - `BluegullAQIWidgetView` gained an explicit `familyOverride:
+    WidgetFamily?` init parameter (defaulting to nil, which reads
+    `@Environment(\.widgetFamily)` as before) -- WidgetKit's own
+    `widgetFamily` environment key is get-only (confirmed against the
+    SDK's `.swiftinterface`, not assumed), so a headless renderer with no
+    real widget host has no way to inject a family via `.environment(_:_:)`
+    the normal way. The real widget host path is unaffected.
+    New `BluegullAQIWidgetViewsTests` (4 tests) confirm each family/state
+    renders via `ImageRenderer` without crashing, same convention as the
+    container app's own render tests (e.g. `AQIPopoverViewRenderTests`).
+  - New `WidgetRenderHarness` executable target/product -- `swift run
+    WidgetRenderHarness <output-dir>` renders fixture small/medium/large
+    (plus no-data) entries to 6 PNGs, no widget host or GUI needed, for
+    direct visual inspection and as `mtm.11`'s future golden-image
+    fixture source. A `@main` struct rather than a script-style
+    `main.swift`: `ImageRenderer` is `@MainActor`-isolated, and top-level
+    code in `main.swift` runs in a nonisolated context in this SDK
+    (confirmed by a real build error) -- `@MainActor static func main()`
+    gives the isolation `ImageRenderer` needs.
+  - Ran the harness and visually inspected the output: correct EPA
+    category color/AQI number/descriptor in all three layouts, correct
+    pixel dimensions at 2x scale (`sips -g pixelWidth -g pixelHeight`
+    confirmed 316×316 / 676×316 / 676×716 against the harness's own
+    158×158 / 338×158 / 338×358-point target sizes).
+  - Verified: `swift build`/`swift test` in the package (117 tests
+    passing across both test targets -- 113 in `BluegullAQIKitTests`, 4
+    new ones in `BluegullAQIWidgetViewsTests`), full Xcode scheme build
+    (`xcodegen generate` picking up the two package products via explicit
+    `product:` keys in `project.yml`, since a multi-product local package
+    needs disambiguation), `BluegullAQITests` (9 passing), live app launch
+    with no crash report.
+
 - 2026-07-30 — Implemented bluegull-aqi-mtm.14 (widget tap-to-expand detail
   view: attribution + disclaimer), same pattern Apple's own Weather widget
   uses:
