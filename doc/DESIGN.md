@@ -1102,6 +1102,32 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-q9r.18 (minimize Lambda cold start:
+  package size and client init), partially.
+  - **Client init**: `cache.resolve_table()` (the DynamoDB Table resource
+    used by both `Cache` and the new `MissRateLimiter`) is now memoized at
+    module scope, keyed by table name -- built once and reused across every
+    warm invocation, instead of a fresh `boto3.resource("dynamodb").Table(...)`
+    on literally every single request (`Cache()` and now `MissRateLimiter()`
+    are both instantiated fresh per `get_aqi()` call). `_resolve_airnow_api_key()`
+    already did the equivalent for the SSM client/resolved key, so this
+    closes the one remaining gap. All 68 tests still pass; no observable
+    behavior change, just fewer redundant client constructions per warm
+    invocation.
+  - **Package size**: deliberately *not* done, after investigating and
+    surfacing the tradeoff for a decision rather than guessing. The issue's
+    "prefer the runtime-provided boto3 over vendoring a copy" would shrink
+    the ~27MB deployment package meaningfully, but the clearest current AWS
+    guidance found (an AWS Compute Blog post on the Python SDK in Lambda)
+    explicitly recommends bundling all dependencies, including the SDK,
+    specifically because the runtime-provided version can change without
+    warning -- and there was no way to verify either way for this project's
+    python3.14 runtime specifically (no Docker available locally to inspect
+    the base image, and no live deploy to test against, per the standing
+    no-AWS-actions-without-permission boundary). Decided, with Steve's
+    input, to keep vendoring boto3 rather than risk an ImportError
+    discovered only at the first real deploy (q9r.10, still open). Revisit
+    if/when there's a way to verify against the actual runtime.
 - 2026-07-30 — Implemented bluegull-aqi-q9r.32 (rate-limit cache misses
   separately from overall request rate): the stronger version of the
   cache-cardinality defense in "Cache-cardinality attack" above, on top of

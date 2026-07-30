@@ -55,17 +55,29 @@ def hash_location_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:12]
 
 
+# Module-scope, built once per process and reused across every warm Lambda
+# invocation (bluegull-aqi-q9r.18) -- constructing a boto3 resource/client
+# isn't free (session setup, endpoint resolution), and Cache()/
+# MissRateLimiter() are otherwise instantiated fresh on every single
+# request. Keyed by table name rather than a single global, purely so tests
+# that point at different tables within one process still get correct,
+# independent Table objects -- production only ever resolves one name.
+_table_cache: dict = {}
+
+
 def resolve_table(table_name: Optional[str] = None):
     """Return the boto3 Table resource for the shared cache table -- reused
     by rate_limiter.py so its own budget counter lives in the same table
     (bluegull-aqi-q9r.32) instead of duplicating this endpoint/region
     resolution logic."""
     table_name = table_name or os.environ["CACHE_TABLE_NAME"]
-    client_kwargs = {"region_name": os.environ.get("AWS_REGION", "us-east-2")}
-    endpoint_url = os.environ.get("DYNAMODB_ENDPOINT_URL")
-    if endpoint_url:
-        client_kwargs["endpoint_url"] = endpoint_url
-    return boto3.resource("dynamodb", **client_kwargs).Table(table_name)
+    if table_name not in _table_cache:
+        client_kwargs = {"region_name": os.environ.get("AWS_REGION", "us-east-2")}
+        endpoint_url = os.environ.get("DYNAMODB_ENDPOINT_URL")
+        if endpoint_url:
+            client_kwargs["endpoint_url"] = endpoint_url
+        _table_cache[table_name] = boto3.resource("dynamodb", **client_kwargs).Table(table_name)
+    return _table_cache[table_name]
 
 
 def seconds_until_next_boundary(ttl_seconds: int, now: Optional[int] = None) -> int:
