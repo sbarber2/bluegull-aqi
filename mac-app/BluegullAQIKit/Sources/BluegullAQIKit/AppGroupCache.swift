@@ -46,7 +46,7 @@ public protocol SharedCacheStore: Sendable {
 public struct UserDefaultsCacheStore: SharedCacheStore {
     /// Placeholder App Group identifier -- revisit once bluegull-aqi-8ef.5
     /// registers the real one with Apple.
-    public static let appGroupIdentifier = "group.org.bluegull.aqi"
+    public static let appGroupIdentifier = "group.solutions.bluegull.aqi"
 
     // UserDefaults isn't formally Sendable in the SDK, but Apple documents
     // it as safe to use from multiple threads -- nonisolated(unsafe) states

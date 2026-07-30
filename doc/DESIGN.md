@@ -28,16 +28,17 @@ GitHub Actions CI/CD, Route53/ACM custom domain.
 | AirNow auth (direct mode) | User supplies their own AirNow API key; stored in iCloud Keychain, so it syncs across the user's Macs under their Apple ID. Not bundled in the app binary. |
 | Widget type | Both: a WidgetKit desktop widget (macOS 14+) **and** a menu bar app, sharing one core library. |
 | Distribution | Mac App Store. Apple Developer Program membership already active. |
+| Business model / monetization | **For-profit** (changed 2026-07-30 — originally planned as non-profit). Collects money via the App Store (In-App Purchase/subscription/paid app — exact mechanism still open, a pricing detail for `bluegull-aqi-fw4`) to cover infrastructure costs, with flexibility to eventually pay Steve for ongoing operations. Reopens the AirNow commercial-use question the original terms review left unresolved — tracked at P0 in `bluegull-aqi-8ef.15`. |
 | Web service client auth / rate limiting | Anonymous, no per-install keys, no login. Not IP-based -- AWS WAFv2 can't attach to an HTTP API (v2), only REST APIs/ALB/etc. (found and corrected 2026-07-30, bluegull-aqi-q9r.5). Relies instead on API Gateway stage throttling, Lambda reserved concurrency, and a global cache-miss budget (bluegull-aqi-q9r.32). |
 | Menu bar app data scope | The menu bar extra (status item) itself shows current overall AQI only — no room for more. Clicking it opens a `.window`-style popover with full detail (pollutant breakdown, attribution, preliminary-data disclaimer), matching the widget's content. This is the guaranteed access point for compliance content regardless of whether the user has placed the desktop widget. |
 | Widget data scope | Current AQI **and** full per-pollutant breakdown (PM2.5, PM10, ozone, etc.). |
 | Location scope | Current location (CoreLocation) **and** user-pinned locations (zip/address, geocoded locally via `CLGeocoder`/MapKit — no backend geocoding endpoint needed). |
 | Refresh cadence | Hourly, matching AirNow's own publish cadence. |
 | Minimum macOS version | macOS 14 (Sonoma) — required for desktop WidgetKit widgets anyway. |
-| Backend custom domain | Three environments, one hosted zone. **Prod** = bare `aqi.bluegull.org`. **Dev** = `dev.aqi.bluegull.org`. **Staging** = `stage.aqi.bluegull.org`. All three are dot-subdomains of `aqi.bluegull.org`, so all three live under the single Route53 hosted zone in AWS account `843088391598`, delegated from `bluegull.org`'s DNS at **Squarespace** (registrar; everything else there untouched). **✅ Delegation confirmed live 2026-07-28.** Mirrors Plant-Tracer's `${StackName}.${BaseDomain}` pattern. |
+| Backend custom domain | Three environments, one hosted zone. **Prod** = bare `aqi.bluegull.org`. **Dev** = `dev.aqi.bluegull.org`. **Staging** = `stage.aqi.bluegull.org`. All three are dot-subdomains of `aqi.bluegull.org`, so all three live under the single Route53 hosted zone in AWS account `843088391598`, delegated from `bluegull.org`'s DNS at **Squarespace** (registrar; everything else there untouched). **✅ Delegation confirmed live 2026-07-28.** Mirrors Plant-Tracer's `${StackName}.${BaseDomain}` pattern. **Pending change (2026-07-30):** a parallel delegation for `bluegull.solutions` (also at Squarespace) is planned alongside this, not replacing it — see `bluegull-aqi-8ef.18`, not yet done. Exact subdomain pattern for the new domain still to be confirmed with Steve. |
 | AWS region | **`us-east-2`** (Ohio), chosen for cost over the Plant-Tracer-matching default of us-east-1. `service/samconfig.toml` deploys here. No conflict with the custom domain: `AWS::Serverless::HttpApi` custom domains are regional-only (unlike REST API v1's edge-optimized option), so the ACM cert for `aqi.bluegull.org` just needs to be in this same region. The one exception: if CloudFront (`bluegull-aqi-q9r.33`, deferred) is ever adopted, its ACM cert must be in **us-east-1** specifically — a hard CloudFront-wide rule, independent of the API's own region. |
 | AWS account | **`843088391598`**, dedicated to this project (not shared with Plant-Tracer) — gives the blast-radius isolation the Scaling & Performance section already assumed. Standalone account, its own IAM Identity Center instance (not part of Plant-Tracer's org). CLI access: `aws sts get-caller-identity --profile AdministratorAccess-843088391598` — an assumed role via `AWSReservedSSO_AdministratorAccess`, not root; re-authenticate with `aws sso login --profile AdministratorAccess-843088391598` when the session expires. |
-| Apple Developer account | Already enrolled; bundle IDs / App Group still need to be created. |
+| Apple Developer account | Already enrolled; bundle IDs / App Group still need to be created (`bluegull-aqi-8ef.5`) — naming decided 2026-07-30: `solutions.bluegull.aqi` (container app), `solutions.bluegull.aqi.widget` (widget extension), App Group `group.solutions.bluegull.aqi`. Whether the enrollment type (Individual vs. Organization) fits the for-profit plan is still unverified (`bluegull-aqi-8ef.22`). |
 | AQI category colors | Official EPA AQI RGB palette only, sourced once in `BluegullAQIKit`'s shared models and used by both the menu bar and widget — never a custom palette. Compliance requirement from the AirNow Data Exchange Guidelines, not a style preference; see "AirNow terms review" below. |
 
 ## Secrets & credentials
@@ -1155,6 +1156,45 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — **Business model pivot**: Steve decided to change this from a
+  non-profit project to a for-profit one, collecting money via the App
+  Store to cover infrastructure costs with flexibility to eventually pay
+  himself for ongoing operations. Two immediate, concrete decisions came
+  out of it, both closing bd issues opened to track the ripple effects
+  (`bluegull-aqi-8ef.15`-`8ef.23`):
+  - **Domain**: switching from `bluegull.org` to `bluegull.solutions`
+    (already owned, registered at Squarespace -- same registrar as
+    `bluegull.org`). The existing live `aqi.bluegull.org` -> Route53
+    delegation (confirmed live 2026-07-28) stays as-is; a new delegation
+    for the new domain gets added alongside it, not migrated. DNS/AWS work
+    itself tracked in `bluegull-aqi-8ef.18`, not done yet.
+  - **Bundle ID / App Group naming**: `solutions.bluegull.aqi` (container
+    app), `solutions.bluegull.aqi.widget` (widget extension), App Group
+    `group.solutions.bluegull.aqi` -- replacing the `org.bluegull.aqi`
+    placeholder that matched the old domain's TLD. Worth a correction for
+    the record: initially reasoned that `.solutions` "doesn't map as
+    cleanly" via reverse-DNS as `.org` did -- Steve rightly pushed back.
+    `.solutions` is a legitimate, ICANN-recognized gTLD; the reverse-DNS
+    mapping is exactly as mechanically clean either way. The real (much
+    narrower) distinction is just that `.solutions` is a newer gTLD than
+    legacy ones like `.com`/`.org`, so fewer bundle IDs "in the wild" use
+    anything but those -- a familiarity/convention point, not a
+    correctness one, and not worth overstating. Updated the three places
+    that had the old placeholder baked in:
+    `AppGroupCache.swift`'s `appGroupIdentifier`,
+    `AirNowAPIKeyStore.swift`'s Keychain `service` string, and the test
+    suite name in `UserDefaultsCacheStoreTests.swift`. 79/79 tests still
+    pass.
+  - Still open and tracked: re-reviewing the AirNow Data Exchange
+    Guidelines specifically for commercial/monetized use
+    (`bluegull-aqi-8ef.15`, P0 -- the original 2026-07-28 terms review
+    explicitly left "no explicit commercial-use clause" unresolved, and
+    that gap is now load-bearing), the business entity/structure decision
+    (`8ef.16`), the actual DNS/AWS delegation work (`8ef.18`), updating
+    every `bluegull.org` reference in this document (`8ef.19`), verifying
+    the Apple Developer Program enrollment type fits (`8ef.22`), and
+    updating the AirNow notification's scope to disclose commercial status
+    before it's sent (`8ef.23`).
 - 2026-07-30 — Implemented bluegull-aqi-8ef.11 (AWS Budget alarms before
   first deploy), in account 843088391598 (bluegull-aqi-8ef.4). Real AWS
   account changes, so run by Steve from his own terminal rather than from

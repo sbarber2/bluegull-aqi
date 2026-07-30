@@ -9,7 +9,7 @@ import XCTest
 /// cleared in setUp/tearDown so this never touches the real App Group
 /// suite or leaves data behind across test runs.
 final class UserDefaultsCacheStoreTests: XCTestCase {
-    private let testSuiteName = "org.bluegull.aqi.tests.UserDefaultsCacheStoreTests"
+    private let testSuiteName = "solutions.bluegull.aqi.tests.UserDefaultsCacheStoreTests"
 
     override func setUp() {
         super.setUp()

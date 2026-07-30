@@ -8,7 +8,7 @@ public struct AirNowAPIKeyStore: Sendable {
         // Not necessarily the app's bundle ID (Keychain doesn't require
         // that) -- revisit once bluegull-aqi-8ef.5 settles on the real one,
         // for consistency if nothing else.
-        service: "org.bluegull.aqi.airnow-api-key",
+        service: "solutions.bluegull.aqi.airnow-api-key",
         account: "airnow-api-key"
     )
 
