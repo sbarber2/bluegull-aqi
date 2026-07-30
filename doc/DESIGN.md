@@ -1201,6 +1201,40 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-e70.3 (settings UI: data-source
+  mode toggle). New `DataSourceMode` (`.service`/`.direct`) and
+  `DataSourceModeStore` (the UserDefaults key + default-value constants) in
+  `BluegullAQIKit` -- `UserDefaults.standard`, not the App Group, since
+  this is a container-app-only setting the widget extension never needs
+  (it never fetches data itself). `DataSourceModeToggle` in the app target
+  is a segmented `Picker` bound via `@AppStorage(DataSourceModeStore.userDefaultsKey)`,
+  keyed off the shared constant rather than a duplicated string literal so
+  the toggle and whatever eventually reads the setting to pick a client
+  (`bluegull-aqi-e70.6`) can't disagree.
+  - Deliberately not wired into a settings window/sheet -- none exists yet
+    (no gear icon, per `e70.11`'s own scope decision). `e70.4`/`e70.5`
+    will each produce their own similarly self-contained piece; composing
+    all three into one settings screen is separate, not-yet-tracked
+    integration work.
+  - Real, minor finding while adding the `ImageRenderer` smoke test (same
+    pattern as `e70.11`'s): `.pickerStyle(.radioGroup)` produced an
+    "Unable to render flattened version of PlatformViewRepresentableAdaptor"
+    warning. Tried `.segmented` instead -- same warning, confirming this is
+    a general `ImageRenderer` limitation with native AppKit-backed
+    controls (`NSViewRepresentable`) on macOS, not specific to either
+    style or a bug in this code. The image still renders (test still
+    passes); kept `.segmented` since it's also the better UI fit for a
+    binary choice. 2 new package tests (90/90 pass), 1 new app-target
+    smoke test (9/9 pass); build and a clean app launch verified.
+  - Real, separate bug caught while checking `git status` before
+    committing: `.gitignore`'s `*.xcodeproj/xcuserdata/` pattern has a
+    slash in the middle, which git anchors to the directory containing the
+    `.gitignore` file itself (the repo root) -- it silently never matched
+    `mac-app/BluegullAQI.xcodeproj/xcuserdata/` (nested, not at root).
+    Latent since `e70.1` first created an actual `.xcodeproj` to test
+    against; fixed with an explicit `**/` prefix on both the xcodeproj and
+    xcworkspace patterns. Also added a missing `.DS_Store` entry while in
+    there.
 - 2026-07-30 — Implemented bluegull-aqi-e70.2 (location permission request
   flow). New `LocationPermissionRequester` (app target, not
   `BluegullAQIKit`) -- `LocationResolver`/`SystemLocationProvider`

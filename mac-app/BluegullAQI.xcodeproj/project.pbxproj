@@ -18,8 +18,10 @@
 		B6AF0E167D73D61CC95AEA18 /* BluegullAQIWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 69D792FF067E0AD051578B6B /* BluegullAQIWidgetBundle.swift */; };
 		BE63DC4F12304F86E599D6EF /* BluegullAQIKit in Frameworks */ = {isa = PBXBuildFile; productRef = 061FF1679162132B4E50AAF5 /* BluegullAQIKit */; };
 		D8FDD84174F95B26D605C510 /* AQIColor+SwiftUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A73E6483B532D53E15C142C /* AQIColor+SwiftUI.swift */; };
+		E6196997D8F5BDD24C31F431 /* DataSourceModeToggle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B4CE51EBA7666C318923D92 /* DataSourceModeToggle.swift */; };
 		EE2AA20276DE4B0A03BEC4C1 /* AQIReading+Headline.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4BA622254A628DD5F95C1FB /* AQIReading+Headline.swift */; };
 		F40295CE846246E89EBAA39B /* BluegullAQIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA88798997F7DDC1CE20DFEB /* BluegullAQIApp.swift */; };
+		FCFC2C9ADCDBB9FE8B9209A4 /* DataSourceModeToggleRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 361EDA2615F667C1DD54E75C /* DataSourceModeToggleRenderTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -58,10 +60,12 @@
 		1BF5CCB5AE475F922E36F8CB /* BluegullAQIWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BluegullAQIWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		1DFB576E6130308BF20611EF /* LocationPermissionRequester.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LocationPermissionRequester.swift; sourceTree = "<group>"; };
 		1E881DBB89A6E6CC197B91AA /* BluegullAQIWidget.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BluegullAQIWidget.entitlements; sourceTree = "<group>"; };
+		361EDA2615F667C1DD54E75C /* DataSourceModeToggleRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataSourceModeToggleRenderTests.swift; sourceTree = "<group>"; };
 		69D792FF067E0AD051578B6B /* BluegullAQIWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluegullAQIWidgetBundle.swift; sourceTree = "<group>"; };
 		75E15CEFFA0C4D84F7C51631 /* BluegullAQIAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluegullAQIAppTests.swift; sourceTree = "<group>"; };
 		78E63CABA446126A185117F4 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		87C92E1FBC62ED2C3A6AF83E /* BluegullAQIWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluegullAQIWidget.swift; sourceTree = "<group>"; };
+		8B4CE51EBA7666C318923D92 /* DataSourceModeToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DataSourceModeToggle.swift; sourceTree = "<group>"; };
 		8DF9717EF0E478DFF3E50972 /* BluegullAQI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BluegullAQI.entitlements; sourceTree = "<group>"; };
 		94DF0D90601FFD77A14B6C59 /* AQIPopoverView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AQIPopoverView.swift; sourceTree = "<group>"; };
 		A10EFC3DAE75FC4C90704A53 /* BluegullAQITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BluegullAQITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -111,6 +115,7 @@
 				F293DBAC18F4A253D773482B /* AQIPopoverViewRenderTests.swift */,
 				AFFA4A486A719822CA6DA220 /* AQIReadingHeadlineTests.swift */,
 				75E15CEFFA0C4D84F7C51631 /* BluegullAQIAppTests.swift */,
+				361EDA2615F667C1DD54E75C /* DataSourceModeToggleRenderTests.swift */,
 			);
 			path = BluegullAQITests;
 			sourceTree = "<group>";
@@ -133,6 +138,7 @@
 				B4BA622254A628DD5F95C1FB /* AQIReading+Headline.swift */,
 				8DF9717EF0E478DFF3E50972 /* BluegullAQI.entitlements */,
 				EA88798997F7DDC1CE20DFEB /* BluegullAQIApp.swift */,
+				8B4CE51EBA7666C318923D92 /* DataSourceModeToggle.swift */,
 				D915A79973D2B1B533D5E97C /* Info.plist */,
 				1DFB576E6130308BF20611EF /* LocationPermissionRequester.swift */,
 			);
@@ -271,6 +277,7 @@
 				770B489087FA66D99F7A2B5C /* AQIPopoverViewRenderTests.swift in Sources */,
 				110F31679C73768DFF3DA944 /* AQIReadingHeadlineTests.swift in Sources */,
 				871FB0558A605131295E5F3F /* BluegullAQIAppTests.swift in Sources */,
+				FCFC2C9ADCDBB9FE8B9209A4 /* DataSourceModeToggleRenderTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -282,6 +289,7 @@
 				01C556A49C92A7B0F6607632 /* AQIPopoverView.swift in Sources */,
 				EE2AA20276DE4B0A03BEC4C1 /* AQIReading+Headline.swift in Sources */,
 				F40295CE846246E89EBAA39B /* BluegullAQIApp.swift in Sources */,
+				E6196997D8F5BDD24C31F431 /* DataSourceModeToggle.swift in Sources */,
 				2452E4E301327F030A298F57 /* LocationPermissionRequester.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

@@ -62,6 +62,15 @@ service/dynamodb-local-metadata.json
 # Swift Package Manager / Xcode build artifacts
 .build/
 .swiftpm/
-*.xcodeproj/xcuserdata/
-*.xcworkspace/xcuserdata/
+# Leading **/ matters: a bare "*.xcodeproj/xcuserdata/" has a slash in the
+# middle, which git anchors to the directory containing this .gitignore
+# (the repo root) -- it silently never matched mac-app/BluegullAQI.xcodeproj/
+# xcuserdata/ (nested, not at root). Caught once an actual .xcodeproj
+# existed to test against (bluegull-aqi-e70.1); latent before that.
+**/*.xcodeproj/xcuserdata/
+**/*.xcworkspace/xcuserdata/
 DerivedData/
+
+# macOS Finder metadata -- never useful in version control, appears
+# anywhere Finder/`open` touches a directory.
+.DS_Store
