@@ -670,10 +670,45 @@ than mine to resolve by asserting a reading.
   violation, and are non-negotiable. The actual number likely only appears on the
   account dashboard after registering (`bluegull-aqi-8ef.1` already covers getting
   this once we register).
-- **No explicit commercial-use clause, no App Store-specific restriction.** Absence of
-  a restriction isn't the same as an affirmative permission, and the registration flow
-  might surface additional text once an account actually exists (a step I haven't
-  taken).
+- ~~**No explicit commercial-use clause, no App Store-specific restriction.**~~ —
+  **Re-reviewed 2026-07-30** (`bluegull-aqi-8ef.15`), see below.
+
+### Commercial use re-review (bluegull-aqi-8ef.15, 2026-07-30)
+
+Triggered by Steve's decision to pivot the project from non-profit to for-profit,
+collecting money via the App Store. The original review's "no explicit commercial-use
+clause" gap, harmless for a free/non-profit app, became load-bearing.
+
+**Re-confirmed directly, not just re-asserted**: fetched and read the full text of the
+Data Exchange Guidelines PDF, the API FAQ, and the account registration form
+specifically searching for commercial-use language. All three are genuinely silent —
+not overlooked the first time, actually absent. The guidelines are entirely about data
+handling (preliminary-data disclaimer, attribution, non-alteration, notification,
+current contact info); the registration form has no organization-type field, no fee
+tiers, no commercial/non-commercial distinction.
+
+**New evidence found**: Domo (a commercial BI platform) publishes a supported "AirNow
+Connector" as a standard data-source integration. Initially reasoned this was weak
+evidence because it's bring-your-own-key — each Domo customer registers their own
+AirNow account rather than Domo redistributing under one shared key the way BlueGull
+does. Steve pushed back, correctly: that distinction is real architecturally but
+doesn't map onto the compliance question. The guidelines' own language ("end users who
+receive these data," "products, publications... or any other related distribution")
+already contemplates and endorses one-registrant-to-many-end-users redistribution --
+that's precisely what the original 2026-07-28 review already established. Domo's
+example speaks to a *different*, previously untested axis: whether AirNow tolerates
+commercial products building on their API at all. On that axis it's real, on-point
+evidence, regardless of key architecture. Whether AirNow data being BlueGull's entire
+product (vs. one of Domo's hundreds of interchangeable connectors) matters is a residual
+uncertainty worth naming, but nothing in the guidelines' actual text keys off how central
+the data is to the product, only how the data itself gets handled -- so it doesn't
+appear to be compliance-relevant either.
+
+**Decided (Steve, 2026-07-30): proceed under the existing 2026-07-28 Service-mode
+approval, no proactive disclosure of commercial status to AirNow.** The silence plus
+the Domo precedent were judged sufficient; `bluegull-aqi-8ef.23` (which would have
+updated the `8ef.13` notification to disclose commercial status) is now moot and
+closed without action.
 
 ### Questions raised for sign-off — and how they resolved
 
@@ -1156,6 +1191,21 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Resolved bluegull-aqi-8ef.15 (re-review AirNow terms for
+  commercial use, P0): **proceed under the existing Service-mode approval,
+  no proactive disclosure to AirNow.** Directly re-read the Data Exchange
+  Guidelines PDF, API FAQ, and registration form -- all genuinely silent on
+  commercial use, confirmed rather than assumed. Found a real data point
+  (Domo's commercial "AirNow Connector" product) that initially seemed
+  weaker than it was: reasoned its bring-your-own-key architecture made it
+  poor evidence, but that conflated an already-resolved question
+  (redistribution-under-one-key is fine, per the original 2026-07-28
+  approval) with the actually-open one (is commercial use tolerated at
+  all). Corrected after Steve pushed back on the distinction. See "AirNow
+  terms review" > "Commercial use re-review" for the full writeup. Closes
+  `bluegull-aqi-8ef.23` (AirNow notification's commercial-status
+  disclosure) as moot -- no disclosure happening, so nothing to update
+  there.
 - 2026-07-30 — **Business model pivot**: Steve decided to change this from a
   non-profit project to a for-profit one, collecting money via the App
   Store to cover infrastructure costs with flexibility to eventually pay
