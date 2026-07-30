@@ -1201,6 +1201,32 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-e70.5 (settings UI: pinned
+  locations management). Different from `e70.3`/`e70.4` in one important
+  way: `bluegull-aqi-mtm.3` (the widget's future App Intents configuration
+  for picking a pinned location) depends on this issue, meaning the list
+  has to live in the **App Group**, not `UserDefaults.standard` -- the
+  widget extension genuinely needs to read it, unlike the data-source mode
+  or the AirNow key.
+  - New `PinnedLocation` (`Codable, Identifiable`) and `PinnedLocationsStore`
+    in `BluegullAQIKit`, both shared for that reason. The store takes an
+    optional `SharedCacheStore`, same graceful-degradation pattern as
+    `BluegullAQIWidgetTimelineProvider` -- an unavailable App Group suite
+    means an empty, read-only list rather than a crash.
+  - `PinnedLocationsView` in the app target: add (geocoded via
+    `LocationResolver.resolve(address:)`, `bluegull-aqi-10h.6`),
+    rename, and remove, backed by the store. Same "not yet wired into a
+    settings window" scope discipline as `e70.3`/`e70.4`.
+  - Same known `ImageRenderer`/`NSViewRepresentable` limitation surfaced a
+    third time (`PlatformTextFieldAdaptor` this time) -- now confirmed
+    across `SecureField`, segmented `Picker`, and plain `TextField`, so
+    it's clearly general to any AppKit-backed control, not particular to
+    any one of them.
+  - 4 new package tests (94/94 pass) covering the store's round-trip,
+    replace-on-save, and nil-store degradation; 2 new app-target render
+    smoke tests (13/13 pass, using a `NeverCalledGeocoder` fake to also
+    confirm rendering never triggers a real geocode). Build and a clean
+    app launch verified.
 - 2026-07-30 — Implemented bluegull-aqi-e70.4 (settings UI: AirNow API key
   entry). `AirNowAPIKeyEntryView` in the app target: loads whatever's
   already saved (via `AirNowAPIKeyStore`, `bluegull-aqi-10h.5`) on appear,
