@@ -23,6 +23,40 @@ final class AQICategoryTests: XCTestCase {
         XCTAssertEqual(AQICategory(aqi: 999), .beyondAQI)
     }
 
+    /// bluegull-aqi-10h.16: a real historical fixture value, not just an
+    /// arbitrary large number -- Oregon DEQ recorded Bend "well over 500"
+    /// during the 2020 wildfires. Must render as valid data, not blank.
+    func testAQI650RendersAsBeyondScaleNotAnError() {
+        let category = AQICategory(aqi: 650)
+        XCTAssertEqual(category, .beyondAQI)
+        XCTAssertNotNil(category)
+    }
+
+    /// bluegull-aqi-10h.16: negative values are malformed data (a parse or
+    /// transport fault), NOT a "beyond the scale" reading -- the two must
+    /// not be conflated. A negative value must not silently become
+    /// .beyondAQI.
+    func testNegativeAQIIsNilNotBeyondScale() {
+        XCTAssertNil(AQICategory(aqi: -1))
+        XCTAssertNil(AQICategory(aqi: -999))
+    }
+
+    func testIsBeyondScale() {
+        XCTAssertFalse(AQICategory.hazardous.isBeyondScale)
+        XCTAssertTrue(AQICategory.beyondAQI.isBeyondScale)
+        for category: AQICategory in [.good, .moderate, .unhealthyForSensitiveGroups, .unhealthy, .veryUnhealthy] {
+            XCTAssertFalse(category.isBeyondScale)
+        }
+    }
+
+    /// AirNow's own phrasing, verbatim -- not invented wording
+    /// (bluegull-aqi-10h.16).
+    func testBeyondScaleNoticeUsesAirNowsOwnPhrasing() {
+        XCTAssertEqual(AQICategory.beyondAQI.beyondScaleNotice, "Values above 500 are beyond the AQI scale")
+        XCTAssertNil(AQICategory.hazardous.beyondScaleNotice)
+        XCTAssertNil(AQICategory.good.beyondScaleNotice)
+    }
+
     func testDescriptors() {
         XCTAssertEqual(AQICategory.good.descriptor, "Good")
         XCTAssertEqual(AQICategory.moderate.descriptor, "Moderate")

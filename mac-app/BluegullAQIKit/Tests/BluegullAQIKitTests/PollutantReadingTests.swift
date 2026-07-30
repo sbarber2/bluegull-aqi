@@ -56,6 +56,27 @@ final class PollutantReadingTests: XCTestCase {
         XCTAssertNil(reading.category)
     }
 
+    func testAQI650DecodesAndCategorizesAsBeyondScale() throws {
+        // bluegull-aqi-10h.16: a real, valid (if rare) reading must render,
+        // not blank out the app.
+        let json = fixtureJSON.replacingOccurrences(of: "\"nowcastAQI\": 31,", with: "\"nowcastAQI\": 650,")
+        let reading = try JSONDecoder().decode(PollutantReading.self, from: Data(json.utf8))
+
+        XCTAssertEqual(reading.nowcastAQI, 650)
+        XCTAssertEqual(reading.category, .beyondAQI)
+        XCTAssertEqual(reading.category?.beyondScaleNotice, "Values above 500 are beyond the AQI scale")
+    }
+
+    func testNegativeNowcastAQIYieldsNilCategoryNotBeyondScale() throws {
+        // bluegull-aqi-10h.16: malformed data (a parse/transport fault)
+        // must not be conflated with a real "beyond the scale" reading.
+        let json = fixtureJSON.replacingOccurrences(of: "\"nowcastAQI\": 31,", with: "\"nowcastAQI\": -5,")
+        let reading = try JSONDecoder().decode(PollutantReading.self, from: Data(json.utf8))
+
+        XCTAssertEqual(reading.nowcastAQI, -5)
+        XCTAssertNil(reading.category)
+    }
+
     func testDecodesArrayOfMultiplePollutants() throws {
         let arrayJSON = "[\(fixtureJSON), \(fixtureJSON.replacingOccurrences(of: "PM2.5", with: "OZONE"))]"
         let readings = try JSONDecoder().decode([PollutantReading].self, from: Data(arrayJSON.utf8))

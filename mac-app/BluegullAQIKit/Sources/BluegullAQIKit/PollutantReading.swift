@@ -60,12 +60,14 @@ public struct PollutantReading: Sendable, Equatable, Codable {
     }
 
     /// `nowcastAQI` mapped to the official TAD category table
-    /// (bluegull-aqi-10h.16 covers `> 500`) -- nil only when `nowcastAQI`
-    /// itself is nil. Deliberately NOT derived from `aqiCategoryName`
-    /// (AirNow's own category string): this type is the single place that
-    /// interprets the numeric value against the TAD table, so the two never
-    /// have a chance to disagree with each other.
+    /// (bluegull-aqi-10h.16 covers `> 500`) -- nil when `nowcastAQI` itself
+    /// is nil, or when it's present but negative (malformed data, not a
+    /// valid "beyond the scale" reading -- see AQICategory.init(aqi:)).
+    /// Deliberately NOT derived from `aqiCategoryName` (AirNow's own
+    /// category string): this type is the single place that interprets the
+    /// numeric value against the TAD table, so the two never have a chance
+    /// to disagree with each other.
     public var category: AQICategory? {
-        nowcastAQI.map(AQICategory.init(aqi:))
+        nowcastAQI.flatMap(AQICategory.init(aqi:))
     }
 }

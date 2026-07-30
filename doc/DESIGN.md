@@ -1102,6 +1102,26 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-10h.16: fixed a real conflation bug
+  bluegull-aqi-10h.2's original `AQICategory.init(aqi:)` had introduced --
+  a negative AQI value (malformed data, a parse/transport fault) fell
+  through the same `default:` case as `> 500` (a real, valid "beyond the
+  scale" reading), silently misclassifying corrupted data as extreme air
+  quality. `init(aqi:)` is now failable (`init?`), returning nil for a
+  negative value so the caller must treat it as an error state, while a
+  genuine `> 500` value still correctly produces `.beyondAQI` --
+  `PollutantReading.category` updated to `flatMap` accordingly. Added
+  `AQICategory.isBeyondScale` and `.beyondScaleNotice` (AirNow's own
+  verbatim phrasing, "Values above 500 are beyond the AQI scale" --  not
+  invented wording) so UI code can surface the distinction. Deliberately did
+  NOT add upper-bound "implausibly large" detection: disseminating AirNow's
+  data as received (bluegull-aqi-10h.17) means not second-guessing its
+  magnitude past the one well-defined, unambiguous boundary (negative is
+  impossible; anything non-negative is AirNow's data to report, however
+  extreme -- Oregon DEQ recorded readings "well over 500" during the 2020
+  wildfires). Tested with a real historical value (AQI 650, matching that
+  fixture) confirming it renders as valid `.beyondAQI` data rather than
+  blanking. 22/22 tests pass via `swift test`.
 - 2026-07-30 — Implemented bluegull-aqi-q9r.15 (stale-while-revalidate +
   single-flight cache) and q9r.16 (concurrent-behavior tests).
   - On a cache miss: an expired-but-present entry is served immediately

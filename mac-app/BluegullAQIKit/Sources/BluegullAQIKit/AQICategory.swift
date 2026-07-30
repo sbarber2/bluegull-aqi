@@ -19,11 +19,27 @@ public enum AQICategory: Sendable, Equatable, Codable {
     /// Hazardous recommendations still apply.
     case beyondAQI
 
-    /// Maps an AQI value to its category per TAD Table 1. `aqi` must be a
-    /// value AirNow itself returned -- never computed from a concentration
-    /// (bluegull-aqi-10h.17). AirNow's contract guarantees a non-negative
-    /// value; behavior for a negative input is unspecified by this type.
-    public init(aqi: Int) {
+    /// Maps an AQI value to its category per TAD Table 1, or nil if `aqi` is
+    /// negative. `aqi` must be a value AirNow itself returned -- never
+    /// computed from a concentration (bluegull-aqi-10h.17).
+    ///
+    /// A negative value is malformed data (a parse or transport fault), NOT
+    /// a "beyond the scale" reading -- those are two different failure
+    /// modes and bluegull-aqi-10h.16 is explicit that they must not be
+    /// conflated. Returning nil here forces the caller to treat a negative
+    /// value as an error state rather than silently rendering it with the
+    /// Hazardous/beyond-scale styling.
+    ///
+    /// Deliberately does NOT attempt to flag an implausibly large *positive*
+    /// value as malformed: disseminating AirNow's data as received
+    /// (bluegull-aqi-10h.17) means not second-guessing its magnitude past
+    /// this one well-defined, unambiguous boundary. Real extreme events
+    /// have been reported this way -- e.g. Oregon DEQ recorded readings
+    /// "well over 500" during the 2020 wildfires -- so inventing an upper
+    /// cutoff risks blanking the app during exactly the conditions its
+    /// users need it most.
+    public init?(aqi: Int) {
+        guard aqi >= 0 else { return nil }
         switch aqi {
         case 0...50: self = .good
         case 51...100: self = .moderate
@@ -31,8 +47,19 @@ public enum AQICategory: Sendable, Equatable, Codable {
         case 151...200: self = .unhealthy
         case 201...300: self = .veryUnhealthy
         case 301...500: self = .hazardous
-        default: self = .beyondAQI  // > 500 (or a malformed negative input)
+        default: self = .beyondAQI  // > 500 (bluegull-aqi-10h.16) -- real, valid data
         }
+    }
+
+    /// True only for `.beyondAQI` -- lets UI code decide whether to show
+    /// `beyondScaleNotice` alongside the (shared) Hazardous styling.
+    public var isBeyondScale: Bool { self == .beyondAQI }
+
+    /// AirNow's own phrasing, verbatim from its AQI Legend panel -- not
+    /// invented wording (bluegull-aqi-10h.16 is explicit about this). nil
+    /// for every category except `.beyondAQI`.
+    public var beyondScaleNotice: String? {
+        self == .beyondAQI ? "Values above 500 are beyond the AQI scale" : nil
     }
 
     /// The full descriptor text. "Unhealthy for Sensitive Groups" is the
