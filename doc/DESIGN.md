@@ -1201,6 +1201,39 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-e70.11 (menu bar popover, `.window`
+  style). Confirmed the scope boundary against sibling issues first: `e70.6`
+  (the status item itself) and `e70.10`/`dc2.4` (attribution/disclaimer
+  content) are separately tracked, blocked *by* this one -- so this covers
+  the popover's content view (current AQI + full pollutant breakdown) only,
+  not compliance text or settings destinations.
+  - `AQIPopoverView`: a "dumb" presentational SwiftUI view (`reading:
+    AQIReading?`) -- no live data pipeline exists yet (`e70.6`/`e70.7`),
+    so `BluegullAQIApp` currently just passes `nil`, showing the empty
+    state via `ContentUnavailableView`.
+  - Filled a real gap `AQIReading`'s own doc comment explicitly calls out:
+    which pollutant's AQI becomes "the" headline number is deliberately
+    not the shared model's job. Added `headlinePollutant` (highest
+    `nowcastAQI` among entries that have one, matching AirNow's own
+    methodology of the worst pollutant driving the reported area AQI) as
+    an app-target-only extension, with unit tests for the empty-reading,
+    all-nil, and tie-breaking-irrelevant cases.
+  - `AQIColor` -> SwiftUI `Color` conversion also lives in the app target,
+    not the package, per `AQIColor`'s own doc comment ("no UI framework
+    dependency") -- uses the explicit-sRGB `Color(.sRGB, red:green:blue:)`
+    initializer, never the ambiguous-color-space default, so the official
+    EPA values don't render differently on a wide-gamut Display P3 Mac.
+  - Verified past "it compiles" two ways: launched the actual built `.app`
+    again (ran cleanly, no crash, no crash report), and -- since the
+    popover's content only builds lazily when clicked, which isn't
+    otherwise exercisable without UI automation (`e70.9`, not yet built) --
+    added a lightweight `ImageRenderer`-based smoke test that actually
+    renders `AQIPopoverView` for both the empty and populated states and
+    confirms it produces a real image, not just that the view type
+    compiles. Deliberately not the full snapshot-testing harness
+    (`mtm.10`/`mtm.11`, separately tracked, more elaborate scope for the
+    widget) -- just enough to catch a render-time crash in this specific
+    view. 7/7 tests pass (`xcodebuild test`).
 - 2026-07-30 — Implemented bluegull-aqi-e70.1 (scaffold Xcode project with
   the container app target). First real step into the menu bar app itself,
   distinct from `BluegullAQIKit` (a plain SwiftPM library, no signing/
