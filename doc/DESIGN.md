@@ -1155,6 +1155,46 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-8ef.11 (AWS Budget alarms before
+  first deploy), in account 843088391598 (bluegull-aqi-8ef.4). Real AWS
+  account changes, so run by Steve from his own terminal rather than from
+  this agent's sandboxed shell -- the `aws` CLI here is shimmed through
+  1Password (`op plugin run`), which isn't unlocked in a non-interactive
+  session. `service/bin/setup_budget_alarms.sh` captures the steps and is
+  idempotent (safe to re-run; checks for existing resources before
+  creating).
+  - **Budget**: `bluegull-aqi-monthly-cost-guard`, $10/month COST budget,
+    notifying `sbarber2@gmail.com` at ACTUAL 50%, ACTUAL 100%, and
+    FORECASTED 100%. Verified via `describe-budget` and
+    `describe-notifications-for-budget`.
+  - **Cost Anomaly Detection**: found the account already had an
+    AWS-auto-provisioned `Default-Services-Monitor` (DIMENSIONAL/SERVICE,
+    predates this project -- created 2025-02-06) with its own
+    `Default-Services-Subscription`, but that subscription only fires on a
+    combined $100 AND 40% anomaly -- too coarse for an account whose
+    baseline spend should be near zero. Reused the existing monitor rather
+    than creating a redundant one, and added a second, separate
+    subscription (`bluegull-aqi-cost-anomaly-alerts`) at a $1 absolute
+    threshold instead of modifying the pre-existing account-level default.
+    Verified via `get-anomaly-monitors`/`get-anomaly-subscriptions`;
+    `Subscribers[0].Status` came back `CONFIRMED` immediately (the email
+    address was already verified account-wide via the pre-existing
+    subscription, so no fresh confirmation click was needed this time).
+  - Cost Explorer/Anomaly Detection's API only exists at the `us-east-1`
+    endpoint regardless of which region resources actually run in -- same
+    quirk as IAM/Route53/ACM-for-CloudFront -- but the DIMENSIONAL/SERVICE
+    monitor tracks costs account-wide across all regions, so this still
+    fully covers the `us-east-2` deploy target.
+  - Real gap found and fixed along the way: the budget itself already
+    existed in the account (from an earlier attempt during this same
+    session, cause not fully diagnosed) but with **zero notifications
+    attached** -- `describe-notifications-for-budget` came back empty even
+    though the budget's limit/type were correct. Added the three
+    notifications via `create-notification` against the existing budget
+    rather than via `create-budget` (which can't be reused once a budget
+    exists). The rewritten script now checks for this specific
+    partially-created state (budget exists, notification count is 0) and
+    fixes it rather than assuming "budget exists" means "fully configured."
 - 2026-07-30 — Resolved bluegull-aqi-10h.14 (investigate App Attest on native
   macOS) and bluegull-aqi-mtm.12 (investigate a widget-reload CLI). Both
   research-only, no code changed.
