@@ -2,14 +2,13 @@
 # BlueGull AQI backend -- a rate-limited caching proxy in front of the AirNow
 # API. See /doc/DESIGN.md for the full design.
 #
-# Covers bluegull-aqi-q9r.2 (handler), q9r.3 (DynamoDB cache table), and q9r.4
-# (SSM-stored AirNow API key). Deliberately NOT here yet, each its own tracked
-# task:
+# Covers bluegull-aqi-q9r.2 (handler), q9r.3 (DynamoDB cache table), q9r.4
+# (SSM-stored AirNow API key), and q9r.31 (Lambda reserved concurrency + API
+# Gateway throttling -- the PRIMARY cost circuit breakers). Deliberately NOT
+# here yet, each its own tracked task:
 #   - WAFv2 per-IP rate-based rule                    (bluegull-aqi-q9r.5)
 #   - Route53 + ACM custom domain                     (bluegull-aqi-q9r.6)
-#   - Reserved concurrency / scale config              (bluegull-aqi-q9r.17)
 #   - Stale-while-revalidate + single-flight cache      (bluegull-aqi-q9r.15)
-#   - Coordinate validation / coverage-area rejection   (bluegull-aqi-q9r.30)
 # -----------------------------------------------------------------------------
 
 AWSTemplateFormatVersion: '2010-09-09'
@@ -41,11 +40,41 @@ Parameters:
       cadence -- see bluegull-aqi-q9r.15 for the stale-while-revalidate
       refinement that will sit on top of this basic TTL.
 
+  LambdaReservedConcurrentExecutions:
+    Type: Number
+    Default: 20
+    Description: >
+      Hard ceiling on concurrent Lambda executions -- the PRIMARY circuit
+      breaker against denial-of-wallet (bluegull-aqi-q9r.31). Lambda, API
+      Gateway, and on-demand DynamoDB all scale (and bill) elastically, so
+      nothing else in this stack bounds cost under a sustained flood; this
+      is what makes the ceiling knowable. Deliberately conservative for a
+      personal-scale project that shares this AWS account with Plant-Tracer
+      -- raise per environment via parameter_overrides, not by editing this
+      default.
+
+  ApiThrottlingRateLimit:
+    Type: Number
+    Default: 10
+    Description: >
+      API Gateway steady-state requests/second cap (bluegull-aqi-q9r.31),
+      independent of both WAF (bluegull-aqi-q9r.5, not deployed yet -- and
+      which bills per request itself, so it amplifies cost under attack
+      rather than capping it) and the Lambda concurrency ceiling above.
+
+  ApiThrottlingBurstLimit:
+    Type: Number
+    Default: 20
+    Description: Token-bucket burst capacity paired with ApiThrottlingRateLimit.
+
 Resources:
   AqiHttpApi:
     Type: AWS::Serverless::HttpApi
     Properties:
       StageName: prod
+      DefaultRouteSettings:
+        ThrottlingRateLimit: !Ref ApiThrottlingRateLimit
+        ThrottlingBurstLimit: !Ref ApiThrottlingBurstLimit
 
   AqiCacheTable:
     Type: AWS::DynamoDB::Table
@@ -119,6 +148,7 @@ Resources:
       Handler: bluegull_aqi_service.lambda_handler.lambda_handler
       Timeout: 30
       MemorySize: 256
+      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrentExecutions
       Environment:
         Variables:
           LOG_LEVEL: !Ref LogLevel

@@ -1099,6 +1099,21 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-q9r.31 (cost circuit breakers) and closed
+  q9r.17 as a side effect (its remaining scope -- ARM64 architecture, DynamoDB
+  on-demand billing -- was already satisfied; it explicitly deferred reserved
+  concurrency to q9r.31). Added `LambdaReservedConcurrentExecutions` (default 20,
+  deliberately conservative since this AWS account is shared with Plant-Tracer)
+  and `ApiThrottlingRateLimit`/`ApiThrottlingBurstLimit` (defaults 10/20 req/s) as
+  SAM Parameters, wired to `AqiFunction.ReservedConcurrentExecutions` and
+  `AqiHttpApi.DefaultRouteSettings`. These are the PRIMARY defense against
+  denial-of-wallet: Lambda, API Gateway, and on-demand DynamoDB all bill
+  elastically, and WAF (q9r.5, not deployed yet) bills per request itself so it
+  amplifies cost under attack rather than capping it. Template-only change --
+  `sam validate --lint` and `sam build` both succeed, no Python code touched, no
+  actual AWS deploy performed. The specific concurrency/throttling numbers are a
+  reasonable, easily-adjustable-via-parameter starting point rather than a
+  measured traffic estimate -- flagged to Steve for possible tuning.
 - 2026-07-30 — Implemented bluegull-aqi-q9r.30: reject invalid/out-of-coverage
   coordinates before any cache lookup or AirNow call. New `coverage.py` validates
   physical range (-90..90 lat, -180..180 lon) and a deliberately generous North
