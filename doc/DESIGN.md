@@ -1201,6 +1201,51 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-e70.9 (XCUITest suite driving the
+  menu bar app). Found and fixed a real prerequisite gap first: `e70.3`,
+  `e70.4`, and `e70.5` each built a settings view, but none was actually
+  reachable from the running app -- every one of their closures explicitly
+  deferred that integration as "separate, not-yet-tracked work." A UI test
+  suite covering "settings flows" needs a settings flow that exists to
+  click through, so this issue also built it:
+  - New `SettingsView` composing `DataSourceModeToggle` + `AirNowAPIKeyEntryView`
+    + `PinnedLocationsView`, presented as a `.sheet` from a new gear-icon
+    button in `AQIPopoverView` -- the "natural home for reaching settings"
+    `e70.11` anticipated but deliberately didn't build.
+    `.accessibilityIdentifier` added throughout all four views
+    specifically so the UI test suite can find elements reliably rather
+    than matching on visible text.
+  - New `BluegullAQIUITests` target (`bundle.ui-testing`, `TEST_TARGET_NAME:
+    BluegullAQI`), 6 test methods: opening the popover via the status
+    item, opening/closing settings via the gear icon, the data-source
+    picker, the AirNow key save/clear flow, and the pinned-location add
+    flow up to (not including) triggering a real geocode.
+  - `app.statusItems`, not `app.menuBarItems`, is the correct query for
+    `MenuBarExtra`/`NSStatusItem`-hosted content -- `menuBarItems` is for a
+    normal app's File/Edit/View menu bar, which this app doesn't have
+    (confirmed via this session's own research while writing the suite,
+    not assumed).
+  - **Verified compiling and building past that point, execution
+    genuinely blocked, exactly as this issue's own description predicted.**
+    `xcodebuild build-for-testing` succeeds cleanly. Actually running a
+    test (`-only-testing:...testStatusItemOpensPopover`) was attempted
+    twice, once bounded at 90s (killed, inconclusive -- still in the build
+    phase) and once given a full unbounded background run: failed after
+    380s with a specific, diagnosed error, not an ambiguous hang --
+    *"BluegullAQIUITests-Runner encountered an error (The test runner hung
+    before establishing connection.)"* -- consistent with this
+    environment lacking the logged-in GUI session + Accessibility/
+    Automation TCC permission XCUITest's runner needs to attach, the same
+    class of barrier already documented for Keychain (`10h.13`) and
+    CoreLocation (`e70.2`) live verification. Granting that permission
+    isn't something to attempt from here -- it's a system security-settings
+    change needing genuine interactive approval, not a code or config fix.
+  - Net result: the suite is real, compiles, and is ready to run wherever
+    that permission exists (a real interactive Mac session) -- exactly
+    the situation `bluegull-aqi-mtm.13` (Makefile targets wrapping the
+    test suites, now unblocked) and any future CI setup for this target
+    will need to account for, per this issue's own "budget time for CI
+    permission wrangling" warning.
 - 2026-07-30 — Implemented bluegull-aqi-mtm.8 (App Intents `perform()`
   unit tests). `SelectLocationIntent.perform()` itself turned out to be
   genuinely unconditional -- WidgetKit reads the configured `location`

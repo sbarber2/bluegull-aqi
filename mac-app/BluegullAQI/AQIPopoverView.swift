@@ -12,8 +12,24 @@ import BluegullAQIKit
 struct AQIPopoverView: View {
     let reading: AQIReading?
 
+    // The "natural home for reaching settings" e70.11 anticipated but
+    // deliberately didn't build -- added here as part of e70.9, which
+    // needs an actual settings flow to drive with a UI test.
+    @State private var showingSettings = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Spacer()
+                Button {
+                    showingSettings = true
+                } label: {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("settingsButton")
+            }
+
             if let reading,
                let headline = reading.headlinePollutant,
                let aqi = headline.nowcastAQI,
@@ -38,6 +54,9 @@ struct AQIPopoverView: View {
         }
         .padding()
         .frame(width: 300)
+        .sheet(isPresented: $showingSettings) {
+            SettingsView()
+        }
     }
 
     private func headlineSection(aqi: Int, category: AQICategory) -> some View {

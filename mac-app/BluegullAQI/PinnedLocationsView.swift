@@ -7,8 +7,8 @@ import BluegullAQIKit
 /// since the widget's future per-instance location configuration
 /// (bluegull-aqi-mtm.3) needs to read this same list.
 ///
-/// Not yet wired into a settings window/sheet -- none exists yet, same
-/// scope discipline as `e70.3`/`e70.4`.
+/// Composed into `SettingsView` (bluegull-aqi-e70.9), reachable via
+/// `AQIPopoverView`'s gear icon.
 struct PinnedLocationsView: View {
     @State private var locations: [PinnedLocation] = []
     @State private var newLabel = ""
@@ -51,12 +51,15 @@ struct PinnedLocationsView: View {
             HStack {
                 TextField("Name (e.g. Home)", text: $newLabel)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("newPinnedLocationLabelField")
                 TextField("Address or zip code", text: $newAddress)
                     .textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("newPinnedLocationAddressField")
                 Button("Add") {
                     Task { await add() }
                 }
                 .disabled(newLabel.isEmpty || newAddress.isEmpty || isResolving)
+                .accessibilityIdentifier("addPinnedLocationButton")
             }
         }
         .onAppear { locations = store.load() }

@@ -92,6 +92,18 @@ targets:
       base:
         CODE_SIGN_STYLE: Automatic
 
+  BluegullAQIUITests:
+    type: bundle.ui-testing
+    platform: macOS
+    sources:
+      - path: BluegullAQIUITests
+    dependencies:
+      - target: BluegullAQI
+    settings:
+      base:
+        CODE_SIGN_STYLE: Automatic
+        TEST_TARGET_NAME: BluegullAQI
+
 schemes:
   BluegullAQI:
     build:
@@ -99,9 +111,11 @@ schemes:
         BluegullAQI: all
         BluegullAQIWidget: all
         BluegullAQITests: [test]
+        BluegullAQIUITests: [test]
     run:
       config: Debug
     test:
       config: Debug
       targets:
         - BluegullAQITests
+        - BluegullAQIUITests

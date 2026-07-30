@@ -37,6 +37,20 @@
          </BuildActionEntry>
          <BuildActionEntry
             buildForTesting = "YES"
+            buildForRunning = "NO"
+            buildForProfiling = "NO"
+            buildForArchiving = "NO"
+            buildForAnalyzing = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "4DA2FB6EEEC10313FF261E10"
+               BuildableName = "BluegullAQIUITests.xctest"
+               BlueprintName = "BluegullAQIUITests"
+               ReferencedContainer = "container:BluegullAQI.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
             buildForRunning = "YES"
             buildForProfiling = "YES"
             buildForArchiving = "YES"
@@ -75,6 +89,17 @@
                BlueprintIdentifier = "2CD144F3A5A3634E088A1A34"
                BuildableName = "BluegullAQITests.xctest"
                BlueprintName = "BluegullAQITests"
+               ReferencedContainer = "container:BluegullAQI.xcodeproj">
+            </BuildableReference>
+         </TestableReference>
+         <TestableReference
+            skipped = "NO"
+            parallelizable = "NO">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "4DA2FB6EEEC10313FF261E10"
+               BuildableName = "BluegullAQIUITests.xctest"
+               BlueprintName = "BluegullAQIUITests"
                ReferencedContainer = "container:BluegullAQI.xcodeproj">
             </BuildableReference>
          </TestableReference>

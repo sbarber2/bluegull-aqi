@@ -8,10 +8,8 @@ import BluegullAQIKit
 /// showing it back to them for editing is reasonable (unlike, say, echoing
 /// a password back).
 ///
-/// Not yet wired into a settings window/sheet -- none exists yet, same as
-/// `DataSourceModeToggle` (bluegull-aqi-e70.3). Composing this,
-/// `e70.3`, and `e70.5` into one settings screen is separate,
-/// not-yet-tracked integration work.
+/// Composed into `SettingsView` (bluegull-aqi-e70.9), reachable via
+/// `AQIPopoverView`'s gear icon.
 struct AirNowAPIKeyEntryView: View {
     @State private var apiKey = ""
     @State private var hasSavedKey = false
@@ -29,6 +27,7 @@ struct AirNowAPIKeyEntryView: View {
                 .font(.headline)
             SecureField("Enter your AirNow API key", text: $apiKey)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("airNowAPIKeyField")
             if let errorMessage {
                 Text(errorMessage)
                     .font(.caption)
@@ -37,8 +36,10 @@ struct AirNowAPIKeyEntryView: View {
             HStack {
                 Button("Save") { save() }
                     .disabled(apiKey.isEmpty)
+                    .accessibilityIdentifier("saveAPIKeyButton")
                 Button("Clear") { clear() }
                     .disabled(!hasSavedKey && apiKey.isEmpty)
+                    .accessibilityIdentifier("clearAPIKeyButton")
             }
         }
         .onAppear { load() }

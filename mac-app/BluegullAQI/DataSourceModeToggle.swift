@@ -7,11 +7,8 @@ import BluegullAQIKit
 /// eventually reads the setting to decide which client to call
 /// (bluegull-aqi-e70.6) can't disagree on the key or default.
 ///
-/// A self-contained component, not yet wired into a settings destination --
-/// there isn't one yet (no gear icon/sheet exists; see
-/// `AQIPopoverView`'s own doc comment). `e70.4`/`e70.5` will each produce
-/// their own similarly self-contained piece; composing them into one
-/// settings screen is separate, not-yet-tracked integration work.
+/// Composed into `SettingsView` (bluegull-aqi-e70.9), reachable via
+/// `AQIPopoverView`'s gear icon.
 struct DataSourceModeToggle: View {
     @AppStorage(DataSourceModeStore.userDefaultsKey) private var mode: DataSourceMode = DataSourceModeStore.defaultMode
 
@@ -21,5 +18,6 @@ struct DataSourceModeToggle: View {
             Text("Direct (use my own AirNow key)").tag(DataSourceMode.direct)
         }
         .pickerStyle(.segmented)
+        .accessibilityIdentifier("dataSourceModePicker")
     }
 }
