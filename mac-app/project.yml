@@ -1,0 +1,72 @@
+name: BluegullAQI
+options:
+  bundleIdPrefix: solutions.bluegull
+  deploymentTarget:
+    macOS: "14.0"
+
+packages:
+  BluegullAQIKit:
+    path: BluegullAQIKit
+
+targets:
+  BluegullAQI:
+    type: application
+    platform: macOS
+    sources:
+      - path: BluegullAQI
+    dependencies:
+      - package: BluegullAQIKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: solutions.bluegull.aqi
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: true
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+    info:
+      path: BluegullAQI/Info.plist
+      properties:
+        # Menu bar-only app: no Dock icon, no main window (bluegull-aqi-e70.1).
+        LSUIElement: true
+        # Friendly display name -- kept separate from PRODUCT_NAME (which stays
+        # "BluegullAQI", no space) so the test target's auto-derived TEST_HOST
+        # path still matches the actual built binary.
+        CFBundleDisplayName: BlueGull AQI
+        NSLocationWhenInUseUsageDescription: >-
+          BlueGull AQI uses your location to show the air quality for where you are.
+    entitlements:
+      path: BluegullAQI/BluegullAQI.entitlements
+      properties:
+        # Required for Mac App Store distribution.
+        com.apple.security.app-sandbox: true
+        # Outbound requests to AirNow (Direct mode) and the BlueGull backend (Service mode).
+        com.apple.security.network.client: true
+        # CoreLocation (current-location mode).
+        com.apple.security.personal-information.location: true
+        # Shared cache with the widget extension (bluegull-aqi-8ef.5).
+        com.apple.security.application-groups:
+          - group.solutions.bluegull.aqi
+
+  BluegullAQITests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: BluegullAQITests
+    dependencies:
+      - target: BluegullAQI
+    settings:
+      base:
+        CODE_SIGN_STYLE: Automatic
+
+schemes:
+  BluegullAQI:
+    build:
+      targets:
+        BluegullAQI: all
+        BluegullAQITests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - BluegullAQITests

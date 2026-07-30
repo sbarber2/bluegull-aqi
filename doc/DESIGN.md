@@ -1201,6 +1201,50 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-e70.1 (scaffold Xcode project with
+  the container app target). First real step into the menu bar app itself,
+  distinct from `BluegullAQIKit` (a plain SwiftPM library, no signing/
+  entitlements/GUI concerns) -- everything in `mac-app/` before this was
+  library code only.
+  - No official Apple CLI exists to create a new Xcode project
+    non-interactively (the "File > New Project" wizard has no scriptable
+    equivalent), and hand-writing `.pbxproj` directly is error-prone
+    enough to risk a project that won't open. Used **XcodeGen** instead
+    (installed via `brew install xcodegen`, a new local dev-tool
+    dependency, not a runtime one) -- `mac-app/project.yml` is now the
+    source of truth, `xcodegen generate` regenerates `BluegullAQI.xcodeproj`
+    deterministically. The generated `.xcodeproj` is committed (matches
+    `.gitignore` already excluding only `xcuserdata/`/`DerivedData/`, not
+    the project file itself) so the project opens directly even without
+    XcodeGen installed; only `project.yml` needs editing for future
+    target/setting changes.
+  - `BluegullAQI` target: `MenuBarExtra` app (`.window` style, matching the
+    `e70.11` popover decision), `LSUIElement: true` (no Dock icon, matches
+    "menu bar app" scope), depends on the local `BluegullAQIKit` package.
+    Entitlements: App Sandbox (required for Mac App Store), network client
+    (AirNow direct + BlueGull backend calls), location (CoreLocation),
+    App Group `group.solutions.bluegull.aqi` (matches `bluegull-aqi-8ef.5`).
+    `CODE_SIGN_STYLE: Automatic`, no `DEVELOPMENT_TEAM` hardcoded -- Xcode
+    resolves Steve's team on first open rather than baking account-specific
+    info into the generated project.
+  - `BluegullAQITests` target added per the repo layout `doc/DESIGN.md`
+    already specified, with one real (not placeholder) test proving the
+    `BluegullAQIKit` link actually works at compile and link time, not just
+    that the `import` statement parses.
+  - Found and fixed a real config bug via testing, not just review: an
+    initial `PRODUCT_NAME: "BlueGull AQI"` (with a space, for a friendlier
+    display name) broke the test target's auto-derived `TEST_HOST` path,
+    which expected the un-spaced target name -- `xcodebuild test` failed
+    with "Could not find test host." Fixed by leaving `PRODUCT_NAME`
+    alone and setting `CFBundleDisplayName` in Info.plist instead, which
+    doesn't affect build product paths.
+  - Live-verified past "it compiles": `xcodebuild build` and `xcodebuild
+    test` both succeed (1/1 tests pass), and actually launched the built
+    `.app` (`open` + `pgrep`) -- stayed running for 5s with no crash and no
+    crash report in `~/Library/Logs/DiagnosticReports/`, then shut down
+    cleanly. Real UI (the popover, location flow, settings) is separate
+    tracked scope (`e70.11`, `e70.2`, `e70.3`-`e70.5`), deliberately not
+    built here -- this issue was the target/dependency wiring only.
 - 2026-07-30 — Implemented bluegull-aqi-8ef.5 (create Apple Developer
   bundle IDs and App Group). Registered by Steve in the Developer portal
   (no CLI/API exists for this, unlike the AWS-side work this session):

@@ -1,0 +1,440 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		427078BFA65B40AE6C2C05F4 /* BluegullAQIKit in Frameworks */ = {isa = PBXBuildFile; productRef = 29CD4EE984C4002F98DE0F20 /* BluegullAQIKit */; };
+		871FB0558A605131295E5F3F /* BluegullAQIAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75E15CEFFA0C4D84F7C51631 /* BluegullAQIAppTests.swift */; };
+		F40295CE846246E89EBAA39B /* BluegullAQIApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EA88798997F7DDC1CE20DFEB /* BluegullAQIApp.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		03E8B5B9D7FC7B90BCCEBA06 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = E76519299445EF26B7302F41 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 647EFED4004ADB5A066E3B39;
+			remoteInfo = BluegullAQI;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		75E15CEFFA0C4D84F7C51631 /* BluegullAQIAppTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluegullAQIAppTests.swift; sourceTree = "<group>"; };
+		8DF9717EF0E478DFF3E50972 /* BluegullAQI.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = BluegullAQI.entitlements; sourceTree = "<group>"; };
+		A10EFC3DAE75FC4C90704A53 /* BluegullAQITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BluegullAQITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AE24C4D71880AB1923A56D17 /* BluegullAQI.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BluegullAQI.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C8D7369A6C5E7049CC45ECB0 /* BluegullAQIKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = BluegullAQIKit; path = BluegullAQIKit; sourceTree = SOURCE_ROOT; };
+		D915A79973D2B1B533D5E97C /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		EA88798997F7DDC1CE20DFEB /* BluegullAQIApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluegullAQIApp.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		8E54CF753CB1D42FE38A6CE4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				427078BFA65B40AE6C2C05F4 /* BluegullAQIKit in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		3EF8FCBFC89E26073468FCCE /* BluegullAQITests */ = {
+			isa = PBXGroup;
+			children = (
+				75E15CEFFA0C4D84F7C51631 /* BluegullAQIAppTests.swift */,
+			);
+			path = BluegullAQITests;
+			sourceTree = "<group>";
+		};
+		4A93D9E051D71F82DE70361B /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				AE24C4D71880AB1923A56D17 /* BluegullAQI.app */,
+				A10EFC3DAE75FC4C90704A53 /* BluegullAQITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		522FE771E365547AE506361C /* BluegullAQI */ = {
+			isa = PBXGroup;
+			children = (
+				8DF9717EF0E478DFF3E50972 /* BluegullAQI.entitlements */,
+				EA88798997F7DDC1CE20DFEB /* BluegullAQIApp.swift */,
+				D915A79973D2B1B533D5E97C /* Info.plist */,
+			);
+			path = BluegullAQI;
+			sourceTree = "<group>";
+		};
+		554D733C257A5F69254219F0 /* Packages */ = {
+			isa = PBXGroup;
+			children = (
+				C8D7369A6C5E7049CC45ECB0 /* BluegullAQIKit */,
+			);
+			name = Packages;
+			sourceTree = "<group>";
+		};
+		7B8F7F6DE3D5670266D4EF51 = {
+			isa = PBXGroup;
+			children = (
+				522FE771E365547AE506361C /* BluegullAQI */,
+				3EF8FCBFC89E26073468FCCE /* BluegullAQITests */,
+				554D733C257A5F69254219F0 /* Packages */,
+				4A93D9E051D71F82DE70361B /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		2CD144F3A5A3634E088A1A34 /* BluegullAQITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 341C94A98089A9A706F5016B /* Build configuration list for PBXNativeTarget "BluegullAQITests" */;
+			buildPhases = (
+				14117FCC047E3D45EB2D9DA3 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A9219094BD25CF1DCF8973BE /* PBXTargetDependency */,
+			);
+			name = BluegullAQITests;
+			packageProductDependencies = (
+			);
+			productName = BluegullAQITests;
+			productReference = A10EFC3DAE75FC4C90704A53 /* BluegullAQITests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		647EFED4004ADB5A066E3B39 /* BluegullAQI */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 6DB44C282CAF0F7B251974BF /* Build configuration list for PBXNativeTarget "BluegullAQI" */;
+			buildPhases = (
+				96BB01B51E1BCF0C5BF263DC /* Sources */,
+				8E54CF753CB1D42FE38A6CE4 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BluegullAQI;
+			packageProductDependencies = (
+				29CD4EE984C4002F98DE0F20 /* BluegullAQIKit */,
+			);
+			productName = BluegullAQI;
+			productReference = AE24C4D71880AB1923A56D17 /* BluegullAQI.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		E76519299445EF26B7302F41 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					2CD144F3A5A3634E088A1A34 = {
+						ProvisioningStyle = Automatic;
+					};
+					647EFED4004ADB5A066E3B39 = {
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = C60EC0D01FAC5090551A4779 /* Build configuration list for PBXProject "BluegullAQI" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 7B8F7F6DE3D5670266D4EF51;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				30C3CD50244877BC892F03C8 /* XCLocalSwiftPackageReference "BluegullAQIKit" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 4A93D9E051D71F82DE70361B /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				647EFED4004ADB5A066E3B39 /* BluegullAQI */,
+				2CD144F3A5A3634E088A1A34 /* BluegullAQITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXSourcesBuildPhase section */
+		14117FCC047E3D45EB2D9DA3 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				871FB0558A605131295E5F3F /* BluegullAQIAppTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		96BB01B51E1BCF0C5BF263DC /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F40295CE846246E89EBAA39B /* BluegullAQIApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		A9219094BD25CF1DCF8973BE /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 647EFED4004ADB5A066E3B39 /* BluegullAQI */;
+			targetProxy = 03E8B5B9D7FC7B90BCCEBA06 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		010788DF558BB3F88E2AF26B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = BluegullAQI/BluegullAQI.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = BluegullAQI/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = solutions.bluegull.aqi;
+				SDKROOT = macosx;
+			};
+			name = Debug;
+		};
+		1B39B3BF65273F69E4312D8D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = solutions.bluegull.BluegullAQITests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BluegullAQI.app/Contents/MacOS/BluegullAQI";
+			};
+			name = Debug;
+		};
+		6F7AAAE3EA4DA0C3AE582546 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		A5C319AB2316512ABF72F5AD /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		D5FADFFF60D45A31AA517A8B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = solutions.bluegull.BluegullAQITests;
+				SDKROOT = macosx;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/BluegullAQI.app/Contents/MacOS/BluegullAQI";
+			};
+			name = Release;
+		};
+		F328FE4E77C0632EAA7B3080 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = BluegullAQI/BluegullAQI.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				ENABLE_HARDENED_RUNTIME = YES;
+				INFOPLIST_FILE = BluegullAQI/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = solutions.bluegull.aqi;
+				SDKROOT = macosx;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		341C94A98089A9A706F5016B /* Build configuration list for PBXNativeTarget "BluegullAQITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1B39B3BF65273F69E4312D8D /* Debug */,
+				D5FADFFF60D45A31AA517A8B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		6DB44C282CAF0F7B251974BF /* Build configuration list for PBXNativeTarget "BluegullAQI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				010788DF558BB3F88E2AF26B /* Debug */,
+				F328FE4E77C0632EAA7B3080 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C60EC0D01FAC5090551A4779 /* Build configuration list for PBXProject "BluegullAQI" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A5C319AB2316512ABF72F5AD /* Debug */,
+				6F7AAAE3EA4DA0C3AE582546 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		30C3CD50244877BC892F03C8 /* XCLocalSwiftPackageReference "BluegullAQIKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = BluegullAQIKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		29CD4EE984C4002F98DE0F20 /* BluegullAQIKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = BluegullAQIKit;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = E76519299445EF26B7302F41 /* Project object */;
+}
