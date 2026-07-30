@@ -4,11 +4,11 @@
 #
 # Covers bluegull-aqi-q9r.2 (handler), q9r.3 (DynamoDB cache table), q9r.4
 # (SSM-stored AirNow API key), and q9r.31 (Lambda reserved concurrency + API
-# Gateway throttling -- the PRIMARY cost circuit breakers). Deliberately NOT
-# here yet, each its own tracked task:
-#   - WAFv2 per-IP rate-based rule                    (bluegull-aqi-q9r.5)
+# Gateway throttling -- the PRIMARY cost circuit breakers). No WAFv2 rate-
+# based rule here on purpose: it can't attach to an HTTP API (v2) at all
+# (bluegull-aqi-q9r.5, resolved as not viable -- see doc/DESIGN.md "Rate
+# limiting"). Deliberately NOT here yet, its own tracked task:
 #   - Route53 + ACM custom domain                     (bluegull-aqi-q9r.6)
-#   - Stale-while-revalidate + single-flight cache      (bluegull-aqi-q9r.15)
 # -----------------------------------------------------------------------------
 
 AWSTemplateFormatVersion: '2010-09-09'

@@ -28,7 +28,7 @@ GitHub Actions CI/CD, Route53/ACM custom domain.
 | AirNow auth (direct mode) | User supplies their own AirNow API key; stored in iCloud Keychain, so it syncs across the user's Macs under their Apple ID. Not bundled in the app binary. |
 | Widget type | Both: a WidgetKit desktop widget (macOS 14+) **and** a menu bar app, sharing one core library. |
 | Distribution | Mac App Store. Apple Developer Program membership already active. |
-| Web service client auth / rate limiting | Anonymous / IP-based (via AWS WAF rate-based rule on the API Gateway). No per-install keys, no login. |
+| Web service client auth / rate limiting | Anonymous, no per-install keys, no login. Not IP-based -- AWS WAFv2 can't attach to an HTTP API (v2), only REST APIs/ALB/etc. (found and corrected 2026-07-30, bluegull-aqi-q9r.5). Relies instead on API Gateway stage throttling, Lambda reserved concurrency, and a global cache-miss budget (bluegull-aqi-q9r.32). |
 | Menu bar app data scope | The menu bar extra (status item) itself shows current overall AQI only — no room for more. Clicking it opens a `.window`-style popover with full detail (pollutant breakdown, attribution, preliminary-data disclaimer), matching the widget's content. This is the guaranteed access point for compliance content regardless of whether the user has placed the desktop widget. |
 | Widget data scope | Current AQI **and** full per-pollutant breakdown (PM2.5, PM10, ozone, etc.). |
 | Location scope | Current location (CoreLocation) **and** user-pinned locations (zip/address, geocoded locally via `CLGeocoder`/MapKit — no backend geocoding endpoint needed). |
@@ -250,10 +250,18 @@ this hasn't been explicitly confirmed yet.
 - **Cache**: single DynamoDB table, keyed by rounded lat/long (or zip), with a TTL
   attribute (~1 hour). This is the main protection for AirNow's own rate limit — many
   clients asking about the same area collapse into one upstream AirNow call.
-- **Rate limiting**: AWS WAFv2 rate-based rule attached to the API Gateway, per-IP.
-  (HTTP APIs/v2 don't support REST API v1's usage-plan + API-key throttling, hence
-  WAF instead.) Known tradeoff: Macs behind CGNAT/shared office IPs will share a
-  throttling bucket — coarser than per-install keys, but that's the chosen tradeoff.
+- **Rate limiting**: not per-IP. HTTP APIs/v2 don't support REST API v1's usage-plan
+  + API-key throttling, and — found while implementing `bluegull-aqi-q9r.5` — AWS
+  WAFv2's `WebACLAssociation` doesn't support HTTP API (v2) either, only REST APIs,
+  ALB, Cognito, AppSync, App Runner, Verified Access, and Amplify (confirmed against
+  AWS's current CloudFormation docs). Decided, with Steve's input, not to chase WAF
+  support for this by migrating to a REST API or fronting the HTTP API with
+  CloudFront (`bluegull-aqi-q9r.33`, still a "later if scale justifies it" candidate)
+  — relies instead on API Gateway stage throttling (a hard, global rate/burst cap,
+  `bluegull-aqi-q9r.31`), Lambda reserved concurrency, and the cache-miss budget
+  (`bluegull-aqi-q9r.32`). None of those are per-IP, so a single misbehaving client
+  can still exhaust the shared budget for everyone — an accepted tradeoff at this
+  scale, not an oversight.
 - **Secrets**: the service's own AirNow API key lives in SSM Parameter Store
   (SecureString) or Secrets Manager, referenced by the Lambda's execution role. Never
   committed to source.
@@ -378,9 +386,11 @@ transient location. One read-only endpoint.
 **The primary threat on this architecture.** An attacker doesn't need to take the
 service down — Lambda, API Gateway, and on-demand DynamoDB all scale elastically,
 which means they all *bill* elastically. A sustained flood costs money at a rate
-nothing in the base design bounds. WAF's per-IP rate limiting does little against a
-botnet or a handful of cheap cloud instances, and WAF bills per request itself, so
-under attack it amplifies cost rather than capping it.
+nothing in the base design bounds. Per-IP rate limiting (WAF, had it been usable —
+see "Rate limiting" above, it isn't for an HTTP API v2) would do little against a
+botnet or a handful of cheap cloud instances anyway, and WAF bills per request
+itself, so under attack it would have amplified cost rather than capped it — one
+more reason not chasing it wasn't a real loss for this specific threat.
 
 Controls that actually bound the burn rate:
 
@@ -442,19 +452,22 @@ Recorded so these get re-argued rather than silently adopted:
   automatic and free.
 - **User accounts / authenticated API** — already decided against; anonymous access is
   the product choice.
-- **WAF managed rule sets** beyond rate limiting — one read-only endpoint taking two
-  numeric parameters has almost no injection surface.
+- **WAF entirely** — not just managed rule sets. Confirmed unusable against this
+  architecture's HTTP API (v2) without a bigger change (REST API migration or
+  CloudFront), and a read-only endpoint taking two numeric parameters has almost no
+  injection surface anyway, so WAF's other value (managed rule sets) wasn't buying
+  much here either. See "Rate limiting" above.
 - **Multi-region, penetration testing** — not until scale justifies them.
 
 **Strong later candidate: CloudFront in front of the API.** The response is identical
 for everyone in a region and changes hourly, which is nearly an ideal CDN workload. It
 would absorb most traffic at the edge before reaching Lambda, cutting cost and attack
-surface together. Not worth the complexity pre-launch; the natural first move if scale
-materializes.
+surface together — and it's also the path back to WAF (which does support CloudFront
+distributions directly) if true per-IP throttling turns out to matter later. Not
+worth the complexity pre-launch; the natural first move if scale materializes.
 
 ### Unverified — confirm before relying on
 
-- Current minimum threshold and evaluation window for WAF rate-based rules.
 - Whether Apple's **App Attest** supports native macOS (well-established on iOS). If
   it does, it's the real answer to "only our app may call this" — but nothing should
   be designed around it until confirmed.
@@ -841,7 +854,8 @@ our per-request opportunistic caching is not.
 
 ## Phased build order
 
-1. **Backend MVP** — SAM template, single Lambda, DynamoDB cache, WAF throttling,
+1. **Backend MVP** — SAM template, single Lambda, DynamoDB cache, stage throttling
+   (WAF turned out not to be usable against an HTTP API v2 -- see "Rate limiting"),
    deployed to a dev stage. Custom domain can follow slightly after if it unblocks
    faster iteration.
 2. **`BluegullAQIKit`** — models, both clients, Keychain helper, App Group cache, unit
@@ -1102,6 +1116,34 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Resolved bluegull-aqi-q9r.5 (add WAFv2 rate-based rule) and
+  bluegull-aqi-q9r.34 (verify WAF rate-based rule minimums) as not viable,
+  without writing any WAF resources into template.yaml. Before implementing,
+  checked AWS's current CloudFormation docs for `AWS::WAFv2::WebACLAssociation`
+  and found its `ResourceArn` only accepts an Application Load Balancer, an
+  API Gateway **REST** API, AppSync, Cognito, App Runner, Verified Access, or
+  Amplify -- HTTP API (v2), what `AqiHttpApi` actually is, isn't in that list
+  and isn't supported. The task as originally scoped (attach WAF directly to
+  the existing HTTP API) was never achievable with the current architecture,
+  contradicting what doc/DESIGN.md's "Rate limiting" section had said.
+  Surfaced the fork to Steve rather than guessing at an architecture change
+  (REST API migration, pulling CloudFront/q9r.33 forward, or dropping WAF) --
+  decided to drop WAF and rely on what's already in place: API Gateway stage
+  throttling (q9r.31), Lambda reserved concurrency (q9r.31), and the new
+  cache-miss budget (q9r.32). None of those are per-IP, so a single
+  misbehaving client can still exhaust the shared budget for everyone -- an
+  accepted tradeoff at this scale, not an oversight. Corrected every prior
+  DESIGN.md reference to WAF-on-the-API-Gateway accordingly (the decisions
+  table, "Rate limiting", "Denial of wallet", "Deliberately out of scope",
+  the phased build order) and template.yaml's header comment. CloudFront
+  remains the noted future path back to WAF if true per-IP throttling turns
+  out to matter later (it does support CloudFront distributions directly).
+  Incidentally answered q9r.34's own question while researching this even
+  though it's now moot: AWS WAFv2's `RateBasedStatement.Limit` has a minimum
+  of 10 and max of 2,000,000,000; `EvaluationWindowSec` allows 60/120/300/600
+  seconds, default 300 -- kept here for reference if CloudFront+WAF happens
+  later. No code changed; `sam validate --lint` and `sam build` both still
+  succeed against the corrected template header.
 - 2026-07-30 — Implemented bluegull-aqi-q9r.25 (gate module import time and
   package size locally, an AWS-free cold-start proxy). New
   `bin/coldstart_gate.py`, wired into `service-ci.yml` right after `make
