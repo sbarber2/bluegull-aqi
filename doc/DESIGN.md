@@ -1113,8 +1113,11 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   actual latest is v7.0.1; also bumped the existing `secret-scan.yml`'s
   `actions/checkout@v4` to `@v7` for consistency while in there. No local
   GitHub Actions runner available (`act`/`docker` not installed) to fully
-  dry-run the workflow, so real verification is the actual CI run once
-  pushed, watched live via `gh run watch`.
+  dry-run the workflow, so pushed it and watched the real run via `gh run
+  watch`: all steps passed in 51s, including DynamoDB Local + pytest
+  (confirming Java is available on `ubuntu-latest` without an explicit
+  setup step) and `sam build` (confirming the native, container-free build
+  works on the runner).
 - 2026-07-30 — Implemented bluegull-aqi-10h.20: `PollutantCopy.spelledOutName(forParameterName:)`
   provides "Particle Pollution (PM2.5)"/"Particle Pollution (PM10)" -- the
   TAD FAQ: "Based on focus group testing by EPA, people better understand
