@@ -1102,6 +1102,31 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-10h.5: `AirNowAPIKeyStore` reads,
+  writes, and deletes the user's own AirNow API key (Direct mode) as an
+  iCloud-synced Keychain item (`kSecAttrSynchronizable`, so it follows the
+  user across their Macs).
+  - `SystemKeychain` (the real `SecItem*`-backed implementation) sits
+    behind an injectable `KeychainStore` protocol, so `AirNowAPIKeyStore`'s
+    logic is fully unit-testable (10 tests) against an in-memory fake --
+    deliberately never the real macOS Keychain from automated tests, since
+    a bare `swift test` process isn't a signed, entitled app bundle and
+    touching real persistent keychain state from a test run risks leaving
+    artifacts behind or failing outright.
+  - Confirmed that last part live: asked first, then tried a one-off
+    executable target calling `SystemKeychain` directly against the real
+    keychain. First attempt failed with `errSecMissingEntitlement`
+    (-34018); a second attempt with an ad-hoc-signed
+    keychain-access-groups entitlement got killed outright by the OS. Real
+    verification of `SystemKeychain`'s actual `SecItem*` calls needs a
+    properly signed, provisioned app target -- not available until
+    `bluegull-aqi-8ef.5` (Apple Developer bundle IDs, an account action
+    requiring Steve) and the settings UI (`bluegull-aqi-e70.4`) exist. The
+    code matches the documented API contract and the standard, widely-used
+    shape for this exact pattern, but is unverified against the real
+    system until then -- flagged explicitly rather than claimed as tested.
+    Temporary verification target removed before committing either way.
+  - 40/40 tests pass via `swift test`.
 - 2026-07-30 — Implemented bluegull-aqi-10h.3: `AirNowDirectClient` calls
   AirNow's `current/ziplatlong` endpoint directly (the same endpoint the
   backend service uses, confirmed in `bluegull-aqi-10h.19`), returning an
