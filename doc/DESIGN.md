@@ -1102,6 +1102,17 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-8ef.12: enabled Dependabot security
+  updates on `sbarber2/bluegull-aqi` (confirmed disabled on 2026-07-27), via
+  `gh api -X PUT /repos/sbarber2/bluegull-aqi/vulnerability-alerts` and
+  `.../automated-security-fixes` -- confirmed with the user first since this
+  is a repo *settings* change via the GitHub API, a different category from
+  the file/commit permission already granted. Verified via
+  `security_and_analysis.dependabot_security_updates.status == "enabled"`.
+  Covers both the Lambda's Python dependencies and BluegullAQIKit's Swift
+  dependencies once those exist. `secret_scanning_non_provider_patterns` and
+  `secret_scanning_validity_checks` remain disabled -- separate P3 issue
+  `bluegull-aqi-8ef.8`, not in scope here.
 - 2026-07-30 — Implemented bluegull-aqi-10h.15: `PollutantReading.attributionText`
   produces "Data courtesy of {reportingAgency}" -- the first tier of the
   two-tier attribution the AirNow Data Exchange Guidelines require (credit
