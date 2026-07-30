@@ -35,6 +35,20 @@
                ReferencedContainer = "container:BluegullAQI.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
+         <BuildActionEntry
+            buildForTesting = "YES"
+            buildForRunning = "YES"
+            buildForProfiling = "YES"
+            buildForArchiving = "YES"
+            buildForAnalyzing = "YES">
+            <BuildableReference
+               BuildableIdentifier = "primary"
+               BlueprintIdentifier = "2372924C8E8574B3FF80C240"
+               BuildableName = "BluegullAQIWidget.appex"
+               BlueprintName = "BluegullAQIWidget"
+               ReferencedContainer = "container:BluegullAQI.xcodeproj">
+            </BuildableReference>
+         </BuildActionEntry>
       </BuildActionEntries>
    </BuildAction>
    <TestAction

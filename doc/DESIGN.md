@@ -1201,6 +1201,38 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-mtm.1 (scaffold the WidgetKit
+  extension target). Second real Xcode target, alongside the container
+  app -- `mac-app/project.yml` now has a `BluegullAQIWidget` `app-extension`
+  target, embedded into `BluegullAQI` via XcodeGen's `embed: true`
+  dependency.
+  - `BluegullAQIWidget` bundle ID `solutions.bluegull.aqi.widget`
+    (already registered, `bluegull-aqi-8ef.5`), `NSExtensionPointIdentifier:
+    com.apple.widgetkit-extension`. Entitlements: App Sandbox + the same
+    App Group as the container app (`group.solutions.bluegull.aqi`) --
+    deliberately NO network-client or location entitlements, since the
+    architecture already decided the widget only ever reads the App Group
+    cache and never fetches itself (doc/DESIGN.md "Widget extension
+    (WidgetKit)").
+  - Placeholder `TimelineProvider`/`Widget`/view only -- a real provider
+    reading the App Group cache is separate tracked work
+    (`bluegull-aqi-mtm.2`), and per-instance App Intents configuration is
+    `mtm.3`. This task was the target/dependency wiring only, matching how
+    `e70.1` scaffolded the container app before any real feature work
+    landed on it.
+  - Real, if minor, bug caught immediately by testing: `import WidgetKit`
+    alone wasn't enough for `Widget`/`WidgetBundle` to resolve -- needed
+    `import SwiftUI` too. Build failed with "cannot find type 'Widget' in
+    scope" until fixed.
+  - Verified past "it compiles": confirmed the built `.appex` actually
+    lands in `BluegullAQI.app/Contents/PlugIns/` with the correct bundle
+    ID and `NSExtension` dictionary, and that the generated entitlements
+    file has exactly the intended set (sandbox + App Group, nothing more).
+    A widget extension can't be launched standalone the way the container
+    app was (it's hosted by the system's widget renderer, not directly
+    executable) -- launched the container app instead and confirmed it
+    still runs cleanly with the extension embedded, no crash. 8/8
+    app-target tests still pass.
 - 2026-07-30 — Implemented bluegull-aqi-e70.10 (attribution in the menu bar
   popover). Two-tier attribution per the AirNow Data Exchange Guidelines:
   tier 1 (specific reporting agency, `PollutantReading.attributionText`,

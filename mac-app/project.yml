@@ -16,6 +16,8 @@ targets:
       - path: BluegullAQI
     dependencies:
       - package: BluegullAQIKit
+      - target: BluegullAQIWidget
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: solutions.bluegull.aqi
@@ -47,6 +49,38 @@ targets:
         com.apple.security.application-groups:
           - group.solutions.bluegull.aqi
 
+  BluegullAQIWidget:
+    type: app-extension
+    platform: macOS
+    sources:
+      - path: BluegullAQIWidget
+    dependencies:
+      - package: BluegullAQIKit
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: solutions.bluegull.aqi.widget
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: true
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+    info:
+      path: BluegullAQIWidget/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: BluegullAQIWidget/BluegullAQIWidget.entitlements
+      properties:
+        # Required for Mac App Store distribution.
+        com.apple.security.app-sandbox: true
+        # Shared cache written by the container app -- the widget extension
+        # does NOT get its own network/location entitlements: it reads the
+        # App Group cache only, never fetches itself (doc/DESIGN.md "Widget
+        # extension (WidgetKit)": "does not fetch network or location
+        # itself" -- restricted background networking is exactly why).
+        com.apple.security.application-groups:
+          - group.solutions.bluegull.aqi
+
   BluegullAQITests:
     type: bundle.unit-test
     platform: macOS
@@ -63,6 +97,7 @@ schemes:
     build:
       targets:
         BluegullAQI: all
+        BluegullAQIWidget: all
         BluegullAQITests: [test]
     run:
       config: Debug
