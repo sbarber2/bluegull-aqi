@@ -466,11 +466,40 @@ surface together — and it's also the path back to WAF (which does support Clou
 distributions directly) if true per-IP throttling turns out to matter later. Not
 worth the complexity pre-launch; the natural first move if scale materializes.
 
-### Unverified — confirm before relying on
+### App Attest on native macOS — resolved (bluegull-aqi-10h.14)
 
-- Whether Apple's **App Attest** supports native macOS (well-established on iOS). If
-  it does, it's the real answer to "only our app may call this" — but nothing should
-  be designed around it until confirmed.
+**Yes, as of macOS 27.** Previously unsupported on native macOS/Catalyst (`DCAppAttestService.shared.isSupported`
+reliably returned `false`, even on Secure Enclave-equipped Macs); confirmed now
+supported "on all Apple platforms, including macOS 27 and higher" per Apple's own
+WWDC guidance. Always gate on `isSupported` at runtime rather than branching on OS
+version, since availability can depend on more than just the OS (see below).
+
+Two caveats that matter for this project specifically:
+
+- **Extension-type restriction is moot here.** App Attest is only available from
+  the main app plus Action and SSO app extensions — not from a WidgetKit extension.
+  That would matter if the widget made its own network calls, but it doesn't: the
+  container app owns all networking and hands results to the widget through the App
+  Group cache ("Widget extension (WidgetKit)" above). So App Attest, if adopted,
+  would only ever need to run in the main app.
+- **Requires full security mode + SIP enabled.** On macOS, App Attest keys are
+  policy-bound to the Mac being in full security mode with System Integrity
+  Protection on. A user who's disabled SIP (not rare among developers/power users)
+  would fail `isSupported` and need a fallback path anyway — attestation can
+  never be assumed universally available even on macOS 27+.
+
+**Sketch of what adopting it would require**, since "supported" isn't "trivial":
+client-side, generate and persist an attestation key via `DCAppAttestService`, run
+the one-time attestation ceremony against Apple's servers, then produce a fresh
+assertion per backend request. Server-side is the bigger lift: `lambda_handler.py`
+would need new verification logic -- validating the attestation/assertion against
+Apple's App Attest root certificate chain, and tracking each key's signature
+counter server-side (in the existing DynamoDB table, most naturally) to detect
+replay. That's a real new feature, not a config flag, and it would raise this
+project's minimum supported macOS to 27 specifically to gate on it meaningfully --
+a product tradeoff, not just an implementation detail. Left as a future candidate
+in the deferred-work table below, not undertaken now; this task's scope was the
+yes/no and the sketch, not the implementation.
 
 ## AirNow terms review — research findings
 
@@ -881,7 +910,7 @@ boundary is one visible list instead of scattered across epics:
 | Richer widget detail view (trends, forecast, more pollutants) | `bluegull-aqi-mtm.15` | The v1 tap-to-expand view is deliberately scoped to compliance content only |
 | Forecast data | — | The data-scope decision chose current observations only; forecast would be a natural companion to the richer detail view above |
 | CloudFront in front of the API | `bluegull-aqi-q9r.33` | Cost/DoS benefit doesn't justify the complexity until real traffic exists |
-| App Attest device attestation | `bluegull-aqi-10h.14` | Unverified whether it's even supported on native macOS; nothing depends on it |
+| App Attest device attestation | `bluegull-aqi-10h.14` | Confirmed supported on macOS 27+, but adopting it means real new server-side verification work and raising the minimum supported OS -- a scope decision, not this v1's default |
 | Branch protection on `main` | `bluegull-aqi-8ef.9` | Friction without benefit until CI produces status checks worth gating on |
 
 Note what is *not* on this list: attribution (`e70.10`, `mtm.14`), the
@@ -1071,9 +1100,19 @@ Small, and genuinely not automatable:
   system scheduling rather than in a test run.
 - App Review.
 
-*Unverified:* whether a supported CLI exists to force an installed widget to reload
-its timeline. Worth checking before relying on it; nothing in the plan currently
-depends on it.
+**Resolved (bluegull-aqi-mtm.12): no supported CLI exists.** `WidgetCenter.reloadAllTimelines()`/
+`reloadTimelines(ofKind:)`, called from app code, remain the only Apple-supported
+reload path -- there's no `xcrun`/`simctl` equivalent for a real Mac's installed
+desktop widgets (simctl's widget support is iOS Simulator-only). The one thing
+search turned up, `killall NotificationCenter` (sometimes paired with `defaults
+delete com.apple.notificationcenterui` first), is a real, commonly-cited fix people
+use -- but it's an undocumented, unsupported trick that restarts the whole
+Notification Center process system-wide, reloading *every* app's widgets, not
+just ours. Not something to build verification tooling around. The actually
+useful fact for tightening the manual loop: per Apple's own WidgetKit docs,
+running under the Xcode debugger removes the normal reload-rate throttling
+entirely, so attaching the debugger to the widget extension during manual testing
+is the practical answer, not a CLI.
 
 ### CI layout
 
@@ -1116,6 +1155,37 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Resolved bluegull-aqi-10h.14 (investigate App Attest on native
+  macOS) and bluegull-aqi-mtm.12 (investigate a widget-reload CLI). Both
+  research-only, no code changed.
+  - **App Attest**: yes, supported as of macOS 27 (previously it wasn't --
+    `isSupported` reliably returned false on native macOS even with a Secure
+    Enclave). Found the extension-type restriction (only main app, Action,
+    and SSO extensions -- not WidgetKit extensions) doesn't actually matter
+    for this project, since the widget extension already never makes its own
+    network calls (the container app owns all networking, per the existing
+    architecture). Also found App Attest requires full security mode + SIP
+    on macOS specifically, so it can never be assumed universally available
+    even on a qualifying OS. Wrote up the adoption sketch the task asked
+    for (client: key generation + attestation ceremony + per-request
+    assertions in the main app; server: new verification logic in
+    `lambda_handler.py` against Apple's root cert chain, plus replay
+    tracking via signature counters, most naturally in the existing
+    DynamoDB table) -- a real feature with a real macOS-27-floor cost, left
+    as a future candidate rather than undertaken now. Corrected
+    doc/DESIGN.md's "Unverified" section and the deferred-work table
+    accordingly.
+  - **Widget-reload CLI**: no supported one exists. `WidgetCenter.reloadAllTimelines()`/
+    `reloadTimelines(ofKind:)` from app code remain the only Apple-sanctioned
+    path; `simctl`'s widget support is iOS-Simulator-only, nothing
+    equivalent exists for a real Mac's installed widgets. Found the
+    commonly-cited `killall NotificationCenter` trick, but it's undocumented,
+    unsupported, and restarts every app's widgets system-wide -- not
+    something to build verification tooling around. The practically useful
+    finding instead: Apple's own docs confirm the debugger removes the
+    normal reload-rate throttling entirely, so attaching Xcode's debugger to
+    the widget extension during manual testing is the real answer to
+    tightening that loop.
 - 2026-07-30 — Resolved bluegull-aqi-q9r.5 (add WAFv2 rate-based rule) and
   bluegull-aqi-q9r.34 (verify WAF rate-based rule minimums) as not viable,
   without writing any WAF resources into template.yaml. Before implementing,
