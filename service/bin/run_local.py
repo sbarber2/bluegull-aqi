@@ -6,6 +6,12 @@ request into the API Gateway HTTP API v2 event shape Lambda would receive.
 See doc/DESIGN.md "Local development (no AWS required)": deliberately not
 `sam local start-api`, which needs Docker and is slower to iterate on.
 
+Uses ThreadingHTTPServer, not the single-connection-at-a-time HTTPServer:
+real Lambda invocations run concurrently, and the stale-while-revalidate +
+single-flight cache logic (bluegull-aqi-q9r.15) is specifically about
+behavior under concurrent requests -- a server that serializes them would
+make that impossible to observe or exercise locally.
+
 Usage:
     make run-local
     curl "http://localhost:8080/aqi?lat=37.7749&lon=-122.4194"
@@ -13,7 +19,7 @@ Usage:
 import json
 import os
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
@@ -92,7 +98,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    server = HTTPServer(("127.0.0.1", PORT), Handler)
+    server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
     print(f"Serving on http://127.0.0.1:{PORT} (Ctrl+C to stop)")
     try:
         server.serve_forever()

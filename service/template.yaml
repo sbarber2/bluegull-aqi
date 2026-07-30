@@ -36,9 +36,11 @@ Parameters:
     Type: Number
     Default: 3600
     Description: >
-      Cache entry lifetime. ~1 hour to match AirNow's own NowCast publish
-      cadence -- see bluegull-aqi-q9r.15 for the stale-while-revalidate
-      refinement that will sit on top of this basic TTL.
+      Cache entry lifetime, aligned to the next boundary of this size since
+      the epoch (e.g. the top of the next UTC hour, at the default) rather
+      than a rolling window from each entry's own first-request time --
+      matches AirNow's roughly-hourly NowCast publish cadence
+      (bluegull-aqi-q9r.15).
 
   LambdaReservedConcurrentExecutions:
     Type: Number
@@ -119,6 +121,7 @@ Resources:
                 Action:
                   - dynamodb:GetItem
                   - dynamodb:PutItem
+                  - dynamodb:UpdateItem
                 Resource: !GetAtt AqiCacheTable.Arn
         - PolicyName: AirNowApiKeyAccess
           PolicyDocument:

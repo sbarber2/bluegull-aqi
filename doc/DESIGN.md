@@ -1102,6 +1102,50 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-q9r.15 (stale-while-revalidate +
+  single-flight cache) and q9r.16 (concurrent-behavior tests).
+  - On a cache miss: an expired-but-present entry is served immediately
+    (`Cache.get_stale()`) while at most one concurrent request wins a
+    DynamoDB conditional-write lock (`Cache.try_acquire_refresh_lock()`) to
+    actually call AirNow; a true cold start (nothing cached at all) waits,
+    bounded, for the winner rather than also calling AirNow. TTL now aligns
+    to the next boundary since the epoch (`cache.seconds_until_next_boundary()`)
+    -- matching AirNow's roughly-hourly NowCast cadence -- instead of a
+    rolling window from each entry's own first-request time.
+  - Two real concurrency bugs were found and fixed only by testing this live
+    against genuinely concurrent requests, not by unit tests with a
+    simulated lock: (1) `Cache.put()` used PutItem, which replaces the
+    *entire* item and was silently clearing the lock attribute the instant
+    the winner wrote its result -- opening a window for a slower request to
+    acquire a "fresh" lock and redundantly re-fetch from AirNow right after
+    a successful refresh. Fixed by switching to UpdateItem, touching only
+    Data/FetchedAt/ExpiresAt. (2) A second race in the gap between a
+    request's own initial miss-check and its own lock-acquisition moments
+    later: another request could complete an entire fetch-and-cache cycle in
+    that window, and without re-checking, the winner would redundantly
+    re-fetch data that already existed. Fixed by re-checking the cache
+    immediately after winning the lock, before actually calling AirNow.
+  - This is a good example of why "run the local server and try it" matters
+    beyond typechecking/unit tests (per this repo's own stated review
+    standard): both bugs passed a 55-test suite cleanly, including tests
+    specifically targeting this feature, and were only caught by firing real
+    concurrent HTTP requests at `make run-local`. That in turn required
+    fixing `bin/run_local.py` itself, which used the single-connection-at-a-
+    time `HTTPServer` -- serializing "concurrent" requests and making the
+    race impossible to observe locally at all -- switched to
+    `ThreadingHTTPServer`.
+  - Verified live at increasing scale (10, then 20 genuinely concurrent
+    requests via `ThreadingHTTPServer` against real AirNow) after each fix:
+    exactly one AirNow call per batch, all responses correct, TTL confirmed
+    aligned to the exact top of the UTC hour. Added `test_concurrent_cache.py`
+    (real `threading.Thread`-based races, not a simulated lock -- deliberately
+    the kind of test that actually would have caught both bugs) as the
+    permanent regression coverage for q9r.16. 57/57 tests pass, pylint
+    10.00/10, `sam validate --lint` clean. Also added the missing
+    `dynamodb:UpdateItem` IAM permission to the Lambda execution role in
+    `template.yaml` (needed by the new lock/put mechanics; local testing
+    against DynamoDB Local doesn't enforce IAM, so this would only have
+    surfaced as a real deploy-time failure otherwise).
 - 2026-07-30 — Implemented bluegull-aqi-10h.17: added `ComplianceTests.swift`,
   a regression guard that scans every `.swift` file under `Sources/` (comments
   stripped, so the prose that names these very terms to explain the
