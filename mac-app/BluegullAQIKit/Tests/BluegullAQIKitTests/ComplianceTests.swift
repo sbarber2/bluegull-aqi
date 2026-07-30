@@ -79,6 +79,28 @@ final class ComplianceTests: XCTestCase {
         }
     }
 
+    /// bluegull-aqi-10h.20: the AQI Technical Assistance Document FAQ says
+    /// EPA's own focus group testing found the public understands and
+    /// prefers "particle pollution" over "particulate matter." Use
+    /// `PollutantCopy.spelledOutName(forParameterName:)` instead of
+    /// inventing wording -- "PM2.5"/"PM10" themselves remain fine as
+    /// compact labels, this only forbids the spelled-out "particulate
+    /// matter" phrase.
+    func testNoParticulateMatterPhrasingExistsInSources() throws {
+        let sourcesDirectory = try Self.sourcesDirectory()
+        let swiftFiles = try Self.swiftFiles(under: sourcesDirectory)
+
+        for fileURL in swiftFiles {
+            let code = try Self.codeOnly(contentsOf: fileURL).lowercased()
+            XCTAssertFalse(
+                code.contains("particulate matter"),
+                "\(fileURL.lastPathComponent) contains 'particulate matter' outside a comment -- " +
+                "bluegull-aqi-10h.20: EPA's own research found the public prefers 'particle pollution.' " +
+                "Use PollutantCopy.spelledOutName(forParameterName:) instead."
+            )
+        }
+    }
+
     /// bluegull-aqi-10h.13: `SystemKeychain`'s AirNow-key item deliberately
     /// has no `kSecAttrAccessGroup` -- only the container app needs this
     /// key (the widget extension only reads pre-fetched data from

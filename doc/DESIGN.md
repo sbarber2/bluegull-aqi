@@ -1102,7 +1102,16 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
-- 2026-07-30 — Implemented bluegull-aqi-10h.10.
+- 2026-07-30 — Implemented bluegull-aqi-10h.20: `PollutantCopy.spelledOutName(forParameterName:)`
+  provides "Particle Pollution (PM2.5)"/"Particle Pollution (PM10)" -- the
+  TAD FAQ: "Based on focus group testing by EPA, people better understand
+  and prefer the term particle pollution than particulate matter." Falls
+  back to the raw `parameterName` unchanged for any other pollutant --
+  deliberately narrow scope, no invented translation table for pollutants
+  this issue never asked about. Added a `ComplianceTests` guard (matching
+  the 10h.17/10h.18 pattern) forbidding "particulate matter" anywhere in
+  `Sources/`, verified it actually catches a violation via temporary
+  injection. 79/79 tests pass via `swift test`.
   - `RefreshScheduler` derives a stable per-install offset within the
     refresh interval (persisted via `SharedCacheStore`, so the container
     app and widget extension see the same schedule) and computes the next
