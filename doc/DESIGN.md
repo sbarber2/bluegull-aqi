@@ -1102,6 +1102,36 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-q9r.25 (gate module import time and
+  package size locally, an AWS-free cold-start proxy). New
+  `bin/coldstart_gate.py`, wired into `service-ci.yml` right after `make
+  build`: measures `import bluegull_aqi_service.lambda_handler` time in a
+  fresh subprocess (a warm interpreter's import cache would hide the real
+  cost, and Lambda's Init always starts cold) and the actual byte size of
+  `.aws-sam/build/AqiFunction`, failing the build if either exceeds a
+  ceiling. Both are measurable without any deployment and correlate well
+  with Init Duration, so this catches the most common cold-start regression
+  -- someone adding a heavy dependency -- on every PR, long before the
+  nightly perf run against a real deployed Lambda (bluegull-aqi-q9r.24,
+  still open) ever would.
+  - Ceilings (350ms import, 50MB package) are generous placeholders with
+    headroom over locally-measured baselines (~90-120ms, ~21MB), not tuned
+    targets -- meant to be re-tightened once real Init Duration
+    measurements exist (bluegull-aqi-q9r.26). Overridable via
+    `MAX_IMPORT_TIME_MS`/`MAX_PACKAGE_SIZE_MB` for local experimentation.
+  - `import time -X importtime` showed the import cost is almost entirely
+    boto3 (and s3transfer specifically, imported unconditionally as part of
+    boto3's own package init even though this service never touches S3) --
+    consistent with the bluegull-aqi-q9r.18 decision to keep vendoring
+    boto3 rather than chase a runtime-provided copy that isn't reliably
+    documented for this project's runtime. Switching from the high-level
+    `boto3` package to bare `botocore` clients would likely cut this
+    further, but that's a separate, more invasive change than this issue
+    asked for -- noted here as a candidate, not undertaken.
+  - Verified the gate actually catches a regression, not just that it
+    passes today: ran it with `MAX_IMPORT_TIME_MS=1` and separately
+    `MAX_PACKAGE_SIZE_MB=1`, confirmed both fail loudly with a nonzero exit
+    and a clear message, then confirmed a normal run passes.
 - 2026-07-30 — Implemented bluegull-aqi-q9r.18 (minimize Lambda cold start:
   package size and client init), partially.
   - **Client init**: `cache.resolve_table()` (the DynamoDB Table resource

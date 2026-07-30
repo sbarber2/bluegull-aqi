@@ -47,3 +47,6 @@ jobs:
 
       - name: Build
         run: make build
+
+      - name: Cold-start proxy gate (import time + package size)
+        run: make coldstart-gate

@@ -1,4 +1,4 @@
-.PHONY: install lint pylint pytest build validate clean \
+.PHONY: install lint pylint pytest build validate clean coldstart-gate \
         dynamodb-local-setup dynamodb-local-start dynamodb-local-stop run-local
 
 install:
@@ -26,6 +26,11 @@ build: src/requirements.txt
 
 validate:
 	sam validate --lint
+
+# AWS-free cold-start proxy (bluegull-aqi-q9r.25) -- requires `make build`
+# to have already produced .aws-sam/build/AqiFunction.
+coldstart-gate:
+	poetry run python3 bin/coldstart_gate.py
 
 clean:
 	rm -rf .aws-sam src/requirements.txt
