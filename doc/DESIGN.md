@@ -1201,6 +1201,55 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-mtm.14 (widget tap-to-expand detail
+  view: attribution + disclaimer), same pattern Apple's own Weather widget
+  uses:
+  - New `WidgetDeepLink` in `BluegullAQIKit` -- encodes/decodes the
+    `Location` a widget instance is showing into a `bluegullaqi://widget-detail`
+    URL (query items `lat`/`lon`, omitted entirely for "current location,"
+    matching `WidgetTimelineComputer`'s own nil-means-fall-back-to-most-
+    recent-cache semantics). Shared by both sides specifically so the
+    widget (which builds the URL) and the container app (which parses it)
+    can't drift out of sync on the format -- 6 new tests, including the
+    round trip and malformed-input-degrades-to-nil cases.
+  - `BluegullAQIWidgetEntry` now also carries `configuredLocation`, and
+    `BluegullAQIWidget`'s configuration closure applies
+    `.widgetURL(WidgetDeepLink.url(for: entry.configuredLocation))` to the
+    whole widget view, making it a single tap target.
+  - New `WidgetDetailView` in the container app, reachable via a new
+    `WindowGroup(id: "widget-detail")` scene with `.onOpenURL` parsing the
+    incoming URL back into a `Location`. Reads the same App Group cache the
+    widget itself reads (via `WidgetTimelineComputer`), so it shows
+    whatever the widget was already displaying, not a fresh fetch.
+  - Extracted `AQIHeadlineBadge` and `AttributionFooter` out of
+    `AQIPopoverView` (`e70.11`) into shared `AQISummaryComponents.swift` so
+    `WidgetDetailView` renders the *exact* same headline/attribution
+    content the popover does, per this issue's explicit instruction to
+    reuse popover content rather than build a third compliance surface.
+    `AQIPopoverView` itself is otherwise unchanged.
+  - New `CFBundleURLTypes` (scheme `bluegullaqi`) registered on the app
+    target in `project.yml`.
+  - **Deliberately does NOT render the preliminary-data disclaimer** --
+    same reasoning as `AQIPopoverView`'s own doc comment: exact wording is
+    a compliance call for Steve to make (`dc2.4`), not something to invent
+    here. This is exactly why `dc2.4` depends on this issue rather than
+    the reverse: the view now exists for `dc2.4` to add the decided
+    wording into, once decided.
+  - Verified: full scheme build, `BluegullAQITests` (9 passing),
+    `BluegullAQIKit swift test` (109 passing, up from 103), and a live
+    end-to-end check -- launched the built app, then `open
+    "bluegullaqi://widget-detail?lat=37.77&lon=-122.42"` against the
+    running process: same PID before and after (no crash/relaunch), no
+    crash report written. Actually *seeing* the detail window (e.g.
+    confirming its contents via the accessibility tree) hit the same
+    barrier already documented for `e70.9`'s XCUITest suite: a
+    5-second-bounded `osascript ... System Events ...` query against the
+    running app process never returned, consistent with this environment
+    lacking the Accessibility/Automation TCC permission such introspection
+    needs. Full interactive confirmation (the window actually appears with
+    the right content) is real work for `mtm.9`'s already-tracked manual
+    verification on a real Mac session, not attempted further here.
+
 - 2026-07-30 — Implemented bluegull-aqi-mtm.4/mtm.5/mtm.6 (widget UI: small,
   medium, and large family layouts), built together since all three depend
   only on already-closed `mtm.2` and share the same `AQIReading`/

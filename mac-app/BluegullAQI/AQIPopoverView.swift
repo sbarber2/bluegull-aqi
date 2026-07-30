@@ -34,7 +34,7 @@ struct AQIPopoverView: View {
                let headline = reading.headlinePollutant,
                let aqi = headline.nowcastAQI,
                let category = headline.category {
-                headlineSection(aqi: aqi, category: category)
+                AQIHeadlineBadge(aqi: aqi, category: category)
                 if let notice = category.beyondScaleNotice {
                     Text(notice)
                         .font(.caption)
@@ -43,7 +43,7 @@ struct AQIPopoverView: View {
                 Divider()
                 pollutantList(reading.pollutants)
                 Divider()
-                attributionFooter(headline)
+                AttributionFooter(headline: headline)
             } else {
                 ContentUnavailableView(
                     "No Air Quality Data",
@@ -56,21 +56,6 @@ struct AQIPopoverView: View {
         .frame(width: 300)
         .sheet(isPresented: $showingSettings) {
             SettingsView()
-        }
-    }
-
-    private func headlineSection(aqi: Int, category: AQICategory) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Circle()
-                .fill(category.color.swiftUIColor)
-                .frame(width: 14, height: 14)
-            VStack(alignment: .leading, spacing: 2) {
-                Text("\(aqi)")
-                    .font(.system(size: 34, weight: .semibold, design: .rounded))
-                Text(category.descriptor)
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-            }
         }
     }
 
@@ -102,19 +87,4 @@ struct AQIPopoverView: View {
         }
     }
 
-    /// Two-tier attribution (bluegull-aqi-e70.10, bluegull-aqi-10h.15):
-    /// credit the specific reporting agency for the headline reading first,
-    /// when AirNow supplied one, then the static AirNow/EPA credit -- always
-    /// shown, never omitted, styled after the airnow.gov precedent (a
-    /// persistent small footer, not a Settings/About screen).
-    private func attributionFooter(_ headline: PollutantReading) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if let agencyCredit = headline.attributionText {
-                Text(agencyCredit)
-            }
-            Text(AttributionCopy.staticCredit)
-        }
-        .font(.caption2)
-        .foregroundStyle(.secondary)
-    }
 }

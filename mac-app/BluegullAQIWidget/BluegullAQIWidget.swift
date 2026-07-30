@@ -6,14 +6,23 @@ struct BluegullAQIWidgetEntry: TimelineEntry {
     let date: Date
     let reading: AQIReading?
 
-    init(date: Date, reading: AQIReading?) {
+    // The location this widget instance is configured for -- nil for
+    // "current location" (see `LocationOptionEntity`'s own doc comment).
+    // Carried on the entry (not just used to compute `reading`) so the
+    // `widgetURL` tap target (bluegull-aqi-mtm.14) can encode the same
+    // location the widget is actually showing.
+    let configuredLocation: Location?
+
+    init(date: Date, reading: AQIReading?, configuredLocation: Location? = nil) {
         self.date = date
         self.reading = reading
+        self.configuredLocation = configuredLocation
     }
 
-    init(_ snapshot: WidgetTimelineSnapshot) {
+    init(_ snapshot: WidgetTimelineSnapshot, configuredLocation: Location? = nil) {
         date = snapshot.date
         reading = snapshot.reading
+        self.configuredLocation = configuredLocation
     }
 }
 
@@ -53,14 +62,20 @@ struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
     }
 
     private func entry(for configuration: SelectLocationIntent, now: Date = Date()) -> BluegullAQIWidgetEntry {
-        guard let computer else { return BluegullAQIWidgetEntry(date: now, reading: nil) }
         // configuration.location is nil for a not-yet-configured instance;
         // .location on the entity itself is nil for the "current location"
         // option specifically (see LocationOptionEntity's own doc
         // comment). Both collapse to the same nil, which
         // currentSnapshot(for:) already treats as "fall back to whatever
         // was most recently cached."
-        return BluegullAQIWidgetEntry(computer.currentSnapshot(for: configuration.location?.location, now: now))
+        let configuredLocation = configuration.location?.location
+        guard let computer else {
+            return BluegullAQIWidgetEntry(date: now, reading: nil, configuredLocation: configuredLocation)
+        }
+        return BluegullAQIWidgetEntry(
+            computer.currentSnapshot(for: configuredLocation, now: now),
+            configuredLocation: configuredLocation
+        )
     }
 }
 
@@ -69,7 +84,12 @@ struct BluegullAQIWidget: Widget {
 
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: kind, intent: SelectLocationIntent.self, provider: BluegullAQIWidgetTimelineProvider()) { entry in
+            // The whole widget is a tap target, deep-linking into the
+            // container app's detail view (bluegull-aqi-mtm.14) -- same
+            // pattern Apple's own Weather widget uses (doc/DESIGN.md
+            // "Widget extension (WidgetKit)").
             BluegullAQIWidgetView(entry: entry)
+                .widgetURL(WidgetDeepLink.url(for: entry.configuredLocation))
         }
         .configurationDisplayName(NowCastCopy.headline)
         .description("Local air quality at a glance.")

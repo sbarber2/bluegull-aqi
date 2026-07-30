@@ -15,10 +15,24 @@ struct BluegullAQIApp: App {
     // this fires the request (if needed) once, not on every scene rebuild.
     @State private var locationPermission = LocationPermissionRequester(requestOnInit: true)
 
+    // Set from the incoming widgetURL when the widget's tap target opens
+    // the detail window (bluegull-aqi-mtm.14) -- nil until then, which
+    // WidgetDetailView already treats as "current location"/most-recently-
+    // cached, the same fallback the widget itself uses.
+    @State private var widgetDetailLocation: Location?
+
     var body: some Scene {
         MenuBarExtra(NowCastCopy.headline, systemImage: "aqi.medium") {
             AQIPopoverView(reading: latestReading)
         }
         .menuBarExtraStyle(.window)
+
+        WindowGroup(id: "widget-detail") {
+            WidgetDetailView(location: widgetDetailLocation)
+                .onOpenURL { url in
+                    widgetDetailLocation = WidgetDeepLink.location(from: url)
+                }
+        }
+        .windowResizability(.contentSize)
     }
 }

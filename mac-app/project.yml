@@ -36,6 +36,12 @@ targets:
         CFBundleDisplayName: BlueGull AQI
         NSLocationWhenInUseUsageDescription: >-
           BlueGull AQI uses your location to show the air quality for where you are.
+        # Widget tap-to-expand deep link (bluegull-aqi-mtm.14) -- matches
+        # WidgetDeepLink.scheme/.host in BluegullAQIKit.
+        CFBundleURLTypes:
+          - CFBundleURLName: solutions.bluegull.aqi
+            CFBundleURLSchemes:
+              - bluegullaqi
     entitlements:
       path: BluegullAQI/BluegullAQI.entitlements
       properties:
