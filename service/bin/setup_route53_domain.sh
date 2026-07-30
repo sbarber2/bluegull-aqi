@@ -8,10 +8,14 @@
 # Creates a Route53 hosted zone for the given subdomain (default:
 # aqi.bluegull.solutions) in the dedicated bluegull-aqi AWS account
 # (843088391598, bluegull-aqi-8ef.4) and prints the 4 nameservers you need
-# to add as an NS record at the registrar (Squarespace, for
-# bluegull.solutions -- same registrar as bluegull.org). Adding that NS
-# record at Squarespace has no CLI/API; this script can't do that part for
-# you, only get you the values to paste in.
+# to add as an NS record. IMPORTANT: bluegull.solutions is REGISTERED at
+# Squarespace but its actual authoritative DNS (nameservers) is at
+# DreamHost (confirmed via `dig NS aqi.bluegull.solutions` -> SOA
+# ns1.dreamhost.com, 2026-07-30) -- unlike bluegull.org, where registrar
+# and DNS host are the same (Squarespace). The NS record goes in
+# DreamHost's panel, NOT Squarespace's DNS settings. Neither has a CLI/API
+# for this; this script can't do that part for you, only get you the
+# values to paste in.
 #
 # Idempotent: if a hosted zone for the subdomain already exists, reuses it
 # instead of creating a duplicate (Route53 doesn't enforce unique names, so
@@ -62,18 +66,25 @@ echo
 echo "=================================================================="
 echo "Zone ready: $ZONE_ID ($SUBDOMAIN)"
 echo
-echo "Next (MANUAL -- Squarespace has no API for this):"
-echo "  1. Log in to Squarespace, go to bluegull.solutions's DNS settings"
-echo "     (Domains > bluegull.solutions > DNS Settings)."
-echo "  2. Add a new NS record:"
-echo "       Host:  ${SUBDOMAIN%%.bluegull.solutions}"
-echo "       Type:  NS"
-echo "       Data:  (one nameserver per line, all 4 below)"
+echo "Next (MANUAL -- DreamHost has no API for this):"
+echo "  bluegull.solutions is REGISTERED at Squarespace but its actual DNS"
+echo "  is hosted at DreamHost (confirmed via dig NS -> SOA ns1.dreamhost.com)."
+echo "  The NS record goes in DreamHost's panel, NOT Squarespace."
+echo
+echo "  1. Log in to the DreamHost panel (panel.dreamhost.com)."
+echo "  2. Go to Websites > Manage Websites, find bluegull.solutions, click"
+echo "     the vertical-3-dots menu, choose DNS Settings."
+echo "  3. Click 'Add Record', hover the 'NS Record' section, click 'ADD'."
+echo "  4. Add one NS record per nameserver below (Host: ${SUBDOMAIN%%.bluegull.solutions},"
+echo "     Value/Points-to: the nameserver) -- repeat for all 4:"
 for ns in $NAMESERVERS; do
   echo "         $ns"
 done
 echo
-echo "  3. Save, then verify (may take a few minutes to propagate):"
+echo "  5. Save, then verify (DreamHost's own docs note propagation can take"
+echo "     a few hours, and subdomain NS records sometimes don't show up in"
+echo "     public dig lookups even once live -- if dig still shows NXDOMAIN"
+echo "     after a while, that alone isn't proof it failed):"
 echo "       dig NS $SUBDOMAIN"
 echo "     Should return the same 4 nameservers listed above."
 echo "=================================================================="
