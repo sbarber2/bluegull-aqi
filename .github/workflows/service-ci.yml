@@ -1,0 +1,49 @@
+name: Service CI
+
+# Lint, test, and validate the backend service on every push and PR.
+# Mirrors Plant-Tracer's ci-cd.yml. No AWS account or deployment needed:
+# DynamoDB Local is started automatically by the pytest session fixture
+# (tests/conftest.py), and `sam build`'s native Python build method doesn't
+# need Docker. See doc/DESIGN.md "Local development (no AWS required)".
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+defaults:
+  run:
+    working-directory: service
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - uses: aws-actions/setup-sam@v3
+        with:
+          use-installer: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Lint
+        run: make lint
+
+      - name: Test
+        run: make pytest
+
+      - name: Validate SAM template
+        run: make validate
+
+      - name: Build
+        run: make build

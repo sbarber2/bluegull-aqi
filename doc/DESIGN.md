@@ -1102,6 +1102,19 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-q9r.7: `.github/workflows/service-ci.yml`
+  runs lint, pytest, `sam validate`, and `sam build` on every push and PR,
+  mirroring Plant-Tracer's `ci-cd.yml`. No AWS account or deployment needed
+  -- DynamoDB Local starts automatically via the existing pytest session
+  fixture, and `sam build`'s native Python build method doesn't need
+  Docker. Verified action versions directly against GitHub's release API
+  (`gh release list`) rather than trusting a web search snippet, which
+  turned out to already be citing a stale `actions/checkout@v6` example --
+  actual latest is v7.0.1; also bumped the existing `secret-scan.yml`'s
+  `actions/checkout@v4` to `@v7` for consistency while in there. No local
+  GitHub Actions runner available (`act`/`docker` not installed) to fully
+  dry-run the workflow, so real verification is the actual CI run once
+  pushed, watched live via `gh run watch`.
 - 2026-07-30 — Implemented bluegull-aqi-10h.20: `PollutantCopy.spelledOutName(forParameterName:)`
   provides "Particle Pollution (PM2.5)"/"Particle Pollution (PM10)" -- the
   TAD FAQ: "Based on focus group testing by EPA, people better understand
