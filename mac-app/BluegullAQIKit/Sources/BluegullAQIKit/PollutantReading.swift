@@ -24,7 +24,12 @@ public struct PollutantReading: Sendable, Equatable, Codable {
     /// that task's job, not this type's.
     public let nowcastAQI: Int?
     public let aqiCategoryName: String
-    public let reportingAgency: String
+
+    /// The specific state/local/tribal agency for this reading (e.g. "Bay
+    /// Area Air District") -- confirmed present on live responses from the
+    /// `ziplatlong` endpoint this project uses, but optional since AirNow's
+    /// contract doesn't guarantee it for every location (bluegull-aqi-10h.15).
+    public let reportingAgency: String?
     public let lookupBehavior: String
     public let consideredMonitors: String
     public let lookupBoundary: String
@@ -39,7 +44,7 @@ public struct PollutantReading: Sendable, Equatable, Codable {
         parameterName: String,
         nowcastAQI: Int?,
         aqiCategoryName: String,
-        reportingAgency: String,
+        reportingAgency: String?,
         lookupBehavior: String,
         consideredMonitors: String,
         lookupBoundary: String
@@ -69,5 +74,20 @@ public struct PollutantReading: Sendable, Equatable, Codable {
     /// to disagree with each other.
     public var category: AQICategory? {
         nowcastAQI.flatMap(AQICategory.init(aqi:))
+    }
+
+    /// "Data courtesy of {agency}" -- the first tier of the two-tier
+    /// attribution the AirNow Data Exchange Guidelines require (credit goes
+    /// FIRST to the specific reporting agency, THEN to AirNow/EPA --
+    /// bluegull-aqi-10h.15). The second tier (static EPA/AirNow branding)
+    /// is app-level UI content, not this package's job.
+    ///
+    /// nil when AirNow doesn't supply an agency name (or it's blank) for
+    /// this reading -- the fallback in that case is a generic class credit,
+    /// which here just means: show only the second tier, rather than this
+    /// type inventing a placeholder agency name it doesn't actually have.
+    public var attributionText: String? {
+        guard let reportingAgency, !reportingAgency.isEmpty else { return nil }
+        return "Data courtesy of \(reportingAgency)"
     }
 }

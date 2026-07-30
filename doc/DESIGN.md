@@ -1102,6 +1102,18 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-10h.15: `PollutantReading.attributionText`
+  produces "Data courtesy of {reportingAgency}" -- the first tier of the
+  two-tier attribution the AirNow Data Exchange Guidelines require (credit
+  FIRST to the specific state/local/tribal agency, THEN to AirNow/EPA). The
+  second, static EPA/AirNow branding tier is app-level UI content
+  (`bluegull-aqi-e70.10`/`mtm.14`), not this package's job. Also made
+  `reportingAgency` optional (`String?`, was `String`) since AirNow's
+  contract doesn't guarantee it for every location even though it's been
+  present on every live-tested response so far -- `attributionText` returns
+  nil when missing or blank, and the fallback in that case is simply to show
+  only the second (static) tier rather than inventing a placeholder agency
+  name. 25/25 tests pass via `swift test`.
 - 2026-07-30 — Implemented bluegull-aqi-10h.16: fixed a real conflation bug
   bluegull-aqi-10h.2's original `AQICategory.init(aqi:)` had introduced --
   a negative AQI value (malformed data, a parse/transport fault) fell

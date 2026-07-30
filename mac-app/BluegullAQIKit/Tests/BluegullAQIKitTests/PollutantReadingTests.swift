@@ -77,6 +77,36 @@ final class PollutantReadingTests: XCTestCase {
         XCTAssertNil(reading.category)
     }
 
+    func testAttributionTextCreditsTheReportingAgencyFirst() throws {
+        // bluegull-aqi-10h.15: AirNow Data Exchange Guidelines require
+        // credit FIRST to the specific state/local/tribal agency.
+        let reading = try JSONDecoder().decode(PollutantReading.self, from: Data(fixtureJSON.utf8))
+        XCTAssertEqual(reading.attributionText, "Data courtesy of Bay Area Air District")
+    }
+
+    func testAttributionTextIsNilWhenReportingAgencyMissing() throws {
+        // bluegull-aqi-10h.15's defensive fallback case: if AirNow doesn't
+        // supply an agency name, don't invent one -- the generic-credit
+        // fallback is the app-level static EPA/AirNow branding shown alone.
+        let json = fixtureJSON.replacingOccurrences(
+            of: "\"reportingAgency\": \"Bay Area Air District\",", with: ""
+        )
+        let reading = try JSONDecoder().decode(PollutantReading.self, from: Data(json.utf8))
+
+        XCTAssertNil(reading.reportingAgency)
+        XCTAssertNil(reading.attributionText)
+    }
+
+    func testAttributionTextIsNilWhenReportingAgencyBlank() throws {
+        let json = fixtureJSON.replacingOccurrences(
+            of: "\"reportingAgency\": \"Bay Area Air District\",", with: "\"reportingAgency\": \"\","
+        )
+        let reading = try JSONDecoder().decode(PollutantReading.self, from: Data(json.utf8))
+
+        XCTAssertEqual(reading.reportingAgency, "")
+        XCTAssertNil(reading.attributionText)
+    }
+
     func testDecodesArrayOfMultiplePollutants() throws {
         let arrayJSON = "[\(fixtureJSON), \(fixtureJSON.replacingOccurrences(of: "PM2.5", with: "OZONE"))]"
         let readings = try JSONDecoder().decode([PollutantReading].self, from: Data(arrayJSON.utf8))
