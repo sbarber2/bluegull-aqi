@@ -11,7 +11,7 @@ from typing import Optional
 
 import boto3
 
-from bluegull_aqi_service import airnow_client, cache
+from bluegull_aqi_service import airnow_client, cache, coverage
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,14 @@ def get_aqi(latitude: float, longitude: float) -> dict:
 
     Returns {"observations": [...], "cached": bool} -- "observations" is
     AirNow's own array of per-pollutant readings, unaltered (bluegull-aqi-10h.17).
+
+    Raises coverage.OutOfCoverageError before touching the cache or AirNow at
+    all if the location is invalid or outside AirNow's coverage area
+    (bluegull-aqi-q9r.30) -- rejecting it here, not just in the cache miss
+    path, matters because a cache *hit* check itself has a cost at scale.
     """
+    coverage.validate_coverage(latitude, longitude)
+
     store = cache.Cache()
     key = cache.location_key(latitude, longitude)
     # Never log latitude/longitude, key, or its rounded form directly -- log

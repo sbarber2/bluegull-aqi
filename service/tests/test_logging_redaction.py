@@ -68,7 +68,7 @@ def test_lambda_handler_error_never_logs_raw_coordinates(caplog):
 def test_get_aqi_never_logs_raw_coordinates(caplog, monkeypatch):
     monkeypatch.setenv("AIRNOW_API_KEY", "test-key")
     caplog.set_level(logging.DEBUG, logger="bluegull_aqi_service")
-    lat, lon = 12.3456, -98.7654
+    lat, lon = 32.7767, -96.7970  # Dallas -- must be a real North American location
 
     cache.Cache().delete(cache.location_key(lat, lon))
 

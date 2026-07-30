@@ -7,10 +7,10 @@ Local as runs in Lambda against DynamoDB, and so it can be exercised by
 contract tests without going through a Lambda event at all. See
 doc/DESIGN.md "Local development (no AWS required)".
 
-Basic parameter presence/type checking only. Rejecting coordinates outside
-AirNow's coverage area, and rounding/grid-snapping the cache key against a
-cardinality attack, is bluegull-aqi-q9r.30 -- a deliberate later layer, not
-this module's job.
+Basic parameter presence/type checking only -- coverage-area and range
+validation (bluegull-aqi-q9r.30) lives in aqi_lookup.get_aqi() via
+coverage.validate_coverage(), so it protects every caller of get_aqi(), not
+just this HTTP entry point.
 """
 import json
 import logging
@@ -18,6 +18,7 @@ import os
 
 from bluegull_aqi_service import aqi_lookup, cache
 from bluegull_aqi_service.airnow_client import AirNowError
+from bluegull_aqi_service.coverage import OutOfCoverageError
 
 # Root stays at WARNING regardless of LOG_LEVEL: boto3/botocore have no level
 # of their own, so they inherit whatever root is set to, and their DEBUG
@@ -39,6 +40,8 @@ def lambda_handler(event, context):
 
     try:
         result = aqi_lookup.get_aqi(latitude, longitude)
+    except OutOfCoverageError as exc:
+        return _response(400, {"error": str(exc)})
     except AirNowError:
         # Never echo AirNow's raw message/URL, or raw/rounded coordinates,
         # back to the client or into logs (bluegull-aqi-q9r.27) -- the hash

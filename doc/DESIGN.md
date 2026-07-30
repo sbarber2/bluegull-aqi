@@ -1099,6 +1099,26 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-q9r.30: reject invalid/out-of-coverage
+  coordinates before any cache lookup or AirNow call. New `coverage.py` validates
+  physical range (-90..90 lat, -180..180 lon) and a deliberately generous North
+  America bounding box (lat 14-72, lon -170 to -52 -- covers CONUS, Alaska,
+  Hawaii, Puerto Rico, Canada, Mexico; not a precise polygon, since a location
+  inside the box without a nearby monitor still just gets AirNow's normal empty
+  response). `aqi_lookup.get_aqi()` calls this before even instantiating the
+  cache client, closing the gap the issue called out: stale-while-revalidate +
+  single-flight (q9r.15, not yet built) only collapses concurrent requests for
+  the *same* key, so an attacker cycling through distinct out-of-coverage
+  coordinates could otherwise still burn the AirNow quota and fill DynamoDB with
+  junk on every request. The cache-key grid-snapping half of this issue was
+  already done (cache.location_key()'s 2-decimal rounding, from q9r.2). Error
+  messages never echo the submitted coordinates (consistent with q9r.27).
+  Fixed two pre-existing tests that used non-North-American coordinates (London;
+  a point south of the coverage box) written before this validation existed.
+  Verified live via `make run-local`: a valid Chicago request succeeded: a
+  Pacific Ocean point, Paris, and an out-of-range latitude all returned 400
+  without any AirNow request or cache-log line appearing. 35/35 tests pass,
+  pylint 10.00/10.
 - 2026-07-30 — Implemented bluegull-aqi-8ef.7 (secret-scanning pre-commit hook +
   CI). Switched tool choice from gitleaks (feature-complete, maintenance-only) to
   **Betterleaks**, its actively-developed drop-in-compatible successor, after the

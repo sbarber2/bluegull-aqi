@@ -5,6 +5,7 @@ import json
 from unittest.mock import patch
 
 from bluegull_aqi_service.airnow_client import AirNowError
+from bluegull_aqi_service.coverage import OutOfCoverageError
 from bluegull_aqi_service.lambda_handler import lambda_handler
 
 
@@ -45,3 +46,15 @@ def test_airnow_error_returns_502_without_echoing_raw_message():
     body = json.loads(response["body"])
     assert "secret-looking-url" not in body["error"]
     assert "Invalid API key" not in body["error"]
+
+
+def test_out_of_coverage_returns_400():
+    with patch(
+        "bluegull_aqi_service.lambda_handler.aqi_lookup.get_aqi",
+        side_effect=OutOfCoverageError("Location is outside AirNow's coverage area"),
+    ):
+        response = lambda_handler({"queryStringParameters": {"lat": "0.0", "lon": "-160.0"}}, None)
+
+    assert response["statusCode"] == 400
+    body = json.loads(response["body"])
+    assert "coverage" in body["error"]
