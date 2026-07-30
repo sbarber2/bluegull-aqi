@@ -38,7 +38,7 @@ GitHub Actions CI/CD, Route53/ACM custom domain.
 | Backend custom domain | Three environments, one hosted zone. **Prod** = bare `aqi.bluegull.org`. **Dev** = `dev.aqi.bluegull.org`. **Staging** = `stage.aqi.bluegull.org`. All three are dot-subdomains of `aqi.bluegull.org`, so all three live under the single Route53 hosted zone in AWS account `843088391598`, delegated from `bluegull.org`'s DNS at **Squarespace** (registrar; everything else there untouched). **✅ Delegation confirmed live 2026-07-28.** Mirrors Plant-Tracer's `${StackName}.${BaseDomain}` pattern. **Second domain added 2026-07-30:** a parallel delegation for `aqi.bluegull.solutions` (mirroring the same prod/dev/stage pattern, alongside `bluegull.org`, not replacing it — `bluegull-aqi-8ef.18`). Note: unlike `bluegull.org`, `bluegull.solutions` is registered at Squarespace but its actual authoritative DNS is at **DreamHost** — the NS delegation record was added in DreamHost's panel, not Squarespace's. **✅ Delegation confirmed live 2026-07-30** (`dig NS aqi.bluegull.solutions` returns the 4 Route53 nameservers). |
 | AWS region | **`us-east-2`** (Ohio), chosen for cost over the Plant-Tracer-matching default of us-east-1. `service/samconfig.toml` deploys here. No conflict with the custom domain: `AWS::Serverless::HttpApi` custom domains are regional-only (unlike REST API v1's edge-optimized option), so the ACM cert for whichever domain(s) end up wired into `template.yaml` (`aqi.bluegull.org`, `aqi.bluegull.solutions`, or both — `bluegull-aqi-q9r.6`) just needs to be in this same region. The one exception: if CloudFront (`bluegull-aqi-q9r.33`, deferred) is ever adopted, its ACM cert must be in **us-east-1** specifically — a hard CloudFront-wide rule, independent of the API's own region. |
 | AWS account | **`843088391598`**, dedicated to this project (not shared with Plant-Tracer) — gives the blast-radius isolation the Scaling & Performance section already assumed. Standalone account, its own IAM Identity Center instance (not part of Plant-Tracer's org). CLI access: `aws sts get-caller-identity --profile AdministratorAccess-843088391598` — an assumed role via `AWSReservedSSO_AdministratorAccess`, not root; re-authenticate with `aws sso login --profile AdministratorAccess-843088391598` when the session expires. |
-| Apple Developer account | Already enrolled; bundle IDs / App Group still need to be created (`bluegull-aqi-8ef.5`) — naming decided 2026-07-30: `solutions.bluegull.aqi` (container app), `solutions.bluegull.aqi.widget` (widget extension), App Group `group.solutions.bluegull.aqi`. Whether the enrollment type (Individual vs. Organization) fits the for-profit plan is still unverified (`bluegull-aqi-8ef.22`). |
+| Apple Developer account | Already enrolled as **Individual** (confirmed 2026-07-30, `bluegull-aqi-8ef.22`) — App Store seller shows Steve's personal name for now, not a company. **Decided:** proceed under Individual rather than pause for LLC formation; convert to Organization once **BlueGull Solutions LLC** exists and revenue justifies forming it (deliberately not before — an LLC doesn't retroactively shield pre-formation activity, and nothing is live/collecting money yet). Conversion path (Apple support-mediated, or fresh Organization enrollment + App Transfer) preserves the app's reviews/ratings/bundle-id string either way; the Team-ID-scoped portal registration and local Xcode signing config are not guaranteed to carry over in the fresh-enrollment path, but that rework is cheap relative to pausing now. Bundle IDs / App Group still need to be created in the portal (`bluegull-aqi-8ef.5`) — naming decided 2026-07-30: `solutions.bluegull.aqi` (container app), `solutions.bluegull.aqi.widget` (widget extension), App Group `group.solutions.bluegull.aqi`. |
 | AQI category colors | Official EPA AQI RGB palette only, sourced once in `BluegullAQIKit`'s shared models and used by both the menu bar and widget — never a custom palette. Compliance requirement from the AirNow Data Exchange Guidelines, not a style preference; see "AirNow terms review" below. |
 
 ## Secrets & credentials
@@ -1201,6 +1201,28 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Resolved bluegull-aqi-8ef.22 (verify Apple Developer
+  enrollment type fits the for-profit plan): **confirmed Individual,
+  proceed under it now.** Steve confirmed the existing membership is
+  Individual, not Organization -- the App Store seller name will show his
+  personal name, not a company, until converted. Researched whether that's
+  a dead end for the eventual "BlueGull Solutions LLC" plan: it isn't.
+  Apple's own enrollment docs describe a support-mediated
+  Individual-to-Organization conversion path ("please contact us"); the
+  fallback is a fresh Organization enrollment plus an App Store Connect
+  App Transfer. Both preserve the app's existing reviews, ratings, and
+  bundle-ID string -- initially conflated that with the *portal
+  registration* of the bundle IDs/App Group and the local Xcode signing
+  config, which genuinely are Team-ID-scoped and NOT guaranteed to carry
+  over cleanly if a new Team ID is issued (Steve caught this
+  inconsistency). Net call: that potential rework is cheap (~10-15 minutes
+  of re-registration, routine Xcode re-signing) next to pausing all
+  engineering work now, so proceed under Individual and convert later.
+  Also worked out *when* "later" actually is: not before more code gets
+  written, but before the app actually starts collecting real user
+  payments -- an LLC formed today wouldn't retroactively shield anything
+  from before it existed, and nothing is live yet, so there's no current
+  liability exposure the delay is costing. Unblocks `bluegull-aqi-8ef.5`.
 - 2026-07-30 — Implemented bluegull-aqi-8ef.19 (update doc/DESIGN.md's
   bluegull.org references for the new domain). Swept every forward-looking
   reference: the "Backend custom domain" and "AWS region" decisions-table
