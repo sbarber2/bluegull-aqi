@@ -1201,6 +1201,47 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-e70.2 (location permission request
+  flow). New `LocationPermissionRequester` (app target, not
+  `BluegullAQIKit`) -- `LocationResolver`/`SystemLocationProvider`
+  deliberately never request authorization themselves, per their own doc
+  comments ("permission UX/timing is app-level policy... not this
+  package's job"), so this is that missing piece.
+  - `@Observable` (Swift's Observation framework, available at the
+    macOS 14 minimum), wraps `CLLocationManager`, exposes
+    `authorizationStatus` and `requestAuthorizationIfNeeded()` -- a no-op
+    unless status is genuinely `.notDetermined`, since CoreLocation itself
+    refuses to re-prompt once answered and a denied/restricted status
+    needs a System Settings change, not another request call.
+    `requestOnInit` defaults to `false` so simply constructing the type
+    (a future preview or test) never has the side effect of triggering a
+    system dialog; the real app opts in explicitly.
+  - Wired into `BluegullAQIApp` with a minimal, real trigger (request on
+    launch) -- deliberately not the full "what happens if denied" UX or
+    the decision of exactly when current-location mode needs this at all
+    (e.g. a user who only ever pins addresses); that orchestration belongs
+    to `bluegull-aqi-e70.6`, which depends on this existing at all.
+  - Attempted to live-verify past the entitlement barrier that blocked
+    Keychain testing earlier this session: found a real code-signing
+    identity available locally ("Steve Barber's CA") and tried a properly
+    signed build instead of the usual `CODE_SIGNING_ALLOWED=NO` one. Ruled
+    out as a real Apple Developer certificate on inspection (self-signed,
+    wrong subject format, unrelated email) -- Xcode isn't actually signed
+    into Steve's Apple ID in this environment, so this remains genuinely
+    blocked on interactive Xcode sign-in, same as Keychain/CoreLocation
+    were documented as blocked on earlier (`bluegull-aqi-10h.13`
+    /`8ef.5`'s prerequisite chain). Not a new limitation, just the first
+    time this session it was worth attempting given real code now exists
+    to test against.
+  - What was verified: build succeeds, 8/8 tests still pass, and the app
+    launches and runs cleanly with `LocationPermissionRequester(requestOnInit:
+    true)` actually constructing a real `CLLocationManager` and calling
+    `requestWhenInUseAuthorization()` at launch -- no crash despite the
+    missing entitlement in this unsigned build, which is itself useful
+    information (CoreLocation fails gracefully without entitlements rather
+    than crashing the process). The actual system dialog appearing is
+    still unverified, same caveat as `SystemLocationProvider` already
+    carried.
 - 2026-07-30 — Implemented bluegull-aqi-mtm.7 (TimelineProvider unit tests
   using fixture App Group cache state) -- and, along the way, corrected an
   architectural assumption `mtm.2` made without verifying it.
