@@ -1102,6 +1102,20 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-q9r.14: added realistic, full-shaped
+  API Gateway HTTP API (payload format 2.0) event fixtures
+  (`tests/fixtures/api_gateway_event*.json`), verified against AWS's own
+  documented example rather than a hand-built minimal dict, and
+  `test_lambda_handler_contract.py` exercising `lambda_handler` against them
+  -- so the thin-handler-over-core-logic split is verified against what API
+  Gateway actually sends, not just structurally. The missing-params fixture
+  deliberately omits `queryStringParameters` entirely (matching API Gateway
+  v2's real behavior for a request with no query string -- it doesn't send
+  an empty dict), which the handler's existing `event.get(...) or {}`
+  already handled correctly. Closed bluegull-aqi-q9r.9 (unit/integration
+  tests for the Lambda handler) as already satisfied by the test suite built
+  up over today's session -- 59 tests, all against real DynamoDB Local
+  (never mocks/moto), no AWS account needed. 59/59 tests pass, pylint 10.00/10.
 - 2026-07-30 — Fixed Dependabot alert #1 (GHSA-6w46-j5rx-g56g / CVE-2025-71176,
   medium severity): pytest < 9.0.3 has vulnerable `/tmp/pytest-of-{user}`
   handling on UNIX. Surfaced within minutes of enabling Dependabot security
