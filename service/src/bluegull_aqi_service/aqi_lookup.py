@@ -25,8 +25,9 @@ from typing import Optional
 
 import boto3
 
-from bluegull_aqi_service import airnow_client, airnow_stub, cache, coverage
+from bluegull_aqi_service import airnow_client, airnow_stub, cache, coverage, rate_limiter
 from bluegull_aqi_service.airnow_client import AirNowError
+from bluegull_aqi_service.rate_limiter import RateLimitExceededError
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +56,12 @@ def get_aqi(latitude: float, longitude: float) -> dict:
     all if the location is invalid or outside AirNow's coverage area
     (bluegull-aqi-q9r.30) -- rejecting it here, not just in the cache miss
     path, matters because a cache *hit* check itself has a cost at scale.
+
+    Raises rate_limiter.RateLimitExceededError if the cache-miss budget for
+    the current window is exhausted and no stale value exists to serve
+    instead (bluegull-aqi-q9r.32) -- misses, not overall request volume, are
+    what cost AirNow quota, so this is checked only on the path that would
+    actually call AirNow, not on every request.
 
     On a cache miss for the reserved synthetic load-test coordinate, with
     AIRNOW_STUB_MODE=1 set, returns canned data instead of calling AirNow --
@@ -110,12 +117,21 @@ def _refresh(  # pylint: disable=too-many-arguments,too-many-positional-argument
     """Called by the single-flight lock winner: fetch fresh data and cache
     it. If AirNow fails and a stale value exists, serve that instead of
     propagating the error -- the lock has its own short expiry
-    (cache.REFRESH_LOCK_SECONDS), so the next request just tries again."""
+    (cache.REFRESH_LOCK_SECONDS), so the next request just tries again. The
+    cache-miss budget (bluegull-aqi-q9r.32) being exhausted gets the same
+    stale-first treatment as an AirNow failure -- from the caller's
+    perspective both mean "can't reach AirNow right now."
+    """
     try:
         observations = _fetch_fresh_observations(latitude, longitude, location_id)
     except AirNowError:
         if stale is not None:
             logger.warning("AirNow refresh failed for %s; serving stale data", location_id)
+            return {"observations": stale, "cached": True}
+        raise
+    except RateLimitExceededError:
+        if stale is not None:
+            logger.warning("Cache-miss budget exhausted for %s; serving stale data", location_id)
             return {"observations": stale, "cached": True}
         raise
 
@@ -148,14 +164,33 @@ def _wait_for_concurrent_refresh(
 
 def _fetch_fresh_observations(latitude: float, longitude: float, location_id: str) -> list:
     if airnow_stub.is_stub_request(latitude, longitude):
-        # Skips key resolution entirely -- a load test shouldn't need a real
-        # AirNow key configured just to exercise the stub path.
+        # Skips key resolution AND the rate limiter entirely -- a load test
+        # shouldn't need a real AirNow key configured, or eat into the real
+        # budget, just to exercise the stub path.
         logger.info("AQI lookup for %s served from stub (load test mode)", location_id)
         return airnow_stub.stub_observations()
+
+    _consume_miss_budget(location_id)
 
     observations = airnow_client.fetch_current_observations(latitude, longitude, _resolve_airnow_api_key())
     logger.info("AQI lookup for %s fetched from AirNow", location_id)
     return observations
+
+
+def _consume_miss_budget(location_id: str) -> None:
+    """Gate the one thing in this module that actually costs AirNow quota
+    (bluegull-aqi-q9r.32). Deliberately checked here, not earlier in
+    get_aqi(): a request resolved by a cache hit, a stale-serve, or another
+    request's in-flight refresh never reaches this line at all, so none of
+    those consume budget -- only a call that's actually about to hit AirNow
+    does."""
+    window_seconds = int(os.environ.get("MISS_RATE_LIMIT_WINDOW_SECONDS", rate_limiter.DEFAULT_WINDOW_SECONDS))
+    budget = int(os.environ.get("MISS_RATE_LIMIT_BUDGET", rate_limiter.DEFAULT_BUDGET))
+    try:
+        rate_limiter.MissRateLimiter().consume(window_seconds=window_seconds, budget=budget)
+    except RateLimitExceededError:
+        logger.warning("Cache-miss budget exhausted; rejecting AirNow call for %s", location_id)
+        raise
 
 
 def _cache_fresh_result(store: cache.Cache, key: str, observations: list) -> None:

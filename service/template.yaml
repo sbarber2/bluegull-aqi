@@ -69,6 +69,26 @@ Parameters:
     Default: 20
     Description: Token-bucket burst capacity paired with ApiThrottlingRateLimit.
 
+  MissRateLimitWindowSeconds:
+    Type: Number
+    Default: 3600
+    Description: >
+      Fixed wall-clock window for the cache-miss budget (bluegull-aqi-q9r.32)
+      -- defaults to matching AirNow's own hourly enforcement window, per its
+      FAQ ("blocked for the rest of the hour" on violation).
+
+  MissRateLimitBudget:
+    Type: Number
+    Default: 400
+    Description: >
+      Max cache-miss-triggered AirNow calls allowed per MissRateLimitWindowSeconds,
+      shared across all callers and locations (bluegull-aqi-q9r.32) -- the
+      stronger, more targeted defense against the cache-cardinality attack,
+      since misses (not overall request volume) are what cost AirNow quota.
+      A conservative placeholder: AirNow's real per-key limit isn't published
+      and only appears on the account dashboard after registering
+      (bluegull-aqi-8ef.1) -- re-tune once that number is known.
+
 Resources:
   AqiHttpApi:
     Type: AWS::Serverless::HttpApi
@@ -158,6 +178,8 @@ Resources:
           CACHE_TABLE_NAME: !Ref AqiCacheTable
           CACHE_TTL_SECONDS: !Ref CacheTtlSeconds
           AIRNOW_API_KEY_SSM_PARAMETER: !Ref AirNowApiKeySsmParameter
+          MISS_RATE_LIMIT_WINDOW_SECONDS: !Ref MissRateLimitWindowSeconds
+          MISS_RATE_LIMIT_BUDGET: !Ref MissRateLimitBudget
       Events:
         AqiRequest:
           Type: HttpApi

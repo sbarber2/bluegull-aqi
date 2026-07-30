@@ -1102,6 +1102,56 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-q9r.32 (rate-limit cache misses
+  separately from overall request rate): the stronger version of the
+  cache-cardinality defense in "Cache-cardinality attack" above, on top of
+  coordinate validation (bluegull-aqi-q9r.30) and grid-snapping
+  (`cache.LOCATION_KEY_PRECISION`), which only bound *where* an attacker can
+  force a miss, not *how many* misses actually reach AirNow.
+  - New `rate_limiter.MissRateLimiter`: a single global budget (not
+    per-location or per-IP -- AirNow enforces its own limit per service key,
+    so that's the dimension that actually matters), tracked as one counter
+    item per fixed wall-clock window in the same DynamoDB table `Cache`
+    already uses (a second on-demand table would double the billing surface
+    for no benefit at this scale). `consume()` is a single conditional
+    `UpdateItem` (`ADD MissCount :one` gated on `MissCount < :budget`), the
+    same atomic-under-concurrency pattern as `Cache.try_acquire_refresh_lock()`
+    -- verified directly with a 20-thread race against a budget of 5,
+    asserting exactly 5 successes.
+  - Wired into `aqi_lookup._fetch_fresh_observations()`, the one chokepoint
+    every real AirNow call passes through -- a request resolved by a cache
+    hit, a stale-serve, or another request's in-flight refresh never reaches
+    it, so only calls that would actually cost quota consume budget. The
+    stub load-test path (bluegull-aqi-q9r.20) is exempted entirely, same as
+    it already skips API key resolution.
+  - Budget-exhausted is treated exactly like an AirNow failure in
+    `_refresh()`: serve stale if there's a value on hand, otherwise propagate
+    a new `RateLimitExceededError`. `lambda_handler.py` maps that to HTTP
+    429 with a generic message -- never the internal budget/window numbers.
+  - Default budget (400/hour) is a placeholder, not a measured value --
+    AirNow's real per-key limit isn't published and only appears on the
+    account dashboard after registering (bluegull-aqi-8ef.1). Both the
+    budget and window are SAM Parameters (`MissRateLimitBudget`,
+    `MissRateLimitWindowSeconds`) specifically so they can be retuned later
+    without a code change. Window defaults to 3600s to match AirNow's own
+    FAQ-documented enforcement cadence ("blocked for the rest of the hour"
+    on violation) -- self-throttling on the same cadence means the service
+    backs off before AirNow ever has to.
+  - Live-verified over real HTTP against `run_local.py` + real DynamoDB
+    Local (not just pytest): confirmed the stub path never touches the
+    limiter, then with `MISS_RATE_LIMIT_BUDGET=1` confirmed a cache miss at
+    one location consumes the only unit of budget (502 upstream failure,
+    fake key) and a *different* location immediately gets 429 without any
+    upstream attempt -- proving the budget is actually global, not
+    accidentally scoped per `LocationKey` the way the refresh lock is.
+    Incidentally caught the shared counter's realism firsthand: an earlier
+    smoke-test request against the persistent local table returned 429
+    immediately because the pytest run moments before had already spent
+    part of the same real-hour window's default budget -- correct behavior
+    for a global counter, not a bug, but a reminder the budget is one
+    shared resource across every caller, tests included.
+  - 68/68 backend tests pass (`make pytest`); `make lint`, `sam validate
+    --lint`, and `sam build` all clean.
 - 2026-07-30 — Implemented bluegull-aqi-q9r.7: `.github/workflows/service-ci.yml`
   runs lint, pytest, `sam validate`, and `sam build` on every push and PR,
   mirroring Plant-Tracer's `ci-cd.yml`. No AWS account or deployment needed

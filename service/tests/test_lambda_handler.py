@@ -7,6 +7,7 @@ from unittest.mock import patch
 from bluegull_aqi_service.airnow_client import AirNowError
 from bluegull_aqi_service.coverage import OutOfCoverageError
 from bluegull_aqi_service.lambda_handler import lambda_handler
+from bluegull_aqi_service.rate_limiter import RateLimitExceededError
 
 
 def test_missing_params_returns_400():
@@ -46,6 +47,18 @@ def test_airnow_error_returns_502_without_echoing_raw_message():
     body = json.loads(response["body"])
     assert "secret-looking-url" not in body["error"]
     assert "Invalid API key" not in body["error"]
+
+
+def test_rate_limit_exceeded_returns_429():
+    with patch(
+        "bluegull_aqi_service.lambda_handler.aqi_lookup.get_aqi",
+        side_effect=RateLimitExceededError("Cache-miss budget exhausted for this window (400 per 3600s)"),
+    ):
+        response = lambda_handler({"queryStringParameters": {"lat": "37.7749", "lon": "-122.4194"}}, None)
+
+    assert response["statusCode"] == 429
+    body = json.loads(response["body"])
+    assert "budget" not in body["error"]  # internal implementation detail, not for clients
 
 
 def test_out_of_coverage_returns_400():

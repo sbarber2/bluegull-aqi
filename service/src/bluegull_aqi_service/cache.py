@@ -55,6 +55,19 @@ def hash_location_key(key: str) -> str:
     return hashlib.sha256(key.encode()).hexdigest()[:12]
 
 
+def resolve_table(table_name: Optional[str] = None):
+    """Return the boto3 Table resource for the shared cache table -- reused
+    by rate_limiter.py so its own budget counter lives in the same table
+    (bluegull-aqi-q9r.32) instead of duplicating this endpoint/region
+    resolution logic."""
+    table_name = table_name or os.environ["CACHE_TABLE_NAME"]
+    client_kwargs = {"region_name": os.environ.get("AWS_REGION", "us-east-2")}
+    endpoint_url = os.environ.get("DYNAMODB_ENDPOINT_URL")
+    if endpoint_url:
+        client_kwargs["endpoint_url"] = endpoint_url
+    return boto3.resource("dynamodb", **client_kwargs).Table(table_name)
+
+
 def seconds_until_next_boundary(ttl_seconds: int, now: Optional[int] = None) -> int:
     """Seconds remaining until the next boundary of size ttl_seconds since
     the Unix epoch -- e.g. with ttl_seconds=3600, always the top of the next
@@ -71,13 +84,7 @@ class Cache:
     """Thin wrapper around a single DynamoDB table used as a TTL cache."""
 
     def __init__(self, table_name: Optional[str] = None):
-        self._table_name = table_name or os.environ["CACHE_TABLE_NAME"]
-        client_kwargs = {"region_name": os.environ.get("AWS_REGION", "us-east-2")}
-        endpoint_url = os.environ.get("DYNAMODB_ENDPOINT_URL")
-        if endpoint_url:
-            client_kwargs["endpoint_url"] = endpoint_url
-        self._resource = boto3.resource("dynamodb", **client_kwargs)
-        self._table = self._resource.Table(self._table_name)
+        self._table = resolve_table(table_name)
 
     def get(self, key: str) -> Optional[list]:
         """Return cached data for key, or None on a miss (absent, expired, or

@@ -19,6 +19,7 @@ import os
 from bluegull_aqi_service import aqi_lookup, cache
 from bluegull_aqi_service.airnow_client import AirNowError
 from bluegull_aqi_service.coverage import OutOfCoverageError
+from bluegull_aqi_service.rate_limiter import RateLimitExceededError
 
 # Root stays at WARNING regardless of LOG_LEVEL: boto3/botocore have no level
 # of their own, so they inherit whatever root is set to, and their DEBUG
@@ -49,6 +50,13 @@ def lambda_handler(event, context):
         location_id = cache.hash_location_key(cache.location_key(latitude, longitude))
         logger.error("AirNow lookup failed for %s", location_id)
         return _response(502, {"error": "Upstream air quality data unavailable"})
+    except RateLimitExceededError:
+        # Only reachable with no stale value to fall back on (aqi_lookup.py
+        # serves stale instead of raising this whenever one exists) --
+        # bluegull-aqi-q9r.32.
+        location_id = cache.hash_location_key(cache.location_key(latitude, longitude))
+        logger.warning("Cache-miss budget exhausted; rejected request for %s", location_id)
+        return _response(429, {"error": "Air quality data temporarily unavailable; please try again shortly"})
 
     return _response(200, result)
 

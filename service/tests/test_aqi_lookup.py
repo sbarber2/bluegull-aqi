@@ -10,6 +10,7 @@ from bluegull_aqi_service import aqi_lookup, cache
 from bluegull_aqi_service.airnow_client import AirNowError
 from bluegull_aqi_service.airnow_stub import STUB_LATITUDE, STUB_LONGITUDE
 from bluegull_aqi_service.coverage import OutOfCoverageError
+from bluegull_aqi_service.rate_limiter import MissRateLimiter, RateLimitExceededError
 
 SAMPLE = [{"parameterName": "PM2.5", "nowcastAQI": 31, "reportingAgency": "Bay Area Air District"}]
 
@@ -215,3 +216,84 @@ def test_get_aqi_falls_back_to_direct_fetch_when_wait_times_out(monkeypatch):
     assert result == {"observations": SAMPLE, "cached": True}
     mock_fetch.assert_called_once()
     assert store.get(key) == SAMPLE  # the fallback fetch was cached too
+
+
+# --- Cache-miss rate limiting (bluegull-aqi-q9r.32) -------------------------
+#
+# A global budget, not per-location -- two *different* locations are used
+# below specifically to prove that, unlike the single-flight lock, this
+# isn't scoped per LocationKey.
+
+RATE_LIMIT_WINDOW_SECONDS = 3600
+
+
+def _reset_current_miss_window():
+    MissRateLimiter().reset_current_window(RATE_LIMIT_WINDOW_SECONDS)
+
+
+def test_get_aqi_falls_back_to_stale_when_miss_budget_exhausted(monkeypatch):
+    monkeypatch.setenv("AIRNOW_API_KEY", "test-key")
+    monkeypatch.setenv("MISS_RATE_LIMIT_WINDOW_SECONDS", str(RATE_LIMIT_WINDOW_SECONDS))
+    monkeypatch.setenv("MISS_RATE_LIMIT_BUDGET", "1")
+    _reset_current_miss_window()
+
+    lat1, lon1 = 41.8781, -87.6298  # Chicago -- spends the only unit of budget
+    lat2, lon2 = 39.7392, -104.9903  # Denver -- distinct location, same global budget
+    store = cache.Cache()
+    key1, key2 = cache.location_key(lat1, lon1), cache.location_key(lat2, lon2)
+    store.delete(key1)
+    store.delete(key2)
+    store.put(key2, STALE_SAMPLE, ttl_seconds=-1)  # already expired, but on hand
+
+    try:
+        with patch("bluegull_aqi_service.aqi_lookup.airnow_client.fetch_current_observations") as mock_fetch:
+            mock_fetch.return_value = SAMPLE
+            result1 = aqi_lookup.get_aqi(lat1, lon1)
+            assert result1 == {"observations": SAMPLE, "cached": False}
+
+            result2 = aqi_lookup.get_aqi(lat2, lon2)  # budget already exhausted by the call above
+            assert result2 == {"observations": STALE_SAMPLE, "cached": True}
+            mock_fetch.assert_called_once()  # the second lookup must not reach AirNow at all
+    finally:
+        _reset_current_miss_window()
+
+
+def test_get_aqi_propagates_rate_limit_error_with_no_stale_data(monkeypatch):
+    """No stale value to fall back to -- must not swallow the error, mirroring
+    test_get_aqi_propagates_error_on_refresh_failure_with_no_stale_data above."""
+    monkeypatch.setenv("AIRNOW_API_KEY", "test-key")
+    monkeypatch.setenv("MISS_RATE_LIMIT_WINDOW_SECONDS", str(RATE_LIMIT_WINDOW_SECONDS))
+    monkeypatch.setenv("MISS_RATE_LIMIT_BUDGET", "1")
+    _reset_current_miss_window()
+
+    lat1, lon1 = 47.6062, -122.3321  # Seattle -- spends the only unit of budget
+    lat2, lon2 = 25.7617, -80.1918  # Miami -- true cold start, nothing to fall back to
+    store = cache.Cache()
+    key1, key2 = cache.location_key(lat1, lon1), cache.location_key(lat2, lon2)
+    store.delete(key1)
+    store.delete(key2)
+
+    try:
+        with patch("bluegull_aqi_service.aqi_lookup.airnow_client.fetch_current_observations") as mock_fetch:
+            mock_fetch.return_value = SAMPLE
+            aqi_lookup.get_aqi(lat1, lon1)
+
+            with pytest.raises(RateLimitExceededError):
+                aqi_lookup.get_aqi(lat2, lon2)
+            mock_fetch.assert_called_once()
+    finally:
+        _reset_current_miss_window()
+
+
+def test_get_aqi_stub_path_never_consumes_miss_budget(monkeypatch):
+    """The stub path must not need, or spend, the real budget -- it never
+    calls AirNow at all (bluegull-aqi-q9r.20)."""
+    monkeypatch.setenv("AIRNOW_STUB_MODE", "1")
+    monkeypatch.delenv("AIRNOW_API_KEY", raising=False)
+    cache.Cache().delete(cache.location_key(STUB_LATITUDE, STUB_LONGITUDE))
+
+    with patch("bluegull_aqi_service.aqi_lookup._consume_miss_budget") as mock_consume:
+        result = aqi_lookup.get_aqi(STUB_LATITUDE, STUB_LONGITUDE)
+
+    assert result["cached"] is False
+    mock_consume.assert_not_called()
