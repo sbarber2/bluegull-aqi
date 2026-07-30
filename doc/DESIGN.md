@@ -1201,6 +1201,46 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-mtm.4/mtm.5/mtm.6 (widget UI: small,
+  medium, and large family layouts), built together since all three depend
+  only on already-closed `mtm.2` and share the same `AQIReading`/
+  `PollutantReading` model:
+  - Real architectural gap found and fixed first: `headlinePollutant`
+    (which pollutant "drives" the reported AQI, matching AirNow's own
+    methodology) existed only in the container app target (added for
+    `e70.11`), but the widget needs the identical decision for its own
+    layouts. Relocated it into `BluegullAQIKit` as a public extension
+    (`AQIReading+Headline.swift`), moving its 4 existing tests into
+    `BluegullAQIKitTests` along with it -- this is genuinely shared logic,
+    not app-UI-specific, and `BluegullAQIKit`'s whole purpose is to be the
+    one place both UI targets agree on such decisions.
+  - `AQIColor.swiftUIColor` (the sRGB-explicit `AQIColor` → SwiftUI `Color`
+    conversion) duplicated into the widget target rather than also moved
+    into the package -- `BluegullAQIKit` deliberately has no UI framework
+    dependency (see `AQIColor`'s own doc comment), so each UI target
+    converts at its own point of use, same as the container app already
+    does.
+  - New `BluegullAQIWidgetView.swift` replacing the `Text(NowCastCopy.headline)`
+    placeholder `mtm.1`-`mtm.3` left in place: dispatches on
+    `@Environment(\.widgetFamily)` to `SmallWidgetLayout` (AQI number +
+    official EPA category color + descriptor -- `mtm.4`), `MediumWidgetLayout`
+    (headline AQI plus the two next-highest-AQI pollutants, ranked the same
+    way `headlinePollutant` itself ranks -- `mtm.5`), and `LargeWidgetLayout`
+    (headline AQI plus every pollutant AirNow returned, mirroring the menu
+    bar popover's own full list -- `mtm.6`). A minimal "No Data" state
+    covers a nil/unreadable cache entry -- distinguishing stale vs. expired
+    vs. offline is `dc2.1`'s separate, dedicated scope, not attempted here.
+  - Verified via the established build/test/launch cycle: `xcodegen
+    generate` → `xcodebuild build` (full `BluegullAQI` scheme, app +
+    widget, `CODE_SIGNING_ALLOWED=NO`) → `BluegullAQITests` (9 passing,
+    4 headline tests having moved to the package) → `swift test` in
+    `BluegullAQIKit` (103 passing, up from 99) → live `open` of the built
+    app confirming it launches and stays running with no crash report.
+    Rendering the new widget layouts themselves in a real widget host is
+    separately tracked (`mtm.9` manual verification, `mtm.10` ImageRenderer
+    harness) -- not attempted here, consistent with the app-extension
+    link-wall documented for `mtm.7`/`mtm.8`.
+
 - 2026-07-30 — Implemented bluegull-aqi-e70.9 (XCUITest suite driving the
   menu bar app). Found and fixed a real prerequisite gap first: `e70.3`,
   `e70.4`, and `e70.5` each built a settings view, but none was actually

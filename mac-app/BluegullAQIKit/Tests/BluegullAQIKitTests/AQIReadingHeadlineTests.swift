@@ -1,6 +1,5 @@
 import XCTest
-import BluegullAQIKit
-@testable import BluegullAQI
+@testable import BluegullAQIKit
 
 final class AQIReadingHeadlineTests: XCTestCase {
     func testHeadlinePollutantIsTheHighestAQI() {

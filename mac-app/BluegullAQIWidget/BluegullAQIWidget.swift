@@ -64,19 +64,6 @@ struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
     }
 }
 
-/// Still a placeholder view -- real per-family layouts (small/medium/large)
-/// are separate tracked scope (bluegull-aqi-mtm.4/mtm.5/mtm.6), not this
-/// task. `entry.reading` now genuinely flows from the App Group cache,
-/// respecting the widget's configured location (bluegull-aqi-mtm.2/mtm.3),
-/// but rendering it meaningfully is deliberately not attempted here.
-struct BluegullAQIWidgetView: View {
-    let entry: BluegullAQIWidgetEntry
-
-    var body: some View {
-        Text(NowCastCopy.headline)
-    }
-}
-
 struct BluegullAQIWidget: Widget {
     let kind = "BluegullAQIWidget"
 
