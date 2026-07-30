@@ -5,33 +5,33 @@ import BluegullAQIKit
 struct BluegullAQIWidgetEntry: TimelineEntry {
     let date: Date
     let reading: AQIReading?
+
+    init(date: Date, reading: AQIReading?) {
+        self.date = date
+        self.reading = reading
+    }
+
+    init(_ snapshot: WidgetTimelineSnapshot) {
+        date = snapshot.date
+        reading = snapshot.reading
+    }
 }
 
-/// Reads the App Group cache written by the container app; never fetches
-/// network or location itself (bluegull-aqi-mtm.2, doc/DESIGN.md "Widget
-/// extension (WidgetKit)").
-///
-/// Uses `AppGroupCache.mostRecentEntry()` rather than a specific configured
-/// location -- there's no per-instance location configuration yet (that's
-/// App Intents work, bluegull-aqi-mtm.3); once it lands, a configured
-/// instance should look up its own pinned location instead of "whatever
-/// was cached most recently."
+/// Thin `TimelineProvider` glue -- the actual cache-reading/reload-policy
+/// logic lives in `BluegullAQIKit.WidgetTimelineComputer` (bluegull-aqi-mtm.2),
+/// specifically so it's unit-testable at all (an `app-extension` target
+/// can't be linked against by a separate test target -- see that type's
+/// doc comment). Never fetches network or location itself
+/// (doc/DESIGN.md "Widget extension (WidgetKit)").
 struct BluegullAQIWidgetTimelineProvider: TimelineProvider {
-    private let cache: AppGroupCache?
-    private let refreshScheduler: RefreshScheduler?
+    private let computer: WidgetTimelineComputer?
 
     init(store: SharedCacheStore? = UserDefaultsCacheStore()) {
-        if let store {
-            cache = AppGroupCache(store: store)
-            refreshScheduler = RefreshScheduler(store: store)
-        } else {
-            // The App Group suite couldn't be opened -- rather than crash
-            // (widget extension crashes are disruptive system-wide, unlike
-            // a container-app failure), degrade to "no data to show," the
-            // same state as a genuine cache miss.
-            cache = nil
-            refreshScheduler = nil
-        }
+        // The App Group suite couldn't be opened -- rather than crash
+        // (widget extension crashes are disruptive system-wide, unlike a
+        // container-app failure), degrade to "no data to show," the same
+        // state as a genuine cache miss.
+        computer = store.map(WidgetTimelineComputer.init(store:))
     }
 
     func placeholder(in context: Context) -> BluegullAQIWidgetEntry {
@@ -39,16 +39,18 @@ struct BluegullAQIWidgetTimelineProvider: TimelineProvider {
     }
 
     func getSnapshot(in context: Context, completion: @escaping (BluegullAQIWidgetEntry) -> Void) {
-        completion(currentEntry())
+        completion(entry())
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<BluegullAQIWidgetEntry>) -> Void) {
-        let nextRefresh = refreshScheduler?.nextRefreshDate() ?? Date().addingTimeInterval(RefreshScheduler.defaultInterval)
-        completion(Timeline(entries: [currentEntry()], policy: .after(nextRefresh)))
+        let now = Date()
+        let nextReload = computer?.nextReloadDate(after: now) ?? now.addingTimeInterval(RefreshScheduler.defaultInterval)
+        completion(Timeline(entries: [entry(now: now)], policy: .after(nextReload)))
     }
 
-    private func currentEntry() -> BluegullAQIWidgetEntry {
-        BluegullAQIWidgetEntry(date: Date(), reading: cache?.mostRecentEntry())
+    private func entry(now: Date = Date()) -> BluegullAQIWidgetEntry {
+        guard let computer else { return BluegullAQIWidgetEntry(date: now, reading: nil) }
+        return BluegullAQIWidgetEntry(computer.currentSnapshot(now: now))
     }
 }
 

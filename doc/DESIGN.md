@@ -1201,6 +1201,35 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-mtm.7 (TimelineProvider unit tests
+  using fixture App Group cache state) -- and, along the way, corrected an
+  architectural assumption `mtm.2` made without verifying it.
+  - Real, confirmed-not-assumed constraint: an `app-extension` build
+    product (`BluegullAQIWidget.appex`) isn't a linkable library. A test
+    target can `@testable import` it and type-check fine, but the actual
+    link step fails outright ("symbol(s) not found for architecture
+    arm64") -- unlike an app target, where Xcode's `TEST_HOST`/
+    `BUNDLE_LOADER` machinery makes hosted testing work. First tried
+    constructing `TimelineProviderContext` directly to call the protocol
+    methods; that's also a dead end -- it has no public initializer at
+    all, by design, since it represents real host-provided info WidgetKit
+    doesn't want test code fabricating.
+  - Fixed by moving the actual cache-reading/reload-policy logic into a
+    new `BluegullAQIKit.WidgetTimelineComputer` (+ `WidgetTimelineSnapshot`,
+    a plain struct -- deliberately not a WidgetKit `TimelineEntry`, same
+    "no UI/platform-framework dependency" rationale as `AQIColor`). The
+    widget extension's `TimelineProvider` is now a thin wrapper delegating
+    to it. This sidesteps the linking problem entirely rather than
+    fighting Xcode's extension-hosting configuration, and gives the logic
+    a proper home with existing test infrastructure
+    (`InMemorySharedCacheStore`) instead of needing its own. 5 new package
+    tests; 88/88 pass.
+  - Net effect on `mtm.2`'s design (not just where the tests live): the
+    reusable computation is now shared-package code like everything else
+    genuinely common to both UI targets, rather than being extension-only
+    logic that happened to be untestable. Verified via the full test
+    suite, a clean build, and a clean app launch with the extension still
+    correctly embedded.
 - 2026-07-30 — Implemented bluegull-aqi-mtm.2 (widget `TimelineProvider`
   reading the App Group cache). Real logic now, not the `mtm.1` placeholder.
   - Filled a real gap: `AppGroupCache` only had `get(for: Location)`,
