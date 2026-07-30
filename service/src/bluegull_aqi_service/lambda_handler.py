@@ -16,10 +16,16 @@ import json
 import logging
 import os
 
-from bluegull_aqi_service import aqi_lookup
+from bluegull_aqi_service import aqi_lookup, cache
 from bluegull_aqi_service.airnow_client import AirNowError
 
-logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
+# Root stays at WARNING regardless of LOG_LEVEL: boto3/botocore have no level
+# of their own, so they inherit whatever root is set to, and their DEBUG
+# output includes raw DynamoDB item bodies -- i.e. the unhashed LocationKey
+# (rounded coordinates) this module goes out of its way not to log
+# (bluegull-aqi-q9r.27). LOG_LEVEL only ever applies to our own logger tree.
+logging.basicConfig(level="WARNING")
+logging.getLogger("bluegull_aqi_service").setLevel(os.environ.get("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
 
@@ -34,10 +40,11 @@ def lambda_handler(event, context):
     try:
         result = aqi_lookup.get_aqi(latitude, longitude)
     except AirNowError:
-        # Never echo AirNow's raw message/URL back to the client or into logs
-        # verbatim -- see bluegull-aqi-q9r.27 for the fuller redaction pass.
-        # This is deliberately generic already, not a stopgap.
-        logger.error("AirNow lookup failed for a request")
+        # Never echo AirNow's raw message/URL, or raw/rounded coordinates,
+        # back to the client or into logs (bluegull-aqi-q9r.27) -- the hash
+        # below is one-way and only for correlating log lines.
+        location_id = cache.hash_location_key(cache.location_key(latitude, longitude))
+        logger.error("AirNow lookup failed for %s", location_id)
         return _response(502, {"error": "Upstream air quality data unavailable"})
 
     return _response(200, result)

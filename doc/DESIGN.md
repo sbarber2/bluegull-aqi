@@ -1074,6 +1074,29 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Closed bluegull-aqi-q9r.13 (local run instructions were already
+  covered by `service/README.md`) and implemented bluegull-aqi-q9r.27: the
+  AirNow key and raw/rounded coordinates must never reach log output.
+  `airnow_client.py` now logs only the static, keyless base URL and HTTP
+  status codes -- the query string carrying `API_KEY` is never passed to a
+  logger. `cache.py` gained `hash_location_key()`, a one-way digest logged in
+  place of the location key everywhere (`cache.py`, `aqi_lookup.py`,
+  `lambda_handler.py`'s AirNowError path) -- deliberately coarser than "just"
+  rounding, since even the 2-decimal cache key would otherwise accumulate an
+  "IP was near location Y at time Z" history over the log retention period.
+  Also found and fixed a related gap while testing: `lambda_handler.py`'s
+  `logging.basicConfig(level=LOG_LEVEL)` was setting the *root* logger, so
+  `LOG_LEVEL=DEBUG` (the `.env.example` local-dev default) also unmuted
+  botocore's own DEBUG logging, which dumps raw DynamoDB item bodies --
+  i.e. the unhashed LocationKey -- straight to the console. Root now stays
+  pinned at WARNING; only the `bluegull_aqi_service` logger tree honors
+  `LOG_LEVEL`. Verified live via `make run-local` with `LOG_LEVEL=DEBUG`
+  (the worst case) against both a cache-hit and a cache-miss/AirNow-fetch
+  request: log output showed only the hash, never the key or raw
+  coordinates. New `test_logging_redaction.py` (7 tests) asserts this with
+  `caplog`, scoped to the `bluegull_aqi_service` logger so botocore's own
+  verbose debug output doesn't produce false failures. 21/21 tests pass,
+  pylint 10.00/10, `sam validate --lint` clean.
 - 2026-07-29 — Moved the local-dev AirNow key from a plaintext `.env`/`.envrc`
   literal to a 1Password reference: Personal vault, item "BlueGull AQI - AirNow
   API Key" (API Credential type, `credential` field), invoked via

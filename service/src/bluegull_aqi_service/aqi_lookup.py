@@ -5,12 +5,15 @@ lambda_handler.py and doc/DESIGN.md "Local development (no AWS required)".
 This is what lets the exact same code run under the native local runner,
 under pytest against DynamoDB Local, and in Lambda.
 """
+import logging
 import os
 from typing import Optional
 
 import boto3
 
 from bluegull_aqi_service import airnow_client, cache
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_CACHE_TTL_SECONDS = 3600
 
@@ -25,9 +28,13 @@ def get_aqi(latitude: float, longitude: float) -> dict:
     """
     store = cache.Cache()
     key = cache.location_key(latitude, longitude)
+    # Never log latitude/longitude, key, or its rounded form directly -- log
+    # only the one-way hash (bluegull-aqi-q9r.27).
+    location_id = cache.hash_location_key(key)
 
     hit = store.get(key)
     if hit is not None:
+        logger.info("AQI lookup for %s served from cache", location_id)
         return {"observations": hit, "cached": True}
 
     observations = airnow_client.fetch_current_observations(
@@ -35,6 +42,7 @@ def get_aqi(latitude: float, longitude: float) -> dict:
     )
     ttl_seconds = int(os.environ.get("CACHE_TTL_SECONDS", DEFAULT_CACHE_TTL_SECONDS))
     store.put(key, observations, ttl_seconds)
+    logger.info("AQI lookup for %s fetched from AirNow", location_id)
     return {"observations": observations, "cached": False}
 
 

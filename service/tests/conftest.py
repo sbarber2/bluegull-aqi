@@ -4,6 +4,7 @@ caches that are otherwise deliberately reused across warm Lambda invocations."""
 import os
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -39,3 +40,13 @@ def _reset_cached_api_key():
     aqi_lookup._cached_api_key = None  # pylint: disable=protected-access
     yield
     aqi_lookup._cached_api_key = None  # pylint: disable=protected-access
+
+
+def mock_urlopen_response(body_bytes: bytes) -> MagicMock:
+    """A urllib.request.urlopen() return value usable as a context manager,
+    for stubbing AirNow responses in tests (shared to avoid duplicate-code)."""
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = body_bytes
+    mock_resp.__enter__.return_value = mock_resp
+    mock_resp.__exit__.return_value = False
+    return mock_resp

@@ -11,12 +11,16 @@ upstream call, is bluegull-aqi-q9r.15 (stale-while-revalidate +
 single-flight) -- a deliberate later layer on top of this, not this module's
 job.
 """
+import hashlib
 import json
+import logging
 import os
 import time
 from typing import Optional
 
 import boto3
+
+logger = logging.getLogger(__name__)
 
 # Matches the client-side rounding decision (~1km precision, since AirNow
 # resolves to the nearest monitoring station regardless) -- see doc/DESIGN.md
@@ -27,6 +31,18 @@ LOCATION_KEY_PRECISION = 2
 def location_key(latitude: float, longitude: float) -> str:
     """Derive the cache partition key for a location, rounded to a coarse grid."""
     return f"{round(latitude, LOCATION_KEY_PRECISION)},{round(longitude, LOCATION_KEY_PRECISION)}"
+
+
+def hash_location_key(key: str) -> str:
+    """One-way digest of a location key, safe to log (bluegull-aqi-q9r.27).
+
+    Never log location_key -- or raw/rounded coordinates -- directly: even a
+    coarse 2-decimal grid cell accumulates an "IP was near location Y at time
+    Z" history over a log retention period. This digest still lets separate
+    log lines for the same request be correlated without being reversible
+    back to a real-world location.
+    """
+    return hashlib.sha256(key.encode()).hexdigest()[:12]
 
 
 class Cache:
@@ -46,9 +62,12 @@ class Cache:
         response = self._table.get_item(Key={"LocationKey": key})
         item = response.get("Item")
         if item is None:
+            logger.debug("Cache miss (absent) for %s", hash_location_key(key))
             return None
         if item["ExpiresAt"] < int(time.time()):
+            logger.debug("Cache miss (expired) for %s", hash_location_key(key))
             return None
+        logger.debug("Cache hit for %s", hash_location_key(key))
         return json.loads(item["Data"])
 
     def delete(self, key: str) -> None:
@@ -67,6 +86,7 @@ class Cache:
                 "ExpiresAt": now + ttl_seconds,
             }
         )
+        logger.debug("Cache put for %s", hash_location_key(key))
 
 
 def create_table_if_missing(table_name: str, region_name: str, endpoint_url: Optional[str] = None) -> None:

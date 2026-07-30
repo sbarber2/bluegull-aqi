@@ -7,9 +7,12 @@ doc/DESIGN.md "Backend service" for how this was confirmed: a dated, merged
 pyairnow migration PR, EPA's own official PDF notice, and a live test query.
 """
 import json
+import logging
 import urllib.error
 import urllib.parse
 import urllib.request
+
+logger = logging.getLogger(__name__)
 
 API_BASE_URL = "https://www.airnowapi.org/aq/observation/current/ziplatlong/"
 REQUEST_TIMEOUT_SECONDS = 10
@@ -36,16 +39,23 @@ def fetch_current_observations(latitude: float, longitude: float, api_key: str) 
             "API_KEY": api_key,
         }
     )
+    # The query string carries API_KEY as a plain parameter -- `url` must never
+    # be passed to logger, an exception message, or anything else that could
+    # surface it in CloudWatch Logs or a client response (bluegull-aqi-q9r.27).
+    # Log calls below reference only the static, keyless API_BASE_URL.
     url = f"{API_BASE_URL}?{params}"
 
+    logger.info("Requesting AirNow observations from %s", API_BASE_URL)
     try:
         with urllib.request.urlopen(url, timeout=REQUEST_TIMEOUT_SECONDS) as response:  # nosec B310
             body = response.read()
     except urllib.error.HTTPError as exc:
+        logger.warning("AirNow request to %s failed with HTTP %s", API_BASE_URL, exc.code)
         body = exc.read()
         _raise_for_error_body(body, exc.code)
         raise AirNowError(f"AirNow returned HTTP {exc.code}") from exc
     except urllib.error.URLError as exc:
+        logger.warning("AirNow request to %s failed: %s", API_BASE_URL, exc.reason)
         raise AirNowError(f"AirNow request failed: {exc.reason}") from exc
 
     try:

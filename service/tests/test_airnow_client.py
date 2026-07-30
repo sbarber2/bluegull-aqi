@@ -2,11 +2,13 @@
 AirNow traffic in the test suite."""
 import json
 import urllib.error
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from bluegull_aqi_service.airnow_client import AirNowError, fetch_current_observations
+
+from .conftest import mock_urlopen_response
 
 SAMPLE_RESPONSE = [
     {
@@ -27,17 +29,9 @@ SAMPLE_RESPONSE = [
 ]
 
 
-def _mock_response(body_bytes):
-    mock_resp = MagicMock()
-    mock_resp.read.return_value = body_bytes
-    mock_resp.__enter__.return_value = mock_resp
-    mock_resp.__exit__.return_value = False
-    return mock_resp
-
-
 def test_fetch_current_observations_success():
     with patch("bluegull_aqi_service.airnow_client.urllib.request.urlopen") as mock_urlopen:
-        mock_urlopen.return_value = _mock_response(json.dumps(SAMPLE_RESPONSE).encode())
+        mock_urlopen.return_value = mock_urlopen_response(json.dumps(SAMPLE_RESPONSE).encode())
         result = fetch_current_observations(37.7749, -122.4194, "fake-key")
     assert result == SAMPLE_RESPONSE
     assert result[0]["reportingAgency"] == "Bay Area Air District"
@@ -46,7 +40,7 @@ def test_fetch_current_observations_success():
 def test_fetch_current_observations_web_service_error():
     error_body = json.dumps({"WebServiceError": [{"Message": "Invalid API key"}]}).encode()
     with patch("bluegull_aqi_service.airnow_client.urllib.request.urlopen") as mock_urlopen:
-        mock_urlopen.return_value = _mock_response(error_body)
+        mock_urlopen.return_value = mock_urlopen_response(error_body)
         with pytest.raises(AirNowError, match="Invalid API key"):
             fetch_current_observations(37.7749, -122.4194, "bad-key")
 
@@ -62,6 +56,6 @@ def test_fetch_current_observations_http_error():
 
 def test_fetch_current_observations_unexpected_type():
     with patch("bluegull_aqi_service.airnow_client.urllib.request.urlopen") as mock_urlopen:
-        mock_urlopen.return_value = _mock_response(json.dumps({"unexpected": "dict"}).encode())
+        mock_urlopen.return_value = mock_urlopen_response(json.dumps({"unexpected": "dict"}).encode())
         with pytest.raises(AirNowError, match="Unexpected AirNow response type"):
             fetch_current_observations(37.7749, -122.4194, "fake-key")
