@@ -1102,6 +1102,24 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-10h.6: `LocationResolver` handles
+  both supported location modes -- current GPS location
+  (`SystemLocationProvider`, wraps `CLLocationManager.requestLocation()` via
+  the classic delegate pattern bridged to async/await, deliberately not the
+  newer `CLLocationUpdate.liveUpdates()` API given a documented Apple Forums
+  crash report combining it with authorization requests, not fixed until
+  iOS/macOS 18) and a user-pinned address/zip
+  (`SystemAddressGeocoder`, wraps `CLGeocoder`) -- no backend geocoding
+  endpoint needed. Both sit behind injectable protocols
+  (`LocationProvider`/`AddressGeocoder`) exactly as the issue asked: CI
+  can't exercise real GPS or live geocoding, so all 6 tests use fakes.
+  Neither real implementation is verified live -- didn't even attempt it
+  this time, since `bluegull-aqi-10h.5`'s Keychain work hit the identical
+  entitlement/signing barrier moments earlier in this same session (a bare
+  Swift package test target isn't a signed, entitled app bundle, and
+  CoreLocation's authorization flow needs both). Real verification waits
+  for the same things: `bluegull-aqi-8ef.5` (Apple Developer account) and
+  an actual app target. 46/46 tests pass via `swift test`.
 - 2026-07-30 — Implemented bluegull-aqi-10h.5: `AirNowAPIKeyStore` reads,
   writes, and deletes the user's own AirNow API key (Direct mode) as an
   iCloud-synced Keychain item (`kSecAttrSynchronizable`, so it follows the
