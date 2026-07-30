@@ -49,7 +49,9 @@ final class AirNowDirectClientTests: XCTestCase {
 
         let reading = try await client.fetchCurrentObservations(location: location, apiKey: fakeKey)
 
-        XCTAssertEqual(reading.location, location)
+        // The returned location is rounded (bluegull-aqi-10h.11) -- it's
+        // what was actually sent, not the caller's original precise value.
+        XCTAssertEqual(reading.location, location.rounded)
         XCTAssertEqual(reading.pollutants.count, 1)
         XCTAssertEqual(reading.pollutants[0].nowcastAQI, 31)
         XCTAssertEqual(reading.pollutants[0].reportingAgency, "Bay Area Air District")
@@ -74,9 +76,11 @@ final class AirNowDirectClientTests: XCTestCase {
         let queryItems = try XCTUnwrap(components.queryItems)
         let queryDict = Dictionary(uniqueKeysWithValues: queryItems.map { ($0.name, $0.value) })
 
+        // Rounded to ~1km precision (bluegull-aqi-10h.11), not the
+        // caller's original precise 37.7749/-122.4194.
         XCTAssertEqual(queryDict["format"], "application/json")
-        XCTAssertEqual(queryDict["latitude"], "37.7749")
-        XCTAssertEqual(queryDict["longitude"], "-122.4194")
+        XCTAssertEqual(queryDict["latitude"], "37.77")
+        XCTAssertEqual(queryDict["longitude"], "-122.42")
         XCTAssertEqual(queryDict["API_KEY"], fakeKey)
     }
 

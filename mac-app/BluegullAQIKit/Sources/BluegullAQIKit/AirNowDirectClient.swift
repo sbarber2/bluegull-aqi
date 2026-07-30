@@ -26,7 +26,12 @@ public struct AirNowDirectClient: Sendable {
     /// Fetches current NowCast observations for a location, one entry per
     /// pollutant. Returns AirNow's own fields exactly as received --
     /// bluegull-aqi-10h.17: never altered, never used to derive an AQI.
+    ///
+    /// `location` is rounded to ~1km precision before the request is built
+    /// (bluegull-aqi-10h.11) -- AirNow never receives a precise coordinate,
+    /// regardless of what precision the caller passed in.
     public func fetchCurrentObservations(location: Location, apiKey: String) async throws -> AQIReading {
+        let location = location.rounded
         let request = try Self.makeRequest(location: location, apiKey: apiKey)
 
         let data: Data

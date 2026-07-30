@@ -1102,6 +1102,20 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-10h.11: `Location.rounded` rounds to
+  ~1km precision (2 decimal degrees), deliberately matching the server's own
+  `LOCATION_KEY_PRECISION` in `cache.py` exactly -- same grid on both ends
+  maximizes cache-hit-rate alignment, not just privacy. `AirNowDirectClient`
+  now rounds before building the request, so AirNow never receives a
+  precise coordinate regardless of what precision the caller passed in; the
+  returned `AQIReading.location` is the rounded value too, since that's
+  what was actually requested. `BluegullServiceClient` (`bluegull-aqi-10h.4`,
+  not yet built) will need the same treatment -- added a note on that issue
+  so it isn't missed. Updated two existing `AirNowDirectClientTests` that
+  asserted exact unrounded coordinates in the request/response, and added a
+  new `LocationTests` case confirming rounding actually rounds (not
+  truncates) using a value exactly on a .5 boundary. 61/61 tests pass via
+  `swift test`.
 - 2026-07-30 — Implemented bluegull-aqi-10h.7: `AppGroupCache`, a
   location-keyed AQI cache (1-hour default TTL) meant to be shared between
   the container app and widget extension via an App Group -- written by the
