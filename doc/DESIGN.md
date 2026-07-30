@@ -35,7 +35,7 @@ GitHub Actions CI/CD, Route53/ACM custom domain.
 | Location scope | Current location (CoreLocation) **and** user-pinned locations (zip/address, geocoded locally via `CLGeocoder`/MapKit — no backend geocoding endpoint needed). |
 | Refresh cadence | Hourly, matching AirNow's own publish cadence. |
 | Minimum macOS version | macOS 14 (Sonoma) — required for desktop WidgetKit widgets anyway. |
-| Backend custom domain | Three environments, one hosted zone. **Prod** = bare `aqi.bluegull.org`. **Dev** = `dev.aqi.bluegull.org`. **Staging** = `stage.aqi.bluegull.org`. All three are dot-subdomains of `aqi.bluegull.org`, so all three live under the single Route53 hosted zone in AWS account `843088391598`, delegated from `bluegull.org`'s DNS at **Squarespace** (registrar; everything else there untouched). **✅ Delegation confirmed live 2026-07-28.** Mirrors Plant-Tracer's `${StackName}.${BaseDomain}` pattern. **Pending change (2026-07-30):** a parallel delegation for `aqi.bluegull.solutions` (mirroring the same prod/dev/stage pattern) is planned alongside this, not replacing it — see `bluegull-aqi-8ef.18`, not yet done. Note: unlike `bluegull.org`, `bluegull.solutions` is registered at Squarespace but its actual authoritative DNS is at **DreamHost** — confirmed via `dig NS aqi.bluegull.solutions` returning `SOA ns1.dreamhost.com`. The NS delegation record goes in DreamHost's panel, not Squarespace's. |
+| Backend custom domain | Three environments, one hosted zone. **Prod** = bare `aqi.bluegull.org`. **Dev** = `dev.aqi.bluegull.org`. **Staging** = `stage.aqi.bluegull.org`. All three are dot-subdomains of `aqi.bluegull.org`, so all three live under the single Route53 hosted zone in AWS account `843088391598`, delegated from `bluegull.org`'s DNS at **Squarespace** (registrar; everything else there untouched). **✅ Delegation confirmed live 2026-07-28.** Mirrors Plant-Tracer's `${StackName}.${BaseDomain}` pattern. **Second domain added 2026-07-30:** a parallel delegation for `aqi.bluegull.solutions` (mirroring the same prod/dev/stage pattern, alongside `bluegull.org`, not replacing it — `bluegull-aqi-8ef.18`). Note: unlike `bluegull.org`, `bluegull.solutions` is registered at Squarespace but its actual authoritative DNS is at **DreamHost** — the NS delegation record was added in DreamHost's panel, not Squarespace's. **✅ Delegation confirmed live 2026-07-30** (`dig NS aqi.bluegull.solutions` returns the 4 Route53 nameservers). |
 | AWS region | **`us-east-2`** (Ohio), chosen for cost over the Plant-Tracer-matching default of us-east-1. `service/samconfig.toml` deploys here. No conflict with the custom domain: `AWS::Serverless::HttpApi` custom domains are regional-only (unlike REST API v1's edge-optimized option), so the ACM cert for `aqi.bluegull.org` just needs to be in this same region. The one exception: if CloudFront (`bluegull-aqi-q9r.33`, deferred) is ever adopted, its ACM cert must be in **us-east-1** specifically — a hard CloudFront-wide rule, independent of the API's own region. |
 | AWS account | **`843088391598`**, dedicated to this project (not shared with Plant-Tracer) — gives the blast-radius isolation the Scaling & Performance section already assumed. Standalone account, its own IAM Identity Center instance (not part of Plant-Tracer's org). CLI access: `aws sts get-caller-identity --profile AdministratorAccess-843088391598` — an assumed role via `AWSReservedSSO_AdministratorAccess`, not root; re-authenticate with `aws sso login --profile AdministratorAccess-843088391598` when the session expires. |
 | Apple Developer account | Already enrolled; bundle IDs / App Group still need to be created (`bluegull-aqi-8ef.5`) — naming decided 2026-07-30: `solutions.bluegull.aqi` (container app), `solutions.bluegull.aqi.widget` (widget extension), App Group `group.solutions.bluegull.aqi`. Whether the enrollment type (Individual vs. Organization) fits the for-profit plan is still unverified (`bluegull-aqi-8ef.22`). |
@@ -1191,6 +1191,20 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-8ef.18 (DNS delegation for
+  bluegull.solutions): **confirmed live.** Real infrastructure gap found
+  along the way, worth recording: `bluegull.solutions` is registered at
+  Squarespace but its actual authoritative nameservers are DreamHost's
+  (`dig NS` returned `SOA ns1.dreamhost.com`) -- unlike `bluegull.org`,
+  where registrar and DNS host are the same provider. The delegation
+  script (`service/bin/setup_route53_domain.sh`) originally assumed
+  Squarespace for both domains and would have sent Steve to the wrong
+  panel; fixed after he hit `NXDOMAIN` trying to verify and caught the
+  mismatch via the SOA record. Fetched DreamHost's own DNS-records docs for
+  the correct panel steps. Steve added the NS record in DreamHost's panel;
+  `dig NS aqi.bluegull.solutions` now returns the 4 Route53 nameservers.
+  `aqi.bluegull.org`'s existing delegation at Squarespace is untouched, per
+  the earlier decision to add rather than migrate.
 - 2026-07-30 — Resolved bluegull-aqi-8ef.15 (re-review AirNow terms for
   commercial use, P0): **proceed under the existing Service-mode approval,
   no proactive disclosure to AirNow.** Directly re-read the Data Exchange
