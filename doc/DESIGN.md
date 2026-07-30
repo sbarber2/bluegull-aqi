@@ -1201,6 +1201,30 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-e70.4 (settings UI: AirNow API key
+  entry). `AirNowAPIKeyEntryView` in the app target: loads whatever's
+  already saved (via `AirNowAPIKeyStore`, `bluegull-aqi-10h.5`) on appear,
+  a `SecureField` for entry/edit, Save/Clear buttons. Deliberately shows
+  the user their own already-saved key back for editing -- it's a
+  credential they typed in themselves, not a shared secret being echoed.
+  - Same "not yet wired into a settings window" scope discipline as
+    `e70.3`: no settings destination exists yet; composing this,
+    `e70.3`, and `e70.5` together is separate, not-yet-tracked work.
+  - Didn't extract the load/save/clear logic into a separately-testable
+    type the way `mtm.7` did for the widget provider -- there's no forcing
+    constraint here (unlike the app-extension linking problem), and the
+    actual Keychain interaction is already thoroughly tested at the
+    `AirNowAPIKeyStore` level (10 tests, `bluegull-aqi-10h.5`). Kept the
+    lighter `ImageRenderer` smoke-test bar used for `e70.3`/`e70.11`
+    instead -- proportionate to what's actually new here.
+  - `KeychainStore` is public, but `BluegullAQIKitTests`' in-memory fake is
+    a test-only file private to that target -- same cross-module
+    visibility gap `mtm.7` hit for `SharedCacheStore`'s fake. Small local
+    fake in `BluegullAQITests` instead of reaching for anything heavier.
+  - Same known `ImageRenderer`/`NSViewRepresentable` limitation as `e70.3`
+    surfaced again (this time `SecureFieldAdaptor`) -- confirms it's
+    general, not specific to any one control. 2 new render smoke tests
+    (11/11 app-target tests pass); build and a clean app launch verified.
 - 2026-07-30 — Implemented bluegull-aqi-e70.3 (settings UI: data-source
   mode toggle). New `DataSourceMode` (`.service`/`.direct`) and
   `DataSourceModeStore` (the UserDefaults key + default-value constants) in
