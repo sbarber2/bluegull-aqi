@@ -1201,6 +1201,22 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-mtm.8 (App Intents `perform()`
+  unit tests). `SelectLocationIntent.perform()` itself turned out to be
+  genuinely unconditional -- WidgetKit reads the configured `location`
+  directly off the intent instance it hands to `AppIntentTimelineProvider`,
+  not from `perform()`'s return value, so there's no branch on `location`
+  to actually unit test there. Rather than declare the issue vacuous,
+  extracted the real logic instead: new `WidgetLocationOptions.all(from:)`
+  in `BluegullAQIKit` (plus a small `LocationOption` enum) builds the
+  "Current Location" + every pinned location list that used to be inlined,
+  private, and untestable inside the widget's `LocationOptionQuery` --
+  same `app-extension`-target-can't-be-linked-against extraction pattern
+  as `WidgetTimelineComputer` (bluegull-aqi-mtm.7). `LocationOptionQuery`
+  now just converts each `LocationOption` into the `AppEntity`-conforming
+  type App Intents needs, rather than duplicating the list-building logic.
+  2 new package tests (99/99 pass); build, 13/13 app tests, and a clean
+  app launch verified.
 - 2026-07-30 — Implemented bluegull-aqi-mtm.3 (App Intents configuration
   for pinned location selection). The widget switches from
   `StaticConfiguration` to `AppIntentConfiguration`, and

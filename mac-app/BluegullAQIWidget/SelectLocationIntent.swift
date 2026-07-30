@@ -30,7 +30,10 @@ struct LocationOptionEntity: AppEntity {
 /// Options come from `PinnedLocationsStore` (bluegull-aqi-e70.5, App Group
 /// backed) plus the synthetic "current location" entry -- never a live
 /// CoreLocation/network fetch, same "widget doesn't fetch itself"
-/// constraint as everywhere else in this extension.
+/// constraint as everywhere else in this extension. The actual
+/// list-building is `WidgetLocationOptions.all(from:)`
+/// (bluegull-aqi-mtm.8) -- this just converts each `LocationOption` into
+/// the `AppEntity`-conforming type App Intents needs.
 struct LocationOptionQuery: EntityQuery {
     func entities(for identifiers: [LocationOptionEntity.ID]) async throws -> [LocationOptionEntity] {
         allOptions().filter { identifiers.contains($0.id) }
@@ -45,10 +48,14 @@ struct LocationOptionQuery: EntityQuery {
     }
 
     private func allOptions() -> [LocationOptionEntity] {
-        let pinned = PinnedLocationsStore().load().map {
-            LocationOptionEntity(id: $0.id.uuidString, name: $0.label, location: $0.location)
+        WidgetLocationOptions.all(from: PinnedLocationsStore()).map { option in
+            switch option {
+            case .currentLocation:
+                return .currentLocation
+            case .pinned(let pinned):
+                return LocationOptionEntity(id: pinned.id.uuidString, name: pinned.label, location: pinned.location)
+            }
         }
-        return [.currentLocation] + pinned
     }
 }
 
@@ -64,6 +71,12 @@ struct SelectLocationIntent: WidgetConfigurationIntent {
     @Parameter(title: "Location")
     var location: LocationOptionEntity?
 
+    // Genuinely unconditional (bluegull-aqi-mtm.8): WidgetKit reads
+    // `location` directly off the intent instance it hands to
+    // `AppIntentTimelineProvider`, not from this method's result --
+    // there's no branch on `location`'s value to unit test here. The real
+    // pinned-location-selection logic is `WidgetLocationOptions.all(from:)`
+    // above, which is what's actually tested.
     func perform() async throws -> some IntentResult {
         .result()
     }
