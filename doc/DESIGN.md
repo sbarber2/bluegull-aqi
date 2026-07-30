@@ -81,23 +81,48 @@ catches things:
 1. **GitHub push protection + secret scanning** — ✅ verified enabled (GitHub turns
    both on by default for public repos). Blocks a push containing a *recognized*
    credential pattern before it reaches the remote.
-2. **gitleaks as a pre-commit hook** — catches it locally before a commit exists,
+2. **Betterleaks as a pre-commit hook** — catches it locally before a commit exists,
    which is the cheapest possible point to catch it.
-3. **gitleaks in CI** — backstop for commits made without the hook installed (fresh
+3. **Betterleaks in CI** — backstop for commits made without the hook installed (fresh
    clones, other machines, other agents).
 
+Tool choice: gitleaks (the tool originally planned here) is now feature-complete —
+its creator has moved active development to **Betterleaks**, a drop-in-compatible
+successor (same config format, same CLI shape) with materially better detection for
+exactly the kind of context-based rule this project needs (CEL/Expr-based validation
+and token-efficiency scanning instead of pure entropy — 98.6% recall vs. 70.4% on the
+CredData benchmark, per Betterleaks' own published results). Verified this against
+the actual release (installed v1.7.2 via Homebrew, read `--help` output directly)
+rather than trusting scraped docs, since a wrong CLI flag here would silently defeat
+the whole point.
+
 ⚠️ **Pattern scanners will not catch the AirNow key on their own.** Push protection
-and gitleaks' default rules key on distinctive credential formats — AWS `AKIA…`,
+and Betterleaks' default rules key on distinctive credential formats — AWS `AKIA…`,
 GitHub `ghp_…`, Stripe `sk_live_…`. The AirNow key carries no such prefix; like most
 government API keys it's a generic token, indistinguishable from any other opaque
 string. So layer 1 protects the AWS and Apple credentials in the inventory above but
 **not this project's primary secret**.
 
-Closing that hole requires a **custom gitleaks rule keyed on context rather than
+Closing that hole requires a **custom Betterleaks rule keyed on context rather than
 token shape**: assignments to `AIRNOW_API_KEY`/`API_KEY`, and high-entropy tokens
 appearing near `airnowapi.org`. Without it, the enforcement stack has a gap exactly
 where it matters most — which is precisely why layers 2 and 3 are not redundant with
-layer 1.
+layer 1. Rules live in `.betterleaks.toml` (`[extend] useDefault = true` plus the two
+custom rules); verified against real and placeholder values via `betterleaks stdin`
+before trusting them, and dry-ran the full ruleset against this repo's entire git
+history (`betterleaks git .`) to confirm zero false positives against the existing
+codebase (test fixtures, `.env.example`, etc.) and zero pre-existing leaks.
+
+The local hook lives in `.beads/hooks/pre-commit` (outside the Beads-managed marker
+block, which explicitly permits additions around it) rather than the `pre-commit`
+Python framework's own `.pre-commit-config.yaml` — Beads already owns
+`core.hooksPath` for its own Dolt-sync hooks, and the `pre-commit` framework refuses
+to install (`Cowardly refusing to install hooks with core.hooksPath set`) when
+anything else already owns that git config. Calling the `betterleaks` binary
+directly from the existing hook script avoids the conflict entirely and adds no new
+dependency beyond the binary itself. Verified live: staged a fake `AIRNOW_API_KEY=`
+value and confirmed the commit was blocked, then confirmed a clean commit still
+succeeds (including Beads' own hook logic still firing normally afterward).
 
 `.gitignore` carries secret filename patterns as a safety net, but it only helps for
 files someone remembered to name conventionally. It is the weakest layer, not the
@@ -1074,6 +1099,23 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-8ef.7 (secret-scanning pre-commit hook +
+  CI). Switched tool choice from gitleaks (feature-complete, maintenance-only) to
+  **Betterleaks**, its actively-developed drop-in-compatible successor, after the
+  user flagged gitleaks' own README warning about the switch -- verified via web
+  search rather than assumed. Added `.betterleaks.toml` (`[extend] useDefault =
+  true` plus two custom rules for the AirNow key's context: assignment to
+  `AIRNOW_API_KEY`/`API_KEY`, and a token following `API_KEY=` in a URL containing
+  `airnowapi.org`), verified against real/placeholder values with `betterleaks
+  stdin` and against this repo's full git history with zero false positives or
+  pre-existing leaks. Wired the local hook into `.beads/hooks/pre-commit` (not a
+  separate `.pre-commit-config.yaml`/Python `pre-commit` framework install, which
+  conflicts with Beads already owning `core.hooksPath` -- discovered by actually
+  trying `pre-commit install` and reading its refusal). Added
+  `.github/workflows/secret-scan.yml` as the CI backstop, pinned to v1.7.2 with
+  checksum verification, dry-run tested locally before trusting it in CI. Verified
+  live end-to-end: a staged fake `AIRNOW_API_KEY=` value was blocked by the hook; a
+  clean commit still succeeded, including Beads' own hook logic firing afterward.
 - 2026-07-30 — Closed bluegull-aqi-q9r.13 (local run instructions were already
   covered by `service/README.md`) and implemented bluegull-aqi-q9r.27: the
   AirNow key and raw/rounded coordinates must never reach log output.

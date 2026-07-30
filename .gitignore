@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # Secrets and credentials — NEVER commit these.
 # See doc/DESIGN.md "Secrets & credentials" for the full policy and inventory.
-# This list is a safety net, not the control: gitleaks (pre-commit + CI) and
+# This list is a safety net, not the control: Betterleaks (pre-commit + CI) and
 # GitHub push protection are what actually enforce the rule.
 # ---------------------------------------------------------------------------
 

@@ -1,0 +1,31 @@
+# Secret-scanning config for this repo. See doc/DESIGN.md "Secrets &
+# credentials" / "Enforcement" for the full policy and why this exists.
+#
+# Extends betterleaks' built-in ruleset (AWS, GitHub, Stripe, etc. -- keyed on
+# distinctive credential prefixes) with two project-specific rules below.
+#
+# CRITICAL CONTEXT: the AirNow API key has no distinctive prefix -- like most
+# government API keys it's a generic token, indistinguishable by shape alone.
+# No pattern scanner's default rules will catch a bare one. These custom
+# rules key on CONTEXT instead: the variable name it's assigned to, or the
+# AirNow domain it's requested against.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "airnow-api-key-assignment"
+description = "Possible AirNow API key assigned to AIRNOW_API_KEY or API_KEY"
+regex = '''(?i)\b(?:AIRNOW_API_KEY|API_KEY)\s*[:=]\s*['"]?([A-Za-z0-9._~-]{16,})['"]?'''
+keywords = ["airnow_api_key", "api_key"]
+# Suppress known-safe placeholders: .env.example's literal placeholder, this
+# project's 1Password op:// reference, and shell/CI variable interpolation.
+filter = '''
+containsAny(finding["secret"], ["your-airnow-api-key-here", "not-a-real-airnow-key", "op://", "${"])
+'''
+
+[[rules]]
+id = "airnow-key-in-request-url"
+description = "Possible AirNow API key in a constructed/logged request URL"
+regex = '''airnowapi\.org[^\s"'`]*[?&]API_KEY=([A-Za-z0-9._~-]{16,})'''
+keywords = ["airnowapi.org"]

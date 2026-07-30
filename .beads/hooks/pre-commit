@@ -1,4 +1,22 @@
 #!/usr/bin/env sh
+
+# --- BEGIN SECRET SCAN (betterleaks) ---
+# See doc/DESIGN.md "Secrets & credentials" / "Enforcement". Runs before the
+# Beads integration below so a detected secret always blocks the commit, even
+# if Beads' own hook logic is skipped, times out, or errors.
+if command -v betterleaks >/dev/null 2>&1; then
+  _repo_root="$(git rev-parse --show-toplevel)"
+  betterleaks git "$_repo_root" --config "$_repo_root/.betterleaks.toml" --pre-commit --redact --staged
+  _bl_exit=$?
+  if [ $_bl_exit -ne 0 ]; then
+    echo >&2 "betterleaks: possible secret detected in staged changes -- commit blocked. See output above."
+    exit $_bl_exit
+  fi
+else
+  echo >&2 "betterleaks: not installed -- skipping local secret scan (CI will still catch it). Install: brew install betterleaks"
+fi
+# --- END SECRET SCAN ---
+
 # --- BEGIN BEADS INTEGRATION v1.1.2 ---
 # This section is managed by beads. Do not remove these markers.
 if command -v bd >/dev/null 2>&1; then

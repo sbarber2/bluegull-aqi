@@ -96,6 +96,8 @@ only real remedy. Local secrets belong in a gitignored `.env`. One trap specific
 this project: AirNow passes its API key as a *URL query parameter*, so logging a
 request URL writes the key into your logs while looking like perfectly ordinary debug
 output. Full policy and inventory: [doc/DESIGN.md § Secrets & credentials](doc/DESIGN.md).
+A pre-commit hook scans staged changes for secrets before every commit -- install
+with `brew install betterleaks` (CI runs the same scan as a backstop either way).
 
 **The backend runs and tests locally with no AWS account.** Core logic is kept
 separate from the Lambda entry point, and the DynamoDB endpoint comes from an
