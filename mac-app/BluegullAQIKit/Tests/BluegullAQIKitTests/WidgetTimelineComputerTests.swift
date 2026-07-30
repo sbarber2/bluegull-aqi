@@ -54,4 +54,38 @@ final class WidgetTimelineComputerTests: XCTestCase {
         let now = Date()
         XCTAssertGreaterThan(computer.nextReloadDate(after: now), now)
     }
+
+    // MARK: - Per-instance location configuration (bluegull-aqi-mtm.3)
+
+    func testCurrentSnapshotForASpecificLocationReturnsThatLocationsEntry() {
+        let store = InMemorySharedCacheStore()
+        let otherLocation = Location(latitude: 40.7128, longitude: -74.0060)
+        let otherReading = AQIReading(location: otherLocation, pollutants: reading.pollutants)
+        let cache = AppGroupCache(store: store)
+        cache.put(reading, for: location)
+        cache.put(otherReading, for: otherLocation)
+
+        let computer = WidgetTimelineComputer(store: store)
+        XCTAssertEqual(computer.currentSnapshot(for: otherLocation).reading, otherReading)
+    }
+
+    func testCurrentSnapshotForASpecificLocationNeverFallsBackToADifferentLocationsData() {
+        // The subtle case: a specific location was requested but has
+        // nothing cached -- must be nil, NOT silently fall back to
+        // mostRecentEntry() and show a different pin's data by surprise.
+        let store = InMemorySharedCacheStore()
+        let requestedButUncachedLocation = Location(latitude: 51.5074, longitude: -0.1278)
+        AppGroupCache(store: store).put(reading, for: location)  // some OTHER location is cached
+
+        let computer = WidgetTimelineComputer(store: store)
+        XCTAssertNil(computer.currentSnapshot(for: requestedButUncachedLocation).reading)
+    }
+
+    func testCurrentSnapshotWithNoLocationFallsBackToMostRecentEntry() {
+        let store = InMemorySharedCacheStore()
+        AppGroupCache(store: store).put(reading, for: location)
+
+        let computer = WidgetTimelineComputer(store: store)
+        XCTAssertEqual(computer.currentSnapshot(for: nil).reading, reading)
+    }
 }

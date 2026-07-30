@@ -26,8 +26,7 @@ public struct WidgetTimelineSnapshot: Sendable, Equatable {
 /// than fighting Xcode's `TEST_HOST`/`BUNDLE_LOADER` extension-hosting
 /// configuration.
 ///
-/// Composes `AppGroupCache.mostRecentEntry()` -- no per-instance location
-/// configuration exists yet (bluegull-aqi-mtm.3, App Intents) -- and
+/// Composes `AppGroupCache.get(for:)`/`mostRecentEntry()` and
 /// `RefreshScheduler.nextRefreshDate()` (bluegull-aqi-10h.10) for the
 /// reload policy.
 public struct WidgetTimelineComputer: Sendable {
@@ -39,8 +38,17 @@ public struct WidgetTimelineComputer: Sendable {
         refreshScheduler = RefreshScheduler(store: store)
     }
 
-    public func currentSnapshot(now: Date = Date()) -> WidgetTimelineSnapshot {
-        WidgetTimelineSnapshot(date: now, reading: cache.mostRecentEntry(now: now))
+    /// `location` is the widget instance's configured pin
+    /// (bluegull-aqi-mtm.3, App Intents) -- when one is set, this looks up
+    /// *only* that location's cache entry, never falling back to a
+    /// different location's data (a user who picked "Work" should see "no
+    /// data yet" rather than "Home"'s AQI by surprise). `nil` covers both
+    /// "current location" (the widget can't resolve that itself -- see
+    /// `AppGroupCache.mostRecentEntry()`'s own doc comment) and the
+    /// pre-`mtm.3` unconfigured case.
+    public func currentSnapshot(for location: Location? = nil, now: Date = Date()) -> WidgetTimelineSnapshot {
+        let reading = location.map { cache.get(for: $0, now: now) } ?? cache.mostRecentEntry(now: now)
+        return WidgetTimelineSnapshot(date: now, reading: reading)
     }
 
     public func nextReloadDate(after now: Date = Date()) -> Date {

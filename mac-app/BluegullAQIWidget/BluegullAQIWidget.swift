@@ -17,13 +17,17 @@ struct BluegullAQIWidgetEntry: TimelineEntry {
     }
 }
 
-/// Thin `TimelineProvider` glue -- the actual cache-reading/reload-policy
-/// logic lives in `BluegullAQIKit.WidgetTimelineComputer` (bluegull-aqi-mtm.2),
-/// specifically so it's unit-testable at all (an `app-extension` target
-/// can't be linked against by a separate test target -- see that type's
-/// doc comment). Never fetches network or location itself
-/// (doc/DESIGN.md "Widget extension (WidgetKit)").
-struct BluegullAQIWidgetTimelineProvider: TimelineProvider {
+/// Thin `AppIntentTimelineProvider` glue -- the actual cache-reading/
+/// reload-policy logic lives in `BluegullAQIKit.WidgetTimelineComputer`
+/// (bluegull-aqi-mtm.2), specifically so it's unit-testable at all (an
+/// `app-extension` target can't be linked against by a separate test
+/// target -- see that type's doc comment). Never fetches network or
+/// location itself (doc/DESIGN.md "Widget extension (WidgetKit)").
+///
+/// `AppIntentTimelineProvider`, not plain `TimelineProvider`, as of
+/// bluegull-aqi-mtm.3 -- each widget instance's configured
+/// `SelectLocationIntent` says which location it shows.
+struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
     private let computer: WidgetTimelineComputer?
 
     init(store: SharedCacheStore? = UserDefaultsCacheStore()) {
@@ -38,27 +42,33 @@ struct BluegullAQIWidgetTimelineProvider: TimelineProvider {
         BluegullAQIWidgetEntry(date: Date(), reading: nil)
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (BluegullAQIWidgetEntry) -> Void) {
-        completion(entry())
+    func snapshot(for configuration: SelectLocationIntent, in context: Context) async -> BluegullAQIWidgetEntry {
+        entry(for: configuration)
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<BluegullAQIWidgetEntry>) -> Void) {
+    func timeline(for configuration: SelectLocationIntent, in context: Context) async -> Timeline<BluegullAQIWidgetEntry> {
         let now = Date()
         let nextReload = computer?.nextReloadDate(after: now) ?? now.addingTimeInterval(RefreshScheduler.defaultInterval)
-        completion(Timeline(entries: [entry(now: now)], policy: .after(nextReload)))
+        return Timeline(entries: [entry(for: configuration, now: now)], policy: .after(nextReload))
     }
 
-    private func entry(now: Date = Date()) -> BluegullAQIWidgetEntry {
+    private func entry(for configuration: SelectLocationIntent, now: Date = Date()) -> BluegullAQIWidgetEntry {
         guard let computer else { return BluegullAQIWidgetEntry(date: now, reading: nil) }
-        return BluegullAQIWidgetEntry(computer.currentSnapshot(now: now))
+        // configuration.location is nil for a not-yet-configured instance;
+        // .location on the entity itself is nil for the "current location"
+        // option specifically (see LocationOptionEntity's own doc
+        // comment). Both collapse to the same nil, which
+        // currentSnapshot(for:) already treats as "fall back to whatever
+        // was most recently cached."
+        return BluegullAQIWidgetEntry(computer.currentSnapshot(for: configuration.location?.location, now: now))
     }
 }
 
 /// Still a placeholder view -- real per-family layouts (small/medium/large)
 /// are separate tracked scope (bluegull-aqi-mtm.4/mtm.5/mtm.6), not this
-/// task. `entry.reading` now genuinely flows from the App Group cache
-/// (bluegull-aqi-mtm.2), but rendering it meaningfully is deliberately not
-/// attempted here.
+/// task. `entry.reading` now genuinely flows from the App Group cache,
+/// respecting the widget's configured location (bluegull-aqi-mtm.2/mtm.3),
+/// but rendering it meaningfully is deliberately not attempted here.
 struct BluegullAQIWidgetView: View {
     let entry: BluegullAQIWidgetEntry
 
@@ -71,7 +81,7 @@ struct BluegullAQIWidget: Widget {
     let kind = "BluegullAQIWidget"
 
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: BluegullAQIWidgetTimelineProvider()) { entry in
+        AppIntentConfiguration(kind: kind, intent: SelectLocationIntent.self, provider: BluegullAQIWidgetTimelineProvider()) { entry in
             BluegullAQIWidgetView(entry: entry)
         }
         .configurationDisplayName(NowCastCopy.headline)

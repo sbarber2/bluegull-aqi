@@ -1201,6 +1201,41 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-mtm.3 (App Intents configuration
+  for pinned location selection). The widget switches from
+  `StaticConfiguration` to `AppIntentConfiguration`, and
+  `BluegullAQIWidgetTimelineProvider` from `TimelineProvider` to
+  `AppIntentTimelineProvider` -- each instance now genuinely can be
+  configured to a specific location, not just show whatever was most
+  recently cached.
+  - New `LocationOptionEntity`/`LocationOptionQuery`/`SelectLocationIntent`
+    in the widget extension (App Intents is widget-specific UI/configuration
+    glue, same "stays in the app target, not the package" rule as
+    `AQIColor`/`AQIReading.headlinePollutant`). Options come from
+    `PinnedLocationsStore` (`bluegull-aqi-e70.5`) plus a synthetic "Current
+    Location" entry -- never a live fetch, same constraint as everywhere
+    else in this extension.
+  - Real build error caught immediately: `@Parameter`'s `default:` for an
+    `AppEntity`-typed parameter must be a compile-time literal --
+    `.currentLocation` (a computed static property) isn't one. Fixed by
+    making the parameter `LocationOptionEntity?` with no default instead of
+    forcing a literal default value; "current location" is represented as
+    `nil` and resolved in the provider.
+  - Extended `WidgetTimelineComputer.currentSnapshot(for:now:)` to take an
+    optional selected `Location`: when one is set, looks up *only* that
+    location's cache entry via the already-existing `AppGroupCache.get(for:)`
+    -- deliberately never falling back to `mostRecentEntry()` in that case,
+    since a user who picked "Work" should see "no data yet" rather than
+    "Home"'s AQI by surprise if Work isn't cached. `nil` (both the
+    "current location" option and a not-yet-configured instance) still
+    falls back to `mostRecentEntry()`, as before. The optional-chaining
+    expression that implements this (`location.map { cache.get(...) } ??
+    mostRecentEntry()`) has genuinely subtle semantics -- verified with an
+    explicit test for the "requested but uncached" case rather than
+    trusting the type-theory reasoning alone.
+  - 3 new package tests (97/97 pass) for the per-location lookup behavior;
+    build, full app-target test suite (13/13), and a clean app launch with
+    the widget extension still correctly embedded all verified.
 - 2026-07-30 — Implemented bluegull-aqi-e70.5 (settings UI: pinned
   locations management). Different from `e70.3`/`e70.4` in one important
   way: `bluegull-aqi-mtm.3` (the widget's future App Intents configuration
