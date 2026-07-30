@@ -1102,6 +1102,32 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-10h.10.
+  - `RefreshScheduler` derives a stable per-install offset within the
+    refresh interval (persisted via `SharedCacheStore`, so the container
+    app and widget extension see the same schedule) and computes the next
+    refresh time on that install's interval-spaced schedule -- spreading
+    load across all installs instead of every one waking at the top of the
+    hour and synchronizing into a server-side spike. The offset is
+    generated once and persisted, not regenerated per call, so the refresh
+    interval stays consistent rather than becoming irregular.
+  - Found and fixed a real floating-point precision bug via testing, not
+    just logic review: the initial implementation computed the next
+    boundary as a raw `Double` and checked it was "strictly after now"
+    using `timeIntervalSince1970` values directly -- but `Date` stores time
+    relative to 2001, not 1970, and converting a ~1.7-2 billion-second
+    "seconds since 1970" value into that internal representation loses some
+    low-order precision. Two raw pre-conversion Doubles that looked safely
+    different could land on the exact same `Date` after conversion, making
+    `next > now` fail intermittently for `now` values landing near a
+    computed boundary -- caught by a flaky test (3-4 failures per 10 runs,
+    not deterministic), root-caused with an isolated repro script rather
+    than guessed at, and fixed by doing the "strictly after" check and any
+    necessary bump entirely in `Date`'s own domain (comparing already-
+    constructed `Date` values and using `addingTimeInterval`) instead of
+    mixing pre- and post-conversion `Double` representations.
+  - Verified with 30 consecutive runs of the specific test after the fix,
+    then 3 full-suite runs. 75/75 tests pass via `swift test`.
 - 2026-07-30 — Implemented bluegull-aqi-10h.12 (bound App Group cache
   retention and review file protection). Found a real gap first: the
   original `AppGroupCache.get()` (from `bluegull-aqi-10h.7`) treated an
