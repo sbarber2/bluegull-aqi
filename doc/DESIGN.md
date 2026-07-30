@@ -818,8 +818,11 @@ our per-request opportunistic caching is not.
   because it isn't an obligation on us — TAD Tables 3–4 bind reporting *agencies*
   above AQI 100, not downstream redistributors, so v1 ships compliant without it.
   Tracked as `bluegull-aqi-mtm.16`.
-- **Default data-source mode** for a fresh install (Service vs. Direct) — see above.
-  Note this is moot if the licensing review rules out Service mode.
+- ~~**Default data-source mode** for a fresh install (Service vs. Direct)~~ —
+  **DECIDED 2026-07-30: Service mode.** Works immediately with zero setup (no
+  AirNow key needed) for the best first-run experience; the settings UI
+  (`bluegull-aqi-e70.3`) lets a user switch to Direct mode (their own key) any
+  time. Tracked as `bluegull-aqi-8ef.2`.
 - ~~**Domain name** for the backend's custom domain~~ — **DECIDED:** `aqi.bluegull.org`,
   delegated from `bluegull.org`'s DNS at **Squarespace** (registrar; untouched
   otherwise) to a Route53 hosted zone created specifically for the subdomain.
@@ -1099,6 +1102,11 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Decided bluegull-aqi-8ef.2: default data-source mode for a fresh
+  install is **Service mode** (works immediately, no AirNow key needed), with
+  Direct mode available as a settings toggle (`bluegull-aqi-e70.3`, still to be
+  built). Steve's call, asked directly since it's a product decision, not an
+  engineering default.
 - 2026-07-30 — Implemented bluegull-aqi-q9r.20 (AirNow stub/test mode for load
   testing, a prerequisite for q9r.21's load test suite -- driving concurrent
   uncached requests at the live AirNow API would burn quota and plausibly
