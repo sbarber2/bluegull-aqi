@@ -1102,6 +1102,19 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-10h.18: `NowCastCopy.headline`
+  ("Current Air Quality" -- airnow.gov's own phrasing, verified safe) for UI
+  code to use instead of inventing wording that implies an instantaneous
+  spot reading, which AirNow's NowCast AQI values are not. Added a
+  `ComplianceTests` guard (matching the pattern from bluegull-aqi-10h.17)
+  scanning `Sources/` for exactly the phrases the issue calls out as unsafe
+  ("right now", "current reading", etc.) so this can't regress silently.
+  Verified the guard actually catches a violation (not just that it passes
+  today) by temporarily injecting one, confirming failure, then restoring.
+  Deliberately did not define a longer NowCast explanation string here:
+  placement and wording for a detail/expand view are UI decisions for
+  whichever task actually builds that view (`bluegull-aqi-e70.11`,
+  `mtm.14`), not this shared package's job. 27/27 tests pass via `swift test`.
 - 2026-07-30 — Implemented bluegull-aqi-8ef.12: enabled Dependabot security
   updates on `sbarber2/bluegull-aqi` (confirmed disabled on 2026-07-27), via
   `gh api -X PUT /repos/sbarber2/bluegull-aqi/vulnerability-alerts` and

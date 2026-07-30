@@ -50,6 +50,35 @@ final class ComplianceTests: XCTestCase {
         }
     }
 
+    /// Phrases that imply an instantaneous spot measurement, which AirNow's
+    /// NowCast AQI values are not (bluegull-aqi-10h.18) -- the exact
+    /// examples the issue itself calls out as unsafe. Checked lowercase, so
+    /// this also catches capitalized UI copy.
+    private static let forbiddenSpotReadingPhrases = [
+        "right now",
+        "current reading",
+        "instant reading",
+        "instantaneous reading",
+    ]
+
+    func testNoSpotReadingPhrasingExistsInSources() throws {
+        let sourcesDirectory = try Self.sourcesDirectory()
+        let swiftFiles = try Self.swiftFiles(under: sourcesDirectory)
+
+        for fileURL in swiftFiles {
+            let code = try Self.codeOnly(contentsOf: fileURL).lowercased()
+            for phrase in Self.forbiddenSpotReadingPhrases {
+                XCTAssertFalse(
+                    code.contains(phrase),
+                    "\(fileURL.lastPathComponent) contains '\(phrase)' outside a comment -- implies an " +
+                    "instantaneous spot measurement, which bluegull-aqi-10h.18 forbids: AirNow's values " +
+                    "are NowCast AQI, a variable-window weighted average, not a spot reading. Use " +
+                    "NowCastCopy.headline (\"Current Air Quality\") instead."
+                )
+            }
+        }
+    }
+
     /// Strips `//` and `///` comment lines before scanning -- this test is
     /// about forbidding actual derivation *code*, not prose that documents
     /// the constraint (which understandably needs to name the very things
