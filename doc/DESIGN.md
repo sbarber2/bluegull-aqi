@@ -1102,6 +1102,31 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-10h.7: `AppGroupCache`, a
+  location-keyed AQI cache (1-hour default TTL) meant to be shared between
+  the container app and widget extension via an App Group -- written by the
+  container app after a successful fetch, read by the widget's
+  TimelineProvider.
+  - `UserDefaultsCacheStore` sits behind a `SharedCacheStore` protocol.
+    Unlike `SystemKeychain`/`SystemLocationProvider`/`SystemAddressGeocoder`
+    elsewhere in this package, this one IS tested directly against the real
+    `UserDefaults` API (5 tests, using a distinct test-only suite name,
+    cleared in setUp/tearDown) -- confirmed empirically first that
+    `UserDefaults(suiteName:)` works fine even without a real registered
+    App Group entitlement (it's just a local plist-backed suite until
+    cross-process sharing is actually exercised), unlike Keychain/
+    CoreLocation which both hard-failed without one. What's still
+    unverified is the actual cross-process sharing this exists for -- that
+    needs the real container app and widget extension wired together with
+    a real App Group (`bluegull-aqi-8ef.5`).
+  - `init?(suiteName:)` deliberately doesn't silently fall back to
+    `.standard` if the suite fails to open -- that would mean the container
+    app and widget silently stop sharing data instead of failing loudly.
+  - 7 additional logic tests (TTL boundaries, malformed-data-is-a-miss,
+    location independence) run against an in-memory fake with a
+    controllable `now`, so expiry behavior doesn't depend on real wall-clock
+    timing.
+  - 58/58 tests pass via `swift test`.
 - 2026-07-30 — Implemented bluegull-aqi-10h.6: `LocationResolver` handles
   both supported location modes -- current GPS location
   (`SystemLocationProvider`, wraps `CLLocationManager.requestLocation()` via
