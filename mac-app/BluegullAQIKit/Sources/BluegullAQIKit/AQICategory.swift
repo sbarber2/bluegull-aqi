@@ -1,0 +1,96 @@
+import Foundation
+
+/// Official EPA AQI category thresholds, colors, and descriptors -- verbatim
+/// from the AQI Technical Assistance Document (EPA 454/B-18-007, Sept 2018),
+/// Tables 1 and 2. A single shared mapping so neither UI target (menu bar
+/// app, widget) defines this separately and risks drifting from the spec or
+/// from each other. See doc/DESIGN.md "AQI Technical Assistance Document &
+/// API Fact Sheet -- review findings".
+public enum AQICategory: Sendable, Equatable, Codable {
+    case good
+    case moderate
+    case unhealthyForSensitiveGroups
+    case unhealthy
+    case veryUnhealthy
+    case hazardous
+    /// AQI > 500. Rare but real, reported data (bluegull-aqi-10h.16) -- NOT
+    /// an error state. The TAD: a value "can still be computed to indicate
+    /// relative magnitude" using the Hazardous breakpoints, and the
+    /// Hazardous recommendations still apply.
+    case beyondAQI
+
+    /// Maps an AQI value to its category per TAD Table 1. `aqi` must be a
+    /// value AirNow itself returned -- never computed from a concentration
+    /// (bluegull-aqi-10h.17). AirNow's contract guarantees a non-negative
+    /// value; behavior for a negative input is unspecified by this type.
+    public init(aqi: Int) {
+        switch aqi {
+        case 0...50: self = .good
+        case 51...100: self = .moderate
+        case 101...150: self = .unhealthyForSensitiveGroups
+        case 151...200: self = .unhealthy
+        case 201...300: self = .veryUnhealthy
+        case 301...500: self = .hazardous
+        default: self = .beyondAQI  // > 500 (or a malformed negative input)
+        }
+    }
+
+    /// The full descriptor text. "Unhealthy for Sensitive Groups" is the
+    /// full form; "USG" (AirNow's own abbreviation, seen on airnow.gov's
+    /// legend) is acceptable only where space genuinely requires it --
+    /// callers choose that abbreviation, this type does not offer it.
+    public var descriptor: String {
+        switch self {
+        case .good: return "Good"
+        case .moderate: return "Moderate"
+        case .unhealthyForSensitiveGroups: return "Unhealthy for Sensitive Groups"
+        case .unhealthy: return "Unhealthy"
+        case .veryUnhealthy: return "Very Unhealthy"
+        case .hazardous: return "Hazardous"
+        case .beyondAQI: return "Hazardous"  // TAD: follow Hazardous recommendations
+        }
+    }
+
+    /// TAD Table 1/2 color, verbatim. GOTCHA (the most likely failure mode
+    /// here): Good is (0,228,0), NOT (0,255,0); Hazardous/BeyondAQI is
+    /// (126,0,35), not a generic dark red.
+    public var color: AQIColor {
+        switch self {
+        case .good: return AQIColor(red: 0, green: 228, blue: 0)
+        case .moderate: return AQIColor(red: 255, green: 255, blue: 0)
+        case .unhealthyForSensitiveGroups: return AQIColor(red: 255, green: 126, blue: 0)
+        case .unhealthy: return AQIColor(red: 255, green: 0, blue: 0)
+        case .veryUnhealthy: return AQIColor(red: 143, green: 63, blue: 151)
+        case .hazardous, .beyondAQI: return AQIColor(red: 126, green: 0, blue: 35)
+        }
+    }
+}
+
+/// Explicit sRGB color, one byte (0-255) per channel -- matches how the TAD
+/// publishes these values. Deliberately not a SwiftUI `Color` or AppKit
+/// `NSColor`: this package has no UI framework dependency, so callers convert
+/// to their platform's color type at the point of use, and MUST specify the
+/// sRGB color space explicitly when doing so -- e.g.
+/// `NSColor(srgbRed: color.red / 255, green: ..., blue: ..., alpha: 1)`.
+/// On a wide-gamut Display P3 Mac, a color literal interpreted in the
+/// display's native color space renders visibly different values than EPA
+/// specified.
+public struct AQIColor: Sendable, Equatable, Codable {
+    public let red: Double
+    public let green: Double
+    public let blue: Double
+
+    public init(red: Double, green: Double, blue: Double) {
+        self.red = red
+        self.green = green
+        self.blue = blue
+    }
+
+    /// Hex string, e.g. "#00E400" -- as published in the TAD.
+    public var hex: String {
+        let r = Int(red)
+        let g = Int(green)
+        let b = Int(blue)
+        return String(format: "#%02X%02X%02X", r, g, b)
+    }
+}

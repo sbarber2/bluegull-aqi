@@ -1102,6 +1102,26 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-10h.2: shared BluegullAQIKit models
+  (`Location`, `PollutantReading`, `AQIReading`, `AQICategory`/`AQIColor`).
+  `PollutantReading` property names match AirNow's JSON keys exactly
+  (including `siteID`'s capitalization) so Codable synthesis needs no manual
+  CodingKeys and there's no chance of a silent field-mapping mismatch;
+  `nowcastAQI` is optional to allow for a response that supplies a raw
+  concentration without a computed AQI (bluegull-aqi-10h.17), though the
+  `ziplatlong` endpoint this project actually uses hasn't been observed to
+  omit it. `AQICategory` is the single shared TAD Table 1/2 mapping (colors
+  specified as a plain `AQIColor` byte-triple, not `Color`/`NSColor`, so the
+  package stays UI-framework-free -- callers must apply the sRGB color space
+  explicitly at the point of use, per the Display-P3 gotcha) and handles
+  `> 500` as `.beyondAQI`, same color/recommendations as Hazardous
+  (bluegull-aqi-10h.16). Deliberately did NOT add a "dominant pollutant"
+  convenience (which pollutant's AQI to headline when several are returned)
+  -- that's a UI-facing decision for whichever task actually renders the
+  number (e.g. `bluegull-aqi-e70.11`'s popover), not something to bake into
+  the shared data model. 15 tests (`swift test`), including boundary tests
+  for every TAD threshold and exact color/hex verification against the
+  table, decoding from a JSON fixture matching AirNow's real response shape.
 - 2026-07-30 — Decided bluegull-aqi-8ef.2: default data-source mode for a fresh
   install is **Service mode** (works immediately, no AirNow key needed), with
   Direct mode available as a settings toggle (`bluegull-aqi-e70.3`, still to be
