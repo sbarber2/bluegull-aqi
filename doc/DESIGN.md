@@ -1102,6 +1102,26 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-10h.3: `AirNowDirectClient` calls
+  AirNow's `current/ziplatlong` endpoint directly (the same endpoint the
+  backend service uses, confirmed in `bluegull-aqi-10h.19`), returning an
+  `AQIReading`. Takes the API key as a parameter rather than reaching into
+  Keychain itself -- keeps the client testable in isolation and decoupled
+  from `bluegull-aqi-10h.5` (not built yet); whatever wires the two together
+  is a later task's job. New `AirNowError` mirrors the Python client's error
+  handling: checks for AirNow's `{"WebServiceError": [...]}` body regardless
+  of HTTP status (AirNow returns some errors, e.g. "no observations for this
+  location," with a 200), and an empty array is valid data, not an error.
+  All 7 unit tests mock the network via a custom `URLProtocol` (no live
+  AirNow traffic in the automated suite, matching the Python client's own
+  approach) -- including one confirming the API key never appears in a
+  thrown error's description. Beyond the mocked tests, also verified live
+  against the real AirNow API end-to-end: temporarily added an executable
+  target calling the real endpoint with the real key (via 1Password),
+  confirmed correct AQI values/categorization/attribution for a real
+  location, then removed the target before committing -- it was a one-off
+  verification tool, not part of the package. 34/34 tests pass via
+  `swift test`.
 - 2026-07-30 — Implemented bluegull-aqi-q9r.14: added realistic, full-shaped
   API Gateway HTTP API (payload format 2.0) event fixtures
   (`tests/fixtures/api_gateway_event*.json`), verified against AWS's own
