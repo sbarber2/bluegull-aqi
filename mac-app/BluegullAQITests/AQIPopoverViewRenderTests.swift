@@ -19,7 +19,22 @@ final class AQIPopoverViewRenderTests: XCTestCase {
 
     @MainActor
     func testRendersWithoutCrashingWithData() {
-        let reading = AQIReading(
+        let reading = sampleReading(reportingAgency: "Bay Area Air District")
+        let image = render(AQIPopoverView(reading: reading))
+        XCTAssertNotNil(image)
+    }
+
+    @MainActor
+    func testRendersWithoutCrashingWhenReportingAgencyIsMissing() {
+        // The tier-1 agency credit is absent, but tier 2 (AttributionCopy.staticCredit)
+        // must never be omitted (bluegull-aqi-10h.15) -- exercises that fallback path.
+        let reading = sampleReading(reportingAgency: nil)
+        let image = render(AQIPopoverView(reading: reading))
+        XCTAssertNotNil(image)
+    }
+
+    private func sampleReading(reportingAgency: String?) -> AQIReading {
+        AQIReading(
             location: Location(latitude: 37.77, longitude: -122.42),
             pollutants: [
                 PollutantReading(
@@ -32,16 +47,13 @@ final class AQIPopoverViewRenderTests: XCTestCase {
                     parameterName: "PM2.5",
                     nowcastAQI: 42,
                     aqiCategoryName: "Good",
-                    reportingAgency: "Bay Area Air District",
+                    reportingAgency: reportingAgency,
                     lookupBehavior: "Closest Reading By Pollutant",
                     consideredMonitors: "All",
                     lookupBoundary: "50 Miles"
                 ),
             ]
         )
-
-        let image = render(AQIPopoverView(reading: reading))
-        XCTAssertNotNil(image)
     }
 
     @MainActor

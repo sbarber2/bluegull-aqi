@@ -5,10 +5,10 @@ import BluegullAQIKit
 /// is clicked (bluegull-aqi-e70.11). A "dumb" presentational view -- takes
 /// whatever reading it's given and renders it; wiring a real, live-fetched
 /// `AQIReading` in is separate tracked work (bluegull-aqi-e70.6/e70.7), not
-/// yet done. Attribution and the preliminary-data disclaimer are
-/// deliberately NOT rendered here -- both are separately tracked
-/// (bluegull-aqi-e70.10, dc2.4) since their exact wording/placement is a
-/// compliance call for Steve to make, not something to invent here.
+/// yet done. The preliminary-data disclaimer is deliberately NOT rendered
+/// here -- separately tracked (bluegull-aqi-dc2.4) since its exact
+/// wording/placement is a compliance call for Steve to make, not something
+/// to invent here. Attribution IS rendered (bluegull-aqi-e70.10).
 struct AQIPopoverView: View {
     let reading: AQIReading?
 
@@ -26,6 +26,8 @@ struct AQIPopoverView: View {
                 }
                 Divider()
                 pollutantList(reading.pollutants)
+                Divider()
+                attributionFooter(headline)
             } else {
                 ContentUnavailableView(
                     "No Air Quality Data",
@@ -79,5 +81,21 @@ struct AQIPopoverView: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+
+    /// Two-tier attribution (bluegull-aqi-e70.10, bluegull-aqi-10h.15):
+    /// credit the specific reporting agency for the headline reading first,
+    /// when AirNow supplied one, then the static AirNow/EPA credit -- always
+    /// shown, never omitted, styled after the airnow.gov precedent (a
+    /// persistent small footer, not a Settings/About screen).
+    private func attributionFooter(_ headline: PollutantReading) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            if let agencyCredit = headline.attributionText {
+                Text(agencyCredit)
+            }
+            Text(AttributionCopy.staticCredit)
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
     }
 }

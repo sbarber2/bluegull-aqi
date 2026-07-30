@@ -1201,6 +1201,32 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-e70.10 (attribution in the menu bar
+  popover). Two-tier attribution per the AirNow Data Exchange Guidelines:
+  tier 1 (specific reporting agency, `PollutantReading.attributionText`,
+  `bluegull-aqi-10h.15`) shown when available; tier 2 (static AirNow/EPA
+  credit) always shown, never omitted -- matches the airnow.gov precedent's
+  own structure (a persistent small footer, checked live 2026-07-28).
+  - New `AttributionCopy.staticCredit` in `BluegullAQIKit`, not the app
+    target -- the widget's tap-to-expand detail view (`bluegull-aqi-mtm.14`)
+    needs the identical tier-2 wording, same rationale as
+    `PollutantCopy`/`NowCastCopy` already living there to prevent copy
+    drift between the two UI targets. Text only, no EPA logo asset (the
+    live precedent uses an "EPA and PARTNERS" logo lockup; reproducing
+    that as an actual logo image wasn't attempted here).
+  - `AQIPopoverView`'s footer credits the *headline* pollutant's reporting
+    agency specifically (the same one driving the displayed AQI number,
+    via `headlinePollutant` from `bluegull-aqi-e70.11`) rather than
+    enumerating every distinct agency across the full pollutant breakdown
+    -- matches airnow.gov's own one-agency-per-location-page precedent;
+    not attempting to solve the (currently theoretical, not observed on
+    live responses) case of different pollutants reporting through
+    different agencies in a single reading.
+  - Added a render test for the fallback path specifically (reporting
+    agency missing -- tier 1 absent, tier 2 alone) alongside the existing
+    empty/populated cases, confirming the "never omit tier 2" rule doesn't
+    silently break. 8/8 app-target tests and 80/80 package tests pass;
+    live app launch clean, no crash.
 - 2026-07-30 — Implemented bluegull-aqi-e70.11 (menu bar popover, `.window`
   style). Confirmed the scope boundary against sibling issues first: `e70.6`
   (the status item itself) and `e70.10`/`dc2.4` (attribution/disclaimer
