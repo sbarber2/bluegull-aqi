@@ -11,7 +11,7 @@ from typing import Optional
 
 import boto3
 
-from bluegull_aqi_service import airnow_client, cache, coverage
+from bluegull_aqi_service import airnow_client, airnow_stub, cache, coverage
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +30,11 @@ def get_aqi(latitude: float, longitude: float) -> dict:
     all if the location is invalid or outside AirNow's coverage area
     (bluegull-aqi-q9r.30) -- rejecting it here, not just in the cache miss
     path, matters because a cache *hit* check itself has a cost at scale.
+
+    On a cache miss for the reserved synthetic load-test coordinate, with
+    AIRNOW_STUB_MODE=1 set, returns canned data instead of calling AirNow --
+    see airnow_stub.py (bluegull-aqi-q9r.20). All other requests are
+    unaffected regardless of that env var.
     """
     coverage.validate_coverage(latitude, longitude)
 
@@ -44,12 +49,19 @@ def get_aqi(latitude: float, longitude: float) -> dict:
         logger.info("AQI lookup for %s served from cache", location_id)
         return {"observations": hit, "cached": True}
 
-    observations = airnow_client.fetch_current_observations(
-        latitude, longitude, _resolve_airnow_api_key()
-    )
+    if airnow_stub.is_stub_request(latitude, longitude):
+        # Skips key resolution entirely -- a load test shouldn't need a real
+        # AirNow key configured just to exercise the stub path.
+        observations = airnow_stub.stub_observations()
+        logger.info("AQI lookup for %s served from stub (load test mode)", location_id)
+    else:
+        observations = airnow_client.fetch_current_observations(
+            latitude, longitude, _resolve_airnow_api_key()
+        )
+        logger.info("AQI lookup for %s fetched from AirNow", location_id)
+
     ttl_seconds = int(os.environ.get("CACHE_TTL_SECONDS", DEFAULT_CACHE_TTL_SECONDS))
     store.put(key, observations, ttl_seconds)
-    logger.info("AQI lookup for %s fetched from AirNow", location_id)
     return {"observations": observations, "cached": False}
 
 

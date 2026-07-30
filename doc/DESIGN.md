@@ -1099,6 +1099,25 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-q9r.20 (AirNow stub/test mode for load
+  testing, a prerequisite for q9r.21's load test suite -- driving concurrent
+  uncached requests at the live AirNow API would burn quota and plausibly
+  violate its terms). New `airnow_stub.py` gates canned data on BOTH an
+  `AIRNOW_STUB_MODE=1` env var AND a reserved, obviously-synthetic coordinate
+  (40.0, -100.0) -- either alone is not enough, so a stage with the env var set
+  can't accidentally serve stub data for a real request, and the reserved
+  coordinate behaves like any other real location when the env var is unset.
+  Deliberately NOT a template.yaml environment variable, so it can't be baked
+  into a deployed stack by a stray parameter-override -- enabling it for an
+  actual load test run is out-of-band and out of this task's scope. Wired into
+  `aqi_lookup.get_aqi()` so stub responses still flow through the real cache
+  read/write path -- only the outbound AirNow HTTP call itself is replaced,
+  and key resolution is skipped entirely for stub requests. Verified live via
+  `make run-local` with `AIRNOW_STUB_MODE=1`: first request is a genuine cache
+  miss served from the stub (log line explicitly distinguishes this from a
+  real AirNow fetch), second is a cache hit; same coordinate without the env
+  var set correctly falls through to a real AirNow call. 42/42 tests pass,
+  pylint 10.00/10.
 - 2026-07-30 — Implemented bluegull-aqi-q9r.31 (cost circuit breakers) and closed
   q9r.17 as a side effect (its remaining scope -- ARM64 architecture, DynamoDB
   on-demand billing -- was already satisfied; it explicitly deferred reserved
