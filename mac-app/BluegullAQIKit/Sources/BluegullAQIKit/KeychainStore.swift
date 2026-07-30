@@ -41,6 +41,20 @@ public protocol KeychainStore: Sendable {
 /// (those explicitly opt out of sync); `kSecAttrAccessibleAfterFirstUnlock`
 /// is used here, the standard choice for a syncable item an app needs
 /// outside of active user interaction.
+///
+/// Reviewed for bluegull-aqi-10h.13:
+/// - Accessibility: `kSecAttrAccessibleAfterFirstUnlock`, not `.always` (a
+///   deprecated, insecure choice that leaves the item readable even while
+///   the device is locked). Correct for a syncable background item.
+/// - Sync: `kSecAttrSynchronizable = true`, confirmed.
+/// - Access group: deliberately NOT set. This key is only ever needed by
+///   the container app (which calls AirNow directly in Direct mode); the
+///   widget extension only reads pre-fetched AQI data from the App Group
+///   cache (`AppGroupCache`, bluegull-aqi-10h.7), never the raw key. With
+///   no `kSecAttrAccessGroup`, the item defaults to being scoped to this
+///   app alone -- the narrowest possible exposure, and correct since
+///   nothing else needs to read it. `ComplianceTests` guards against this
+///   being added later without deliberate reconsideration.
 public struct SystemKeychain: KeychainStore {
     public init() {}
 

@@ -1102,6 +1102,18 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Reviewed bluegull-aqi-10h.13 (Keychain item accessibility and
+  access group): `SystemKeychain`'s accessibility (`kSecAttrAccessibleAfterFirstUnlock`,
+  not the deprecated/insecure `.always`) and sync (`kSecAttrSynchronizable
+  = true`) were already correct from `bluegull-aqi-10h.5`. The access-group
+  question was the real review: concluded no shared `kSecAttrAccessGroup`
+  should exist, since only the container app ever needs the raw AirNow key
+  -- the widget extension only reads pre-fetched AQI data from
+  `AppGroupCache` (`bluegull-aqi-10h.7`), never the key itself. No group
+  means the item defaults to the narrowest possible scope (this app alone).
+  Documented the reasoning in `SystemKeychain`'s doc comment and added a
+  `ComplianceTests` guard so a shared access group can't be added later
+  without deliberately revisiting this conclusion. 62/62 tests pass.
 - 2026-07-30 — Implemented bluegull-aqi-10h.11: `Location.rounded` rounds to
   ~1km precision (2 decimal degrees), deliberately matching the server's own
   `LOCATION_KEY_PRECISION` in `cache.py` exactly -- same grid on both ends

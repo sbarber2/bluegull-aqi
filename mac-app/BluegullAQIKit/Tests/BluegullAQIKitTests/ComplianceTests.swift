@@ -79,6 +79,28 @@ final class ComplianceTests: XCTestCase {
         }
     }
 
+    /// bluegull-aqi-10h.13: `SystemKeychain`'s AirNow-key item deliberately
+    /// has no `kSecAttrAccessGroup` -- only the container app needs this
+    /// key (the widget extension only reads pre-fetched data from
+    /// `AppGroupCache`, never the raw key), so no shared access group
+    /// should exist. Guards against it being added later without
+    /// deliberately reconsidering that review conclusion.
+    func testKeychainItemHasNoSharedAccessGroup() throws {
+        let sourcesDirectory = try Self.sourcesDirectory()
+        let swiftFiles = try Self.swiftFiles(under: sourcesDirectory)
+
+        for fileURL in swiftFiles {
+            let code = try Self.codeOnly(contentsOf: fileURL).lowercased()
+            XCTAssertFalse(
+                code.contains("ksecattraccessgroup"),
+                "\(fileURL.lastPathComponent) references kSecAttrAccessGroup -- bluegull-aqi-10h.13 " +
+                "concluded the AirNow key needs no shared access group, since only the container app " +
+                "reads it. If a real need for one has emerged, update this test and that review " +
+                "deliberately rather than letting it slip in silently."
+            )
+        }
+    }
+
     /// Strips `//` and `///` comment lines before scanning -- this test is
     /// about forbidding actual derivation *code*, not prose that documents
     /// the constraint (which understandably needs to name the very things
