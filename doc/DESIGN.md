@@ -1102,6 +1102,20 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-10h.17: added `ComplianceTests.swift`,
+  a regression guard that scans every `.swift` file under `Sources/` (comments
+  stripped, so the prose that names these very terms to explain the
+  constraint doesn't trip it) for identifiers that would only appear in a
+  client-side AQI derivation (`breakpoint`, `interpolat`, `computeAQI`,
+  `deriveAQI`, `calculateAQI`, etc.) -- the hard constraint that AirNow's AQI
+  values must be displayed exactly as received, never recomputed from a
+  concentration. Verified the guard actually catches a violation (not just
+  that it currently passes) by temporarily injecting a `computeAQI` function,
+  confirming the test failed, then restoring the file. The rest of this
+  constraint was already satisfied by construction from bluegull-aqi-10h.2:
+  `AQICategory.init(aqi:)` only ever consumes AirNow's own `nowcastAQI`, and
+  `PollutantReading` has no concentration/breakpoint field to derive from.
+  16/16 tests pass via `swift test`.
 - 2026-07-30 — Moved the local-dev AirNow key's 1Password item from the
   Personal vault to a dedicated **BlueGull** vault (Steve's own 1Password-side
   move). Updated the `op://Personal/...` reference to `op://BlueGull/...` in
