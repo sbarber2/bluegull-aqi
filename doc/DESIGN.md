@@ -1102,6 +1102,14 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Fixed Dependabot alert #1 (GHSA-6w46-j5rx-g56g / CVE-2025-71176,
+  medium severity): pytest < 9.0.3 has vulnerable `/tmp/pytest-of-{user}`
+  handling on UNIX. Surfaced within minutes of enabling Dependabot security
+  updates (`bluegull-aqi-8ef.12`, same session) -- confirming it actually
+  works. Dev-only dependency (not in the deployed Lambda), but a cheap,
+  low-risk fix: bumped `pytest = "^8.0"` to `"^9.0.3"` in `pyproject.toml`,
+  re-locked (8.4.2 -> 9.1.1). 57/57 tests pass under the new version, pylint
+  10.00/10, `sam validate --lint` clean.
 - 2026-07-30 — Implemented bluegull-aqi-10h.18: `NowCastCopy.headline`
   ("Current Air Quality" -- airnow.gov's own phrasing, verified safe) for UI
   code to use instead of inventing wording that implies an instantaneous
