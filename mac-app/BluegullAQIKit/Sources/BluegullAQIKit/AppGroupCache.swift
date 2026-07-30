@@ -24,6 +24,11 @@ public struct AQICacheEntry: Sendable, Equatable, Codable {
 public protocol SharedCacheStore: Sendable {
     func data(forKey key: String) -> Data?
     func set(_ data: Data?, forKey key: String)
+    /// Every key currently in the store (not just this cache's own entries,
+    /// if the store is shared for other purposes) -- used to bound
+    /// retention (bluegull-aqi-10h.12): `AppGroupCache` filters to its own
+    /// key prefix before acting on the result.
+    func allKeys() -> [String]
 }
 
 /// `UserDefaults(suiteName:)`-backed, for sharing across the container app
@@ -67,12 +72,50 @@ public struct UserDefaultsCacheStore: SharedCacheStore {
             defaults.removeObject(forKey: key)
         }
     }
+
+    public func allKeys() -> [String] {
+        Array(defaults.dictionaryRepresentation().keys)
+    }
 }
 
 /// Location-keyed AQI cache shared between the container app and widget
 /// extension via an App Group (bluegull-aqi-10h.7). 1-hour default TTL.
+///
+/// Retention is bounded two ways (bluegull-aqi-10h.12) -- the container app
+/// only writes this cache right after a successful fetch, which is also
+/// the cheapest, most natural place to sweep it, rather than needing
+/// separate scheduled maintenance:
+/// 1. Expired entries are deleted, not just skipped -- both reactively (a
+///    `get()` that finds an expired entry removes it) and proactively
+///    (every `put()` sweeps every entry, not just the one being written).
+/// 2. A hard cap on entry count (`maxRetainedEntries`): if still over the
+///    cap after sweeping expired entries, the oldest-by-`fetchedAt` entries
+///    are evicted until back under it. TTL alone only bounds *age*, not
+///    *count* -- someone who used current-location mode while traveling
+///    (or resolved many one-off addresses) could otherwise accumulate
+///    entries for locations they never revisit, and so never trigger the
+///    reactive per-key cleanup that only fires on a `get()` for that
+///    specific key.
+///
+/// File protection: macOS has no per-file Data Protection classes the way
+/// iOS does (`NSFileProtectionKey` et al.) -- confirmed against Apple's own
+/// Security Guide, which describes Class A on macOS as backed by the
+/// FileVault *volume* key rather than a per-file key, and Class D as simply
+/// "Not supported in macOS." There's no per-file protection-class API call
+/// for this type to make; the actual data-at-rest protection this depends
+/// on is FileVault (a system-level, user-controlled setting), not
+/// something this package can configure. Bounding what's stored and for
+/// how long -- the retention work above -- is the real, actionable
+/// mitigation available at this layer.
 public struct AppGroupCache: Sendable {
     public static let defaultTTL: TimeInterval = 3600
+
+    /// Deliberately generous relative to the realistic use case (current
+    /// location plus a handful of pinned favorites, bluegull-aqi-e70.5) --
+    /// a real bound, not effectively unlimited.
+    public static let maxRetainedEntries = 10
+
+    private static let keyPrefix = "aqi-cache-"
 
     private let store: SharedCacheStore
 
@@ -80,11 +123,20 @@ public struct AppGroupCache: Sendable {
         self.store = store
     }
 
-    /// nil on a miss -- absent, undecodable, or expired.
+    /// nil on a miss -- absent, undecodable, or expired. An expired entry
+    /// is deleted here too, not just treated as a miss -- see the type's
+    /// doc comment on retention bounding.
     public func get(for location: Location, now: Date = Date()) -> AQIReading? {
-        guard let data = store.data(forKey: Self.key(for: location)) else { return nil }
-        guard let entry = try? JSONDecoder().decode(AQICacheEntry.self, from: data) else { return nil }
-        guard !entry.isExpired(now: now) else { return nil }
+        let key = Self.key(for: location)
+        guard let data = store.data(forKey: key) else { return nil }
+        guard let entry = try? JSONDecoder().decode(AQICacheEntry.self, from: data) else {
+            store.set(nil, forKey: key)
+            return nil
+        }
+        guard !entry.isExpired(now: now) else {
+            store.set(nil, forKey: key)
+            return nil
+        }
         return entry.reading
     }
 
@@ -92,13 +144,38 @@ public struct AppGroupCache: Sendable {
         let entry = AQICacheEntry(reading: reading, fetchedAt: now, expiresAt: now.addingTimeInterval(ttl))
         guard let data = try? JSONEncoder().encode(entry) else { return }
         store.set(data, forKey: Self.key(for: location))
+        pruneIfNeeded(now: now)
     }
 
     public func remove(for location: Location) {
         store.set(nil, forKey: Self.key(for: location))
     }
 
+    private func pruneIfNeeded(now: Date) {
+        let myKeys = store.allKeys().filter { $0.hasPrefix(Self.keyPrefix) }
+        var live: [(key: String, entry: AQICacheEntry)] = []
+
+        for key in myKeys {
+            guard let data = store.data(forKey: key) else { continue }
+            guard let entry = try? JSONDecoder().decode(AQICacheEntry.self, from: data) else {
+                store.set(nil, forKey: key)  // undecodable junk -- drop it
+                continue
+            }
+            if entry.isExpired(now: now) {
+                store.set(nil, forKey: key)
+            } else {
+                live.append((key, entry))
+            }
+        }
+
+        guard live.count > Self.maxRetainedEntries else { return }
+        let oldestFirst = live.sorted { $0.entry.fetchedAt < $1.entry.fetchedAt }
+        for stale in oldestFirst.prefix(live.count - Self.maxRetainedEntries) {
+            store.set(nil, forKey: stale.key)
+        }
+    }
+
     private static func key(for location: Location) -> String {
-        "aqi-cache-\(location.latitude)-\(location.longitude)"
+        "\(keyPrefix)\(location.latitude)-\(location.longitude)"
     }
 }

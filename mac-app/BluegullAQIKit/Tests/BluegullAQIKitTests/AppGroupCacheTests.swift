@@ -70,4 +70,68 @@ final class AppGroupCacheTests: XCTestCase {
 
         XCTAssertNil(cache.get(for: location))
     }
+
+    // MARK: - Retention bounding (bluegull-aqi-10h.12)
+
+    func testExpiredEntryIsActuallyDeletedNotJustSkippedOnGet() {
+        let store = InMemorySharedCacheStore()
+        let cache = AppGroupCache(store: store)
+        let now = Date()
+        cache.put(reading, for: location, ttl: 1, now: now)
+
+        XCTAssertNil(cache.get(for: location, now: now.addingTimeInterval(2)))
+        XCTAssertTrue(store.allKeys().isEmpty, "expired entry should have been deleted, not just skipped")
+    }
+
+    func testExpiredEntriesAreSweptOnEveryPutNotJustTheOneBeingWritten() {
+        let store = InMemorySharedCacheStore()
+        let cache = AppGroupCache(store: store)
+        let now = Date()
+        let staleLocation = Location(latitude: 51.5074, longitude: -0.1278)
+
+        cache.put(reading, for: staleLocation, ttl: 1, now: now)
+        XCTAssertEqual(store.allKeys().count, 1)
+
+        // Writing an entry for a DIFFERENT location, well after the first
+        // one expired, should still sweep the first one away.
+        let later = now.addingTimeInterval(10)
+        cache.put(reading, for: location, ttl: AppGroupCache.defaultTTL, now: later)
+
+        XCTAssertEqual(store.allKeys().count, 1)
+        XCTAssertNil(cache.get(for: staleLocation, now: later))
+        XCTAssertNotNil(cache.get(for: location, now: later))
+    }
+
+    func testEntryCountIsBoundedEvictingOldestFirst() {
+        let store = InMemorySharedCacheStore()
+        let cache = AppGroupCache(store: store)
+        let now = Date()
+
+        // One more location than the cap allows, each written at a
+        // distinct, increasing timestamp so eviction order is unambiguous.
+        let locations = (0...AppGroupCache.maxRetainedEntries).map {
+            Location(latitude: Double($0), longitude: Double($0))
+        }
+        for (index, loc) in locations.enumerated() {
+            cache.put(reading, for: loc, ttl: AppGroupCache.defaultTTL, now: now.addingTimeInterval(Double(index)))
+        }
+
+        XCTAssertEqual(store.allKeys().count, AppGroupCache.maxRetainedEntries)
+        // The very first (oldest) location written should have been evicted...
+        XCTAssertNil(cache.get(for: locations[0], now: now))
+        // ...but the most recently written one should still be present.
+        XCTAssertNotNil(cache.get(for: locations.last!, now: now))
+    }
+
+    func testPruningNeverTouchesKeysOutsideItsOwnPrefix() {
+        // A store shared for other purposes shouldn't have unrelated data
+        // swept away by AppGroupCache's own housekeeping.
+        let store = InMemorySharedCacheStore()
+        store.set(Data("unrelated".utf8), forKey: "some-other-feature-key")
+        let cache = AppGroupCache(store: store)
+
+        cache.put(reading, for: location)
+
+        XCTAssertEqual(store.data(forKey: "some-other-feature-key"), Data("unrelated".utf8))
+    }
 }

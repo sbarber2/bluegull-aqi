@@ -13,4 +13,8 @@ final class InMemorySharedCacheStore: SharedCacheStore, @unchecked Sendable {
     func set(_ data: Data?, forKey key: String) {
         storage[key] = data
     }
+
+    func allKeys() -> [String] {
+        Array(storage.keys)
+    }
 }

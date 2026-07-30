@@ -46,6 +46,46 @@ final class UserDefaultsCacheStoreTests: XCTestCase {
         XCTAssertNil(store.data(forKey: "test-key"))
     }
 
+    func testAllKeysReflectsWhatWasSet() throws {
+        let store = try XCTUnwrap(UserDefaultsCacheStore(suiteName: testSuiteName))
+        store.set(Data("a".utf8), forKey: "aqi-cache-key-a")
+        store.set(Data("b".utf8), forKey: "aqi-cache-key-b")
+
+        let keys = Set(store.allKeys())
+        XCTAssertTrue(keys.isSuperset(of: ["aqi-cache-key-a", "aqi-cache-key-b"]))
+    }
+
+    func testRetentionBoundingWorksAgainstRealUserDefaults() throws {
+        // bluegull-aqi-10h.12: the fake-backed tests in AppGroupCacheTests
+        // prove the *logic*; this proves allKeys()-driven pruning also
+        // works against the real UserDefaults store it'll actually run
+        // against, not just the fake.
+        let store = try XCTUnwrap(UserDefaultsCacheStore(suiteName: testSuiteName))
+        let cache = AppGroupCache(store: store)
+        let now = Date()
+        let reading = AQIReading(
+            location: Location(latitude: 0, longitude: 0),
+            pollutants: [
+                PollutantReading(
+                    dateObserved: "2026-07-29", hourObserved: "14:00", localTimeZone: "GMT",
+                    reportingAreaName: "Test", siteID: "1", siteName: "Test",
+                    parameterName: "PM2.5", nowcastAQI: 10, aqiCategoryName: "Good",
+                    reportingAgency: "Test Agency", lookupBehavior: "Closest Reading By Pollutant",
+                    consideredMonitors: "All", lookupBoundary: "50 Miles"
+                ),
+            ]
+        )
+
+        for index in 0...AppGroupCache.maxRetainedEntries {
+            let location = Location(latitude: Double(index), longitude: Double(index))
+            cache.put(reading, for: location, ttl: AppGroupCache.defaultTTL, now: now.addingTimeInterval(Double(index)))
+        }
+
+        let remainingKeys = store.allKeys().filter { $0.hasPrefix("aqi-cache-") }
+        XCTAssertEqual(remainingKeys.count, AppGroupCache.maxRetainedEntries)
+        XCTAssertNil(cache.get(for: Location(latitude: 0, longitude: 0), now: now))
+    }
+
     func testAppGroupCacheEndToEndAgainstRealUserDefaults() throws {
         let store = try XCTUnwrap(UserDefaultsCacheStore(suiteName: testSuiteName))
         let cache = AppGroupCache(store: store)

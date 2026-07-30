@@ -1102,6 +1102,38 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-10h.12 (bound App Group cache
+  retention and review file protection). Found a real gap first: the
+  original `AppGroupCache.get()` (from `bluegull-aqi-10h.7`) treated an
+  expired entry as a miss but never actually deleted it, so stale entries
+  accumulated forever -- and since cleanup only happened reactively on a
+  `get()` for that exact key, a location the user never revisits (e.g.
+  current-location mode while traveling, or one-off resolved addresses)
+  would never get cleaned up at all. Fixed with two bounding mechanisms:
+  - Expired entries are now deleted, not just skipped -- reactively on
+    `get()`, and proactively across *every* stored entry on each `put()`
+    (the cache is only ever written right after a successful fetch, which
+    is also the natural, cheap place to sweep it).
+  - A hard cap on entry count (`maxRetainedEntries = 10`, generous relative
+    to the realistic use case of current-location plus a handful of pinned
+    favorites): if still over the cap after sweeping expired entries, the
+    oldest-by-`fetchedAt` are evicted. TTL alone only bounds *age*, not
+    *count*.
+  - `SharedCacheStore` gained `allKeys()` so `AppGroupCache` can enumerate
+    and sweep its own entries (filtered by its `aqi-cache-` prefix, so a
+    store shared for other purposes is left alone).
+  - File protection: verified against Apple's own Security Guide that
+    macOS has no per-file Data Protection classes the way iOS does --
+    Class A on macOS is backed by the FileVault *volume* key, not a
+    per-file key, and Class D ("No Protection") is "Not supported in
+    macOS." There's no per-file protection-class API call to make here;
+    the actual data-at-rest protection this depends on is FileVault
+    (system-level, user-controlled), not something this package configures.
+    Documented this conclusion directly in `AppGroupCache`'s doc comment
+    rather than leaving it silently unaddressed.
+  - Retention bounding verified against both the in-memory fake (7 new
+    tests) and the real `UserDefaults` API (2 new tests) -- not just the
+    fake, matching this cache's existing test approach. 68/68 tests pass.
 - 2026-07-30 — Reviewed bluegull-aqi-10h.13 (Keychain item accessibility and
   access group): `SystemKeychain`'s accessibility (`kSecAttrAccessibleAfterFirstUnlock`,
   not the deprecated/insecure `.always`) and sync (`kSecAttrSynchronizable
