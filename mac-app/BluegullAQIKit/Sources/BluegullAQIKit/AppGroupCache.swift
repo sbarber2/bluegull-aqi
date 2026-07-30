@@ -151,6 +151,39 @@ public struct AppGroupCache: Sendable {
         store.set(nil, forKey: Self.key(for: location))
     }
 
+    /// The most recently fetched, still-valid cached reading across every
+    /// location -- used by the widget's `TimelineProvider`
+    /// (bluegull-aqi-mtm.2) before per-instance location configuration
+    /// exists (bluegull-aqi-mtm.3, App Intents). Once that lands, a widget
+    /// instance configured for a specific pinned location should prefer
+    /// `get(for:)` with that location instead of this.
+    ///
+    /// Same expired-entry cleanup as `get()` -- deletes what it finds
+    /// expired along the way, not just skips it -- for the same retention-
+    /// bounding reason (bluegull-aqi-10h.12). nil if nothing is cached, or
+    /// everything cached has expired.
+    public func mostRecentEntry(now: Date = Date()) -> AQIReading? {
+        let myKeys = store.allKeys().filter { $0.hasPrefix(Self.keyPrefix) }
+        var newest: AQICacheEntry?
+
+        for key in myKeys {
+            guard let data = store.data(forKey: key) else { continue }
+            guard let entry = try? JSONDecoder().decode(AQICacheEntry.self, from: data) else {
+                store.set(nil, forKey: key)
+                continue
+            }
+            guard !entry.isExpired(now: now) else {
+                store.set(nil, forKey: key)
+                continue
+            }
+            if newest == nil || entry.fetchedAt > newest!.fetchedAt {
+                newest = entry
+            }
+        }
+
+        return newest?.reading
+    }
+
     private func pruneIfNeeded(now: Date) {
         let myKeys = store.allKeys().filter { $0.hasPrefix(Self.keyPrefix) }
         var live: [(key: String, entry: AQICacheEntry)] = []

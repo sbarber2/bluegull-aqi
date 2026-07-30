@@ -123,6 +123,37 @@ final class AppGroupCacheTests: XCTestCase {
         XCTAssertNotNil(cache.get(for: locations.last!, now: now))
     }
 
+    // MARK: - mostRecentEntry (bluegull-aqi-mtm.2)
+
+    func testMostRecentEntryReturnsNilWhenNothingCached() {
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        XCTAssertNil(cache.mostRecentEntry())
+    }
+
+    func testMostRecentEntryPicksTheNewestAcrossDifferentLocations() {
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        let now = Date()
+        let olderLocation = Location(latitude: 40.7128, longitude: -74.0060)
+        let newerReading = AQIReading(location: location, pollutants: reading.pollutants)
+
+        cache.put(reading, for: olderLocation, now: now)
+        cache.put(newerReading, for: location, now: now.addingTimeInterval(10))
+
+        XCTAssertEqual(cache.mostRecentEntry(now: now.addingTimeInterval(10)), newerReading)
+    }
+
+    func testMostRecentEntryExcludesExpiredEntriesAndDeletesThem() {
+        let store = InMemorySharedCacheStore()
+        let cache = AppGroupCache(store: store)
+        let now = Date()
+
+        cache.put(reading, for: location, ttl: 1, now: now)
+        let afterExpiry = now.addingTimeInterval(2)
+
+        XCTAssertNil(cache.mostRecentEntry(now: afterExpiry))
+        XCTAssertTrue(store.allKeys().isEmpty, "expired entry should have been deleted, not just skipped")
+    }
+
     func testPruningNeverTouchesKeysOutsideItsOwnPrefix() {
         // A store shared for other purposes shouldn't have unrelated data
         // swept away by AppGroupCache's own housekeeping.

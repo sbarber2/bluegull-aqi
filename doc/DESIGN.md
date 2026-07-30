@@ -1201,6 +1201,40 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-mtm.2 (widget `TimelineProvider`
+  reading the App Group cache). Real logic now, not the `mtm.1` placeholder.
+  - Filled a real gap: `AppGroupCache` only had `get(for: Location)`,
+    keyed to one specific location -- but there's no per-instance
+    location configuration yet (`mtm.3`, App Intents, still open), so the
+    provider has no specific location to ask for. Added
+    `AppGroupCache.mostRecentEntry()` (the newest still-valid cached
+    reading across every location), mirroring `get()`'s expired-entry
+    cleanup for consistency with the existing retention-bounding design
+    (`10h.12`). Once `mtm.3` lands, a configured instance should prefer
+    `get(for:)` with its own pinned location instead. 3 new package tests;
+    83/83 pass.
+  - The provider's reload policy uses `RefreshScheduler.nextRefreshDate()`
+    (built in `10h.10` for exactly this) rather than `.never`, which the
+    `mtm.1` placeholder used -- a `TimelineProvider` isn't actually
+    correct without a real reload policy, and the scheduler already
+    existed purpose-built for it.
+  - If the App Group suite can't be opened, degrades to "no data to show"
+    (same state as a genuine cache miss) rather than crashing -- a
+    deliberate, narrow divergence from `UserDefaultsCacheStore`'s own
+    "fail loudly, never silently substitute `.standard`" principle: this
+    isn't substituting a different data source, it's treating "cache
+    unavailable" as an already-modeled empty state, and a widget extension
+    crash is disruptive system-wide in a way a container-app failure isn't.
+  - Deliberately did NOT write `TimelineProvider`-specific unit tests here
+    -- `bluegull-aqi-mtm.7` ("Add TimelineProvider unit tests using
+    fixture App Group cache state") is its own separately tracked,
+    dependent issue; duplicating that scope now would preempt work that's
+    deliberately split out. The view itself also stays an unchanged
+    placeholder (`entry.reading` now genuinely flows through, but
+    rendering it is `mtm.4`/`mtm.5`/`mtm.6`'s job, not this one's).
+    Verified via build + the full test suite + a clean container-app
+    launch with the extension embedded (a widget extension can't be
+    launched standalone to verify directly).
 - 2026-07-30 — Implemented bluegull-aqi-mtm.1 (scaffold the WidgetKit
   extension target). Second real Xcode target, alongside the container
   app -- `mac-app/project.yml` now has a `BluegullAQIWidget` `app-extension`
