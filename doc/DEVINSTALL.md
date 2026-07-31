@@ -8,30 +8,37 @@ entirely from your own Mac, with no AWS dependency, using **Direct mode**
 
 ## Install / run
 
-1. **Open the project in Xcode:**
+```bash
+make install
+```
 
-   ```bash
-   open mac-app/BluegullAQI.xcodeproj
-   ```
+Builds a real, signed Debug build (App Sandbox needs an actual signature
+to launch at all — this is not the same as `make test-swift`'s
+`CODE_SIGNING_ALLOWED=NO` build) and launches it: the command-line
+equivalent of opening the project in Xcode and pressing Cmd+R.
 
-   It's already generated and committed — no need to run `xcodegen`
-   first unless you've edited `mac-app/project.yml`.
+This needs Xcode signed into the Apple ID that registered the
+`solutions.bluegull.aqi` bundle IDs and App Group (`bluegull-aqi-8ef.5`).
+If it fails with a signing/entitlements error, open the project once in
+Xcode to resolve the team interactively, then retry:
 
-2. **Make sure Xcode is signed into the right Apple ID** — the one used
-   to register the `solutions.bluegull.aqi` bundle IDs and App Group
-   (`bluegull-aqi-8ef.5`). Xcode → Settings → Accounts. Signing is
-   `Automatic`, and this app uses App Sandbox + App Groups, so it needs to
-   actually sign successfully to launch at all.
+```bash
+open mac-app/BluegullAQI.xcodeproj
+```
 
-3. **Select the `BluegullAQI` scheme** (the default) and press **Cmd+R**.
+Select the `BluegullAQI` scheme, check Signing & Capabilities on both the
+`BluegullAQI` and `BluegullAQIWidget` targets, and press Cmd+R once from
+there. After that, `make install` should work directly.
 
-4. **Look in the menu bar, not a window** — it's `LSUIElement: true` (no
+Once it's running:
+
+1. **Look in the menu bar, not a window** — it's `LSUIElement: true` (no
    Dock icon, no main window, by design). You'll see either a generic AQI
    icon (no data yet) or, once it has a reading, a colored dot + number.
 
-5. **Grant location access** when macOS prompts you.
+2. **Grant location access** when macOS prompts you.
 
-6. **Switch to Direct mode**: click the menu bar icon → gear icon →
+3. **Switch to Direct mode**: click the menu bar icon → gear icon →
    Settings → "Data Source" → **Direct (use my own AirNow key)** → paste
    in your AirNow API key → Save. Service mode is still the default and
    won't work yet.
@@ -46,50 +53,39 @@ and the popover.
 
 ## Uninstall (leave no trace)
 
-App Sandbox writes to a few places macOS doesn't clean up automatically
-when you just delete the app bundle.
+```bash
+make uninstall
+```
 
-1. **Remove the widget from your desktop first**, if you added one —
-   right-click it → Remove Widget. Otherwise it can dangle after the host
-   app is gone.
+Quits the app, deletes the DerivedData build, clears the data-source-mode
+preference and the App Group container (AQI cache, pinned locations,
+refresh-schedule state), and resets the location permission grant. App
+Sandbox writes to all of these outside the app bundle itself, and macOS
+doesn't clean them up just because the app bundle is gone.
 
-2. **Quit the app.** No Dock icon — quit from the menu bar icon, or stop
-   it from Xcode if you're running it via Cmd+R. It's not a login item
-   (nothing registers one), so it won't relaunch itself.
+Two things it can't do:
 
-3. **Delete the app bundle:**
-   - If running via Xcode (Cmd+R), it lives in DerivedData, not
-     `/Applications` — delete the whole build folder:
-     `~/Library/Developer/Xcode/DerivedData/BluegullAQI-*`
-   - If you archived/exported it to `/Applications`, drag it to Trash and
-     empty Trash.
+- **Reliably clear the Keychain item.** The `security` CLI doesn't
+  consistently target iCloud-synchronizable items the way
+  `SecItemAdd`'s `kSecAttrSynchronizable` does — `make uninstall` still
+  attempts it, but verify afterward in Keychain Access.app (search
+  `solutions.bluegull.aqi`). This item is the one that matters most to
+  actually clear, since it's iCloud-synced and would otherwise linger
+  across your other Macs — easiest to clear it from the app's own
+  Settings ("Clear" next to the AirNow API key) *before* running
+  `make uninstall`.
+- **Remove a widget placed on your desktop.** No CLI for that — right-click
+  it → Remove Widget, manually, before or after running `make uninstall`.
 
-4. **Clear the Keychain item** — this is the one that matters most, since
-   it's iCloud-synced and would otherwise linger across your other Macs.
-   Easiest: while the app still exists, open Settings → "Clear" next to
-   the AirNow API key, *before* deleting the app bundle. If you've
-   already deleted the app: open Keychain Access.app, search
-   `solutions.bluegull.aqi`, delete the item you find there.
+Manual equivalent, if you'd rather run the steps individually or the app
+was built outside `make install` (e.g. archived/exported to
+`/Applications` instead of left in DerivedData):
 
-5. **Delete stored preferences and cache:**
-
-   ```bash
-   defaults delete solutions.bluegull.aqi 2>/dev/null
-   rm -rf ~/Library/Group\ Containers/group.solutions.bluegull.aqi
-   ```
-
-   The first clears your data-source mode setting; the second clears the
-   App Group container (AQI cache, pinned locations, refresh-schedule
-   state) shared between the app and widget.
-
-6. **Reset the location permission grant:**
-
-   ```bash
-   tccutil reset Location solutions.bluegull.aqi
-   ```
-
-   macOS's TCC permission database isn't touched by deleting the app
-   itself — this explicitly revokes the grant.
-
-That covers everything the code actually writes — no other files, no
-other Keychain items, nothing else on disk.
+```bash
+pkill -x BluegullAQI
+rm -rf ~/Library/Developer/Xcode/DerivedData/BluegullAQI-*   # or drag the /Applications copy to Trash
+security delete-generic-password -s solutions.bluegull.aqi.airnow-api-key -a airnow-api-key
+defaults delete solutions.bluegull.aqi
+rm -rf ~/Library/Group\ Containers/group.solutions.bluegull.aqi
+tccutil reset Location solutions.bluegull.aqi
+```
