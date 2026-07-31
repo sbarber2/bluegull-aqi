@@ -12,6 +12,12 @@ import SwiftUI
 /// `.sheet()` -- see `AQIPopoverView`'s doc comment on why that didn't
 /// work reliably. `dismissWindow`, not the sheet-specific `dismiss`
 /// action, closes it.
+///
+/// Sizing: the window's own `.windowResizability(.contentSize)` is what
+/// makes it fit this view's ideal size -- deliberately no `.fixedSize()`
+/// here too. The two fighting over sizing authority is exactly what
+/// triggered a real "already being laid out" AppKit recursion warning in
+/// Steve's first interactive run of the `Window`-based version.
 struct SettingsView: View {
     @Environment(\.dismissWindow) private var dismissWindow
 
@@ -33,7 +39,6 @@ struct SettingsView: View {
         }
         .padding()
         .frame(width: 360)
-        .fixedSize(horizontal: false, vertical: true)
         .accessibilityIdentifier("settingsView")
     }
 }
