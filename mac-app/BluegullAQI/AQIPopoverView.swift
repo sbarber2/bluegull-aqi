@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import BluegullAQIKit
 
@@ -55,6 +56,19 @@ struct AQIPopoverView: View {
                     description: Text("BlueGull AQI hasn't fetched a reading yet.")
                 )
             }
+
+            // LSUIElement (menu bar-only, bluegull-aqi-e70.1) means no Dock
+            // icon and no standard app menu -- without this, quitting
+            // needs Activity Monitor or a terminal `pkill`. Found the hard
+            // way: this genuinely didn't exist until Steve asked, having
+            // just hit exactly that dead end.
+            Divider()
+            Button("Quit BlueGull AQI") {
+                NSApp.terminate(nil)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .accessibilityIdentifier("quitButton")
         }
         .padding()
         .frame(width: 300)
