@@ -1,0 +1,61 @@
+# Repo-root test orchestration (bluegull-aqi-mtm.13), following Plant-
+# Tracer's Makefile idiom: everything runnable from a bash command line, no
+# Xcode GUI required. `service/Makefile` already covers the Python side in
+# detail (poetry, DynamoDB Local, SAM); this delegates to it rather than
+# duplicating it.
+.PHONY: test test-swift test-ui test-service snapshots record-snapshots
+
+MAC_APP_DIR := mac-app
+SERVICE_DIR := service
+SNAPSHOT_SCRATCH_DIR := /tmp/bluegull-widget-snapshots
+
+# Everything except test-ui -- see that target's own comment for why it's
+# not part of the default run.
+test: test-swift test-service
+
+# Full BluegullAQI scheme (container app + widget extension) plus the
+# BluegullAQIKit Swift package (small/medium/large widget layouts,
+# snapshot regression tests, and everything else in BluegullAQIKitTests /
+# BluegullAQIWidgetViewsTests) -- unsigned, so this needs no Apple
+# Developer account or real device.
+test-swift:
+	cd $(MAC_APP_DIR) && xcodegen generate
+	cd $(MAC_APP_DIR) && xcodebuild build -scheme BluegullAQI -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
+	cd $(MAC_APP_DIR) && xcodebuild test -scheme BluegullAQI -destination 'platform=macOS' -only-testing:BluegullAQITests CODE_SIGNING_ALLOWED=NO
+	cd $(MAC_APP_DIR)/BluegullAQIKit && swift test
+
+# Separate from `test-swift`/`test` on purpose -- bluegull-aqi-e70.9 found
+# XCUITest's runner needs a logged-in GUI session with Accessibility/
+# Automation TCC permission granted to the process running `xcodebuild
+# test`, which a headless/CI-style environment doesn't have (confirmed via
+# a real, diagnosed 380-second failure, not a guess). Folding this into the
+# default `make test` would make it hang or fail somewhere that can't grant
+# that permission -- run this deliberately, from a real interactive session.
+test-ui:
+	cd $(MAC_APP_DIR) && xcodegen generate
+	cd $(MAC_APP_DIR) && xcodebuild test -scheme BluegullAQI -destination 'platform=macOS' -only-testing:BluegullAQIUITests CODE_SIGNING_ALLOWED=NO
+
+# The service-side pytest suite -- delegates to service/Makefile, which
+# owns the DynamoDB Local fixture lifecycle (downloads its own jar on
+# demand; needs `java`, not Docker).
+test-service:
+	$(MAKE) -C $(SERVICE_DIR) pytest
+
+# Renders the widget's small/medium/large/no-data fixtures to PNGs for
+# direct visual inspection (bluegull-aqi-mtm.10) -- a scratch directory,
+# NOT the committed golden images `record-snapshots` updates below.
+snapshots:
+	mkdir -p $(SNAPSHOT_SCRATCH_DIR)
+	cd $(MAC_APP_DIR)/BluegullAQIKit && swift run WidgetRenderHarness $(SNAPSHOT_SCRATCH_DIR)
+	@echo "Rendered widget snapshots to $(SNAPSHOT_SCRATCH_DIR)"
+
+# Re-records the golden PNGs the snapshot regression tests compare against
+# (bluegull-aqi-mtm.11). Only run this after confirming a rendering change
+# is actually intentional -- review the resulting diff under
+# mac-app/BluegullAQIKit/Tests/BluegullAQIWidgetViewsTests/__Snapshots__/
+# before committing it. Recording itself always reports failures (that's
+# how it flags "these are new, go look at them," not a real problem) --
+# the `|| true` keeps that from failing the make invocation.
+record-snapshots:
+	cd $(MAC_APP_DIR)/BluegullAQIKit && RECORD_SNAPSHOTS=1 swift test --filter BluegullAQIWidgetSnapshotTests || true
+	@echo "Golden images re-recorded -- review the diff before committing."

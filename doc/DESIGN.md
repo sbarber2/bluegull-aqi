@@ -1201,6 +1201,48 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-mtm.13 (Makefile targets wrapping
+  the test suites), following Plant-Tracer's Makefile idiom: everything
+  runnable from a bash command line, no Xcode GUI needed. New repo-root
+  `Makefile` (`service/Makefile` already existed and covers the Python
+  side in detail -- this delegates to it via `$(MAKE) -C service pytest`
+  rather than duplicating it):
+  - `make test-swift` -- `xcodegen generate` + full `BluegullAQI` scheme
+    build/test (`BluegullAQITests`, unsigned) + `swift test` for the
+    `BluegullAQIKit` package (`BluegullAQIKitTests` +
+    `BluegullAQIWidgetViewsTests`, 125 tests total).
+  - `make test-ui` -- kept deliberately separate from `test`/`test-swift`,
+    not folded in: `bluegull-aqi-e70.9` found (with a real, diagnosed
+    380-second failure, not a guess) that `BluegullAQIUITests`' XCUITest
+    runner needs a logged-in GUI session with Accessibility/Automation TCC
+    permission that a headless/CI-style environment doesn't have. Folding
+    it into the default target would make `make test` hang or fail
+    somewhere that can't grant that permission.
+  - `make test-service` -- delegates to `service/Makefile`'s `pytest`
+    target (68 tests, DynamoDB Local via a downloaded jar + `java`, no
+    Docker needed).
+  - `make snapshots` -- runs `mtm.10`'s `WidgetRenderHarness` to a scratch
+    directory (`/tmp/bluegull-widget-snapshots`) for visual inspection,
+    explicitly NOT touching the committed golden images.
+  - `make record-snapshots` -- re-records `mtm.11`'s golden PNGs
+    (`RECORD_SNAPSHOTS=1 swift test --filter
+    BluegullAQIWidgetSnapshotTests`); documented as needing a manual diff
+    review before committing, since re-recording always reports the
+    (expected) "recorded new golden image" failures.
+  - `make test` -- `test-swift` + `test-service` (not `test-ui`, per
+    above).
+  - Verified every target actually runs successfully here: `test-swift`
+    (125 Swift tests passing), `snapshots` (6 PNGs written to the scratch
+    dir), `record-snapshots` (re-recorded golden images landed byte-close
+    but not byte-identical to the committed ones -- expected, and exactly
+    why `mtm.11` already switched the comparison to pixel-tolerance rather
+    than exact bytes; reverted the working tree back to the committed
+    goldens afterward since the re-record was only to verify the target
+    itself, not an intentional visual change), `test-service` (68 pytest
+    tests passing), and the combined `test` target end-to-end. `test-ui`
+    intentionally not run here, consistent with `e70.9`'s already-
+    documented environment limitation.
+
 - 2026-07-30 — Implemented bluegull-aqi-mtm.11 (widget snapshot regression
   tests with golden PNGs), and along the way found and fixed a real
   production gap in the widget views:
