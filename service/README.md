@@ -54,5 +54,11 @@ sam deploy --config-env dev   # or stage / prod
 ```
 
 CI/CD deploy (`.github/workflows/deploy.yml-OFF`, `bluegull-aqi-q9r.8`) is
-written but disabled until `bluegull-aqi-q9r.29` (OIDC role) exists and the
-first manual dev deploy (`bluegull-aqi-q9r.10`) has happened.
+written but disabled until the first manual dev deploy
+(`bluegull-aqi-q9r.10`) has happened -- the stack must exist before CI ever
+touches it. The OIDC IAM role it assumes (`bluegull-aqi-q9r.29`) is already
+live: `arn:aws:iam::843088391598:role/bluegull-aqi-github-deploy`, trust
+policy and permissions in `service/iam/`. dev and stage deploy from any
+branch/ref; prod deploys ONLY from a `vX.Y.Z` release tag (`gh release
+create vX.Y.Z`), enforced both in the workflow and by a GitHub Environment
+deployment-tag policy on `prod`.

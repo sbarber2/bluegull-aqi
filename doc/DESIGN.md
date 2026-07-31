@@ -288,7 +288,23 @@ this hasn't been explicitly confirmed yet.
   (`deploy-dev.yml-OFF`, `deploy-demo.yml-OFF`, `deploy-production.yml-OFF`) —
   starting the same way here: build + test on every push, deploy to any stack gated
   behind a manual trigger (`workflow_dispatch`) or tag push, not auto-deployed on
-  merge, until the service is proven out.
+  merge, until the service is proven out. Deploy credentials use GitHub Actions
+  OIDC role assumption (`bluegull-aqi-q9r.29`) — no long-lived AWS keys in GitHub
+  secrets.
+- **Release policy** (decided 2026-07-31, `bluegull-aqi-q9r.29`): **dev and stage
+  deploy from any branch/ref** — they're pre-release testing grounds, not
+  release-controlled. **prod deploys ONLY from a semver release tag**
+  (`vX.Y.Z`, cut via `gh release create vX.Y.Z`), never from a branch HEAD directly
+  — this is what makes rollback well-defined: re-dispatch the deploy workflow
+  against a prior tag rather than reasoning about which commit was actually live.
+  Enforced twice, deliberately redundant: an in-workflow guard step (fast,
+  reviewable, versioned in `deploy.yml-OFF` itself) and a GitHub Environment
+  deployment-tag policy on the `prod` environment (`type: tag`, pattern `v*`,
+  repo settings — enforced by GitHub before the job even starts). The IAM role's
+  trust policy is intentionally broader than this (allows any branch ref or any
+  `v*` tag) since the actual branch-vs-tag restriction per environment lives at
+  the GitHub layer, not the AWS trust boundary — one shared deploy role for all
+  three stages, kept simple.
 
 ### Scaling & performance
 
@@ -2877,3 +2893,11 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   real background-refresh scheduling. Added 5 Beads tasks (ImageRenderer harness,
   snapshot tests, XCUITest suite, Makefile test targets, and a low-priority
   investigation of the unverified widget-reload CLI question).
+- 2026-07-31 — Set up GitHub Actions OIDC deploy credentials (`bluegull-aqi-q9r.29`):
+  created the `token.actions.githubusercontent.com` IAM OIDC provider and a
+  `bluegull-aqi-github-deploy` role scoped to `bluegull-aqi-*`-named resources
+  (`service/iam/`). Surfaced a gap while scoping the trust policy: release/rollback
+  hadn't been designed at all. Added the Release policy above — dev/stage deploy
+  from any branch, prod only from a `vX.Y.Z` tag, enforced both in-workflow and via
+  a GitHub Environment tag policy on `prod`. `deploy.yml-OFF` updated accordingly;
+  still disabled pending the first manual deploy (`bluegull-aqi-q9r.10`).

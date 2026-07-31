@@ -5,14 +5,25 @@ name: Deploy backend service
 # deploy-dev.yml-OFF/deploy-demo.yml-OFF/deploy-production.yml-OFF until
 # the service is proven out (bluegull-aqi-q9r.8). Turn on by renaming to
 # deploy.yml once:
-#   - bluegull-aqi-q9r.29 has created the OIDC IAM role and set the
-#     AWS_DEPLOY_ROLE_ARN repo secret this workflow assumes below, and
+#   - DONE (2026-07-31): bluegull-aqi-q9r.29 created the OIDC IAM role
+#     (arn:aws:iam::843088391598:role/bluegull-aqi-github-deploy) and the
+#     AWS_DEPLOY_ROLE_ARN repo secret this workflow assumes below.
 #   - bluegull-aqi-q9r.10 has done the first manual dev-stage deploy from a
 #     local machine, so the stack already exists before CI ever touches it.
 #
 # Manual trigger only (workflow_dispatch) -- not auto-deployed on push/merge,
 # matching doc/DESIGN.md "CI/CD". No domain parameter_overrides yet -- those
 # land with bluegull-aqi-q9r.6 (Route53 + ACM in template.yaml).
+#
+# Release policy (bluegull-aqi-q9r.29, decided 2026-07-31): dev and stage
+# deploy from any branch/ref, matching their role as pre-release testing
+# grounds. prod deploys ONLY from a semver release tag (vX.Y.Z, created via
+# `gh release create vX.Y.Z`) -- never from a branch HEAD -- so rolling back
+# means re-dispatching this workflow against a prior tag. Enforced twice,
+# deliberately redundant: the in-workflow guard step below (fast, reviewable,
+# versioned in this file) and a GitHub Environment deployment-tag protection
+# rule on the "prod" environment (configured in repo settings, enforced by
+# GitHub before the job even starts).
 
 on:
   workflow_dispatch:
@@ -36,8 +47,20 @@ defaults:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
     steps:
       - uses: actions/checkout@v7
+
+      - name: Enforce prod deploys are tag-gated
+        if: inputs.environment == 'prod'
+        run: |
+          case "${{ github.ref }}" in
+            refs/tags/v*) ;;
+            *)
+              echo "::error::Production deploys must run from a vX.Y.Z release tag, not ${{ github.ref }}. Cut a release first: gh release create vX.Y.Z"
+              exit 1
+              ;;
+          esac
 
       - uses: actions/setup-python@v7
         with:
