@@ -2932,3 +2932,17 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   and which was itself stuck behind `q9r.10`'s pending AWS quota increase) — the
   dependency was a byproduct of "the whole menu bar app should be wired up," not
   something this task structurally required.
+- 2026-07-31 — Filed and closed `bluegull-aqi-mtm.17`, found while showing widget
+  screenshots: `large-typical-accessibility-dynamic-type.png` was byte-for-byte
+  identical to `large-typical.png` -- the Dynamic Type snapshot test could never
+  fail. Root-caused with an isolated repro independent of this codebase:
+  `ImageRenderer` does not honor `.environment(\.dynamicTypeSize, ...)` at all on
+  this platform (a bare `Text().font(.caption)` renders identically regardless;
+  the same pipeline's `colorScheme` override works fine, per
+  `testLargeTypicalDarkMode`). Fixed the underlying accessibility gap anyway --
+  the small/medium/large widget layouts now use `@ScaledMetric` instead of a
+  fixed `.system(size:)` font for the headline AQI number, so it correctly
+  scales on a real widget host even though the headless harness can't verify
+  it. Removed the test (permanently unable to test anything) and folded real
+  verification into `bluegull-aqi-mtm.9`'s scope, since this can only be
+  confirmed by hand on a real Mac.

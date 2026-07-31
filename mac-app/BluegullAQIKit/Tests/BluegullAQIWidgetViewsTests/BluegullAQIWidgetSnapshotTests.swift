@@ -18,7 +18,21 @@ import BluegullAQIKit
 ///   dc2.1's separate, not-yet-built scope -- these tests cover what
 ///   actually renders today.
 /// - Light/dark mode -- `testLargeTypicalDarkMode`.
-/// - Dynamic Type -- `testLargeTypicalAccessibilityDynamicType`.
+///
+/// Deliberately NOT covered here: Dynamic Type. `ImageRenderer` does not
+/// honor `.environment(\.dynamicTypeSize, ...)` at all on this platform --
+/// confirmed with an isolated repro independent of this codebase (a bare
+/// `Text("x").font(.caption)` renders byte-identical PNGs regardless of the
+/// override, while the same pipeline's `colorScheme` override does work, per
+/// `testLargeTypicalDarkMode`). A prior version of this file had a
+/// `testLargeTypicalAccessibilityDynamicType` snapshot test that could never
+/// actually fail, since its golden image was always identical to
+/// `large-typical`'s -- pure false confidence, removed in
+/// bluegull-aqi-mtm.17. The widget layouts now use `@ScaledMetric` for their
+/// headline AQI number font (see `BluegullAQIWidgetView.swift`), which *does*
+/// respond to Dynamic Type on a real widget host -- just not verifiable
+/// through this harness. Real verification is manual, folded into
+/// bluegull-aqi-mtm.9.
 ///
 /// First run (or after an intentional visual change) needs
 /// `RECORD_SNAPSHOTS=1 swift test --filter BluegullAQIWidgetSnapshotTests`
@@ -114,13 +128,6 @@ final class BluegullAQIWidgetSnapshotTests: XCTestCase {
             .environment(\.colorScheme, .dark)
             .background(Color.black)
         GoldenImageAssertion.assert(view, named: "large-typical-dark", size: Self.largeSize)
-    }
-
-    @MainActor
-    func testLargeTypicalAccessibilityDynamicType() {
-        let view = BluegullAQIWidgetView(entry: typicalLargeEntry, familyOverride: .systemLarge)
-            .environment(\.dynamicTypeSize, .accessibility3)
-        GoldenImageAssertion.assert(view, named: "large-typical-accessibility-dynamic-type", size: Self.largeSize)
     }
 
     // MARK: - Fixtures

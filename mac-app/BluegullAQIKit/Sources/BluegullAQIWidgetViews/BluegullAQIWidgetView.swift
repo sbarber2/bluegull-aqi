@@ -78,6 +78,13 @@ public struct BluegullAQIWidgetView: View {
 /// bluegull-aqi-mtm.4: compact -- AQI number, official EPA category color,
 /// descriptor. Nothing else fits `.systemSmall` legibly.
 struct SmallWidgetLayout: View {
+    // @ScaledMetric, not a bare .system(size:) point size, so the headline
+    // number actually grows under Dynamic Type on a real widget host --
+    // bluegull-aqi-mtm.17. Our ImageRenderer-based snapshot harness can't
+    // verify this itself (confirmed: ImageRenderer doesn't honor
+    // .environment(\.dynamicTypeSize, ...) at all, independent of this
+    // code -- see that issue and bluegull-aqi-mtm.9's expanded scope).
+    @ScaledMetric(relativeTo: .largeTitle) private var aqiFontSize: CGFloat = 36
     let aqi: Int
     let category: AQICategory
 
@@ -87,7 +94,7 @@ struct SmallWidgetLayout: View {
                 .fill(category.color.swiftUIColor)
                 .frame(width: 12, height: 12)
             Text("\(aqi)")
-                .font(.system(size: 36, weight: .semibold, design: .rounded))
+                .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
             Text(category.descriptor)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -103,6 +110,9 @@ struct SmallWidgetLayout: View {
 /// the headline is "what else matters," using the same NowCast ranking
 /// `headlinePollutant` itself uses, not an arbitrary subset.
 struct MediumWidgetLayout: View {
+    // See SmallWidgetLayout's doc comment for why @ScaledMetric, not a bare
+    // .system(size:) point size.
+    @ScaledMetric(relativeTo: .title) private var aqiFontSize: CGFloat = 30
     let aqi: Int
     let category: AQICategory
     let reading: AQIReading
@@ -124,7 +134,7 @@ struct MediumWidgetLayout: View {
                     .fill(category.color.swiftUIColor)
                     .frame(width: 10, height: 10)
                 Text("\(aqi)")
-                    .font(.system(size: 30, weight: .semibold, design: .rounded))
+                    .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
                 Text(category.descriptor)
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -162,6 +172,9 @@ struct MediumWidgetLayout: View {
 /// `pollutantList`), since "full breakdown" means the same thing in both
 /// places.
 struct LargeWidgetLayout: View {
+    // See SmallWidgetLayout's doc comment for why @ScaledMetric, not a bare
+    // .system(size:) point size.
+    @ScaledMetric(relativeTo: .title) private var aqiFontSize: CGFloat = 32
     let aqi: Int
     let category: AQICategory
     let reading: AQIReading
@@ -173,7 +186,7 @@ struct LargeWidgetLayout: View {
                     .fill(category.color.swiftUIColor)
                     .frame(width: 12, height: 12)
                 Text("\(aqi)")
-                    .font(.system(size: 32, weight: .semibold, design: .rounded))
+                    .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
                 Text(category.descriptor)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
