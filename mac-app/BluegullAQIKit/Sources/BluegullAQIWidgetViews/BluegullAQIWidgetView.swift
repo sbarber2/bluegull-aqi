@@ -30,24 +30,36 @@ public struct BluegullAQIWidgetView: View {
     private var family: WidgetFamily { familyOverride ?? environmentFamily }
 
     public var body: some View {
-        if let reading = entry.reading,
-           let headline = reading.headlinePollutant,
-           let aqi = headline.nowcastAQI,
-           let category = headline.category {
-            switch family {
-            case .systemSmall:
-                SmallWidgetLayout(aqi: aqi, category: category)
-            case .systemMedium:
-                MediumWidgetLayout(aqi: aqi, category: category, reading: reading, headline: headline)
-            default:
-                LargeWidgetLayout(aqi: aqi, category: category, reading: reading)
+        Group {
+            if let reading = entry.reading,
+               let headline = reading.headlinePollutant,
+               let aqi = headline.nowcastAQI,
+               let category = headline.category {
+                switch family {
+                case .systemSmall:
+                    SmallWidgetLayout(aqi: aqi, category: category)
+                case .systemMedium:
+                    MediumWidgetLayout(aqi: aqi, category: category, reading: reading, headline: headline)
+                default:
+                    LargeWidgetLayout(aqi: aqi, category: category, reading: reading)
+                }
+            } else {
+                // Deliberately minimal -- distinguishing "never fetched" from
+                // "cache expired" from "genuinely offline" is dc2.1's
+                // dedicated scope, not this task's. This is just "nothing to
+                // show yet."
+                noDataView
             }
-        } else {
-            // Deliberately minimal -- distinguishing "never fetched" from
-            // "cache expired" from "genuinely offline" is dc2.1's dedicated
-            // scope, not this task's. This is just "nothing to show yet."
-            noDataView
         }
+        // Required since macOS 14/iOS 17 -- a widget that never calls this
+        // gets no background fill from a headless renderer (confirmed via a
+        // real bluegull-aqi-mtm.11 golden-image snapshot: dark-mode text
+        // came out invisible, white-on-transparent, because nothing behind
+        // it adapted to the color scheme). A real widget host has
+        // historically papered over a missing containerBackground with an
+        // automatic default, but relying on that is exactly the kind of
+        // implicit behavior Apple's own WWDC23 guidance says to stop doing.
+        .containerBackground(.background, for: .widget)
     }
 
     private var noDataView: some View {

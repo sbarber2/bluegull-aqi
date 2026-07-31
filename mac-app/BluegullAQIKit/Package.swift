@@ -49,7 +49,10 @@ let package = Package(
         ),
         .testTarget(
             name: "BluegullAQIWidgetViewsTests",
-            dependencies: ["BluegullAQIWidgetViews"]
+            dependencies: ["BluegullAQIWidgetViews"],
+            // The golden PNGs (bluegull-aqi-mtm.11) are test fixtures read
+            // directly off disk by file path, not bundled resources.
+            exclude: ["__Snapshots__"]
         ),
     ]
 )

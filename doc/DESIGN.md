@@ -1201,6 +1201,63 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-07-30 — Implemented bluegull-aqi-mtm.11 (widget snapshot regression
+  tests with golden PNGs), and along the way found and fixed a real
+  production gap in the widget views:
+  - **Found via the golden images themselves, not by inspection**: the
+    dark-mode fixture came out with invisible white-on-nothing text.
+    `BluegullAQIWidgetView` never called `.containerBackground(_:for:
+    .widget)` -- required by WidgetKit since macOS 14/iOS 17 for a widget
+    to get any background fill at all from the real host. Fixed by adding
+    `.containerBackground(.background, for: .widget)` to the view's root.
+    This doesn't visibly change a headless `ImageRenderer` capture (that
+    modifier only paints when actual WidgetKit host machinery is present,
+    confirmed by rendering before/after with no visual difference outside
+    a host) -- it's a correctness fix for the real widget host, not
+    something this test suite can itself visually confirm end-to-end (that
+    remains `mtm.9`'s manual-verification scope). The dark-mode *golden
+    image* itself needed its own explicit `.background(Color.black)`, kept
+    test-only in `testLargeTypicalDarkMode`, so the fixture is legible at
+    all -- documented inline as a test-harness concern, distinct from the
+    production fix.
+  - **Found via running the full test suite repeatedly, not by
+    inspection**: exact-byte PNG comparison (the first implementation) was
+    genuinely flaky -- `small-no-data` failed 100% of 5/5 runs of the full
+    `swift test`, off by exactly 2 bytes every time, but passed 5/5 when
+    run alone via `--filter`. Whatever test happens to run immediately
+    before it in the same process measurably changes how AppKit/CoreText
+    rasterizes the SF Symbol in `noDataView` -- a real, reproducible
+    environment quirk. Fixed by rewriting `GoldenImageAssertion` to decode
+    both images to raw RGBA pixel buffers (via `CGContext`, not relying on
+    either image's original encoding) and compare with a small per-channel
+    tolerance (8/255) plus an allowed mismatched-pixel fraction (0.5%) --
+    the same approach established snapshot-testing libraries use (e.g.
+    swift-snapshot-testing's `precision`), confirmed to still catch a real
+    regression (deliberately swapped in a wrong golden image and watched
+    the test correctly fail, then restored it).
+  - 12 golden PNGs recorded, covering every failure mode the issue named:
+    `small-low-aqi`/`small-hazardous-aqi`/`small-beyond-scale-aqi` (AQI 5
+    vs 500 vs 550 digit-count/color changes), `large-many-pollutants` (6
+    pollutants, the large widget's full-breakdown overflow case),
+    `*-no-data` for all three families, `large-typical-dark` (light/dark
+    mode), `large-typical-accessibility-dynamic-type` (Dynamic Type).
+    "Stale-cache" doesn't have a visual state distinct from "no data" to
+    snapshot yet -- `WidgetTimelineComputer` already collapses an expired
+    cache entry to the same nil reading (see its own tests), and giving
+    staleness its own look is `dc2.1`'s separate, not-yet-built scope.
+  - New `GoldenImageAssertion` test helper (hand-rolled, not
+    `swift-snapshot-testing` -- this project has no third-party
+    dependencies anywhere, and didn't need one here either) supports
+    `RECORD_SNAPSHOTS=1 swift test --filter BluegullAQIWidgetSnapshotTests`
+    to (re)write goldens.
+  - `Package.swift`'s `BluegullAQIWidgetViewsTests` target now excludes
+    `__Snapshots__` from being treated as an unhandled resource.
+  - Verified: `swift test` (125 tests, up from 117, stable across 5
+    repeated full-suite runs after the tolerance fix), a deliberate
+    corrupted-golden and wrong-golden check confirming real regressions
+    still fail the suite, full Xcode scheme build, `BluegullAQITests` (9
+    passing), live app launch with no crash report.
+
 - 2026-07-30 — Implemented bluegull-aqi-mtm.10 (ImageRenderer harness to
   render widget views to PNG):
   - New `BluegullAQIWidgetViews` library target added to the
