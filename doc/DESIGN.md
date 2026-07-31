@@ -35,8 +35,8 @@ GitHub Actions CI/CD, Route53/ACM custom domain.
 | Location scope | Current location (CoreLocation) **and** user-pinned locations (zip/address, geocoded locally via `CLGeocoder`/MapKit — no backend geocoding endpoint needed). |
 | Refresh cadence | Hourly, matching AirNow's own publish cadence. |
 | Minimum macOS version | macOS 14 (Sonoma) — required for desktop WidgetKit widgets anyway. |
-| Backend custom domain | Three environments, one hosted zone. **Prod** = bare `aqi.bluegull.org`. **Dev** = `dev.aqi.bluegull.org`. **Staging** = `stage.aqi.bluegull.org`. All three are dot-subdomains of `aqi.bluegull.org`, so all three live under the single Route53 hosted zone in AWS account `843088391598`, delegated from `bluegull.org`'s DNS at **Squarespace** (registrar; everything else there untouched). **✅ Delegation confirmed live 2026-07-28.** Mirrors Plant-Tracer's `${StackName}.${BaseDomain}` pattern. **Second domain added 2026-07-30:** a parallel delegation for `aqi.bluegull.solutions` (mirroring the same prod/dev/stage pattern, alongside `bluegull.org`, not replacing it — `bluegull-aqi-8ef.18`). Note: unlike `bluegull.org`, `bluegull.solutions` is registered at Squarespace but its actual authoritative DNS is at **DreamHost** — the NS delegation record was added in DreamHost's panel, not Squarespace's. **✅ Delegation confirmed live 2026-07-30** (`dig NS aqi.bluegull.solutions` returns the 4 Route53 nameservers). |
-| AWS region | **`us-east-2`** (Ohio), chosen for cost over the Plant-Tracer-matching default of us-east-1. `service/samconfig.toml` deploys here. No conflict with the custom domain: `AWS::Serverless::HttpApi` custom domains are regional-only (unlike REST API v1's edge-optimized option), so the ACM cert for whichever domain(s) end up wired into `template.yaml` (`aqi.bluegull.org`, `aqi.bluegull.solutions`, or both — `bluegull-aqi-q9r.6`) just needs to be in this same region. The one exception: if CloudFront (`bluegull-aqi-q9r.33`, deferred) is ever adopted, its ACM cert must be in **us-east-1** specifically — a hard CloudFront-wide rule, independent of the API's own region. |
+| Backend custom domain | Three environments, one hosted zone, **single domain: `bluegull.solutions`** (decided 2026-07-31, reversing the brief 2026-07-30 "both domains stay live" detour — see changelog). **Prod** = bare `aqi.bluegull.solutions`. **Dev** = `dev.aqi.bluegull.solutions`. **Staging** = `stage.aqi.bluegull.solutions`. All three are dot-subdomains of `aqi.bluegull.solutions`, living under a single Route53 hosted zone in AWS account `843088391598`. `bluegull.solutions` is registered at Squarespace but its actual authoritative DNS is at **DreamHost** — the NS delegation record was added in DreamHost's panel, not Squarespace's. **✅ Delegation confirmed live 2026-07-30.** Mirrors Plant-Tracer's `${StackName}.${BaseDomain}` pattern in spirit, though the actual stack names (`bluegull-aqi-dev` etc.) don't literally match the per-environment hostnames, so `template.yaml` takes the full domain name per environment as a parameter rather than deriving it from `AWS::StackName`. The earlier `aqi.bluegull.org` Route53 hosted zone + Squarespace delegation (confirmed live 2026-07-28) is unused now but deliberately left in place rather than torn down — no functional risk, revisit later if `bluegull.org` is fully abandoned. |
+| AWS region | **`us-east-2`** (Ohio), chosen for cost over the Plant-Tracer-matching default of us-east-1. `service/samconfig.toml` deploys here. No conflict with the custom domain: `AWS::Serverless::HttpApi` custom domains are regional-only (unlike REST API v1's edge-optimized option), so the ACM cert for `aqi.bluegull.solutions` (`bluegull-aqi-q9r.6`) just needs to be in this same region. The one exception: if CloudFront (`bluegull-aqi-q9r.33`, deferred) is ever adopted, its ACM cert must be in **us-east-1** specifically — a hard CloudFront-wide rule, independent of the API's own region. |
 | AWS account | **`843088391598`**, dedicated to this project (not shared with Plant-Tracer) — gives the blast-radius isolation the Scaling & Performance section already assumed. Standalone account, its own IAM Identity Center instance (not part of Plant-Tracer's org). CLI access: `aws sts get-caller-identity --profile AdministratorAccess-843088391598` — an assumed role via `AWSReservedSSO_AdministratorAccess`, not root; re-authenticate with `aws sso login --profile AdministratorAccess-843088391598` when the session expires. |
 | Apple Developer account | Already enrolled as **Individual** (confirmed 2026-07-30, `bluegull-aqi-8ef.22`) — App Store seller shows Steve's personal name for now, not a company. **Decided:** proceed under Individual rather than pause for LLC formation; convert to Organization once **BlueGull Solutions LLC** exists and revenue justifies forming it (deliberately not before — an LLC doesn't retroactively shield pre-formation activity, and nothing is live/collecting money yet). Conversion path (Apple support-mediated, or fresh Organization enrollment + App Transfer) preserves the app's reviews/ratings/bundle-id string either way; the Team-ID-scoped portal registration and local Xcode signing config are not guaranteed to carry over in the fresh-enrollment path, but that rework is cheap relative to pausing now. **✅ Bundle IDs and App Group registered 2026-07-30** (`bluegull-aqi-8ef.5`): `solutions.bluegull.aqi` (container app) and `solutions.bluegull.aqi.widget` (widget extension), both with the App Groups capability enabled and attached to App Group `group.solutions.bluegull.aqi` — matching what's already hardcoded in `AppGroupCache.swift`/`AirNowAPIKeyStore.swift`. Unblocks `bluegull-aqi-e70.1` (scaffold the Xcode project). |
 | AQI category colors | Official EPA AQI RGB palette only, sourced once in `BluegullAQIKit`'s shared models and used by both the menu bar and widget — never a custom palette. Compliance requirement from the AirNow Data Exchange Guidelines, not a style preference; see "AirNow terms review" below. |
@@ -266,20 +266,22 @@ this hasn't been explicitly confirmed yet.
 - **Secrets**: the service's own AirNow API key lives in SSM Parameter Store
   (SecureString) or Secrets Manager, referenced by the Lambda's execution role. Never
   committed to source.
-- **Custom domain**: three stacks, one hosted zone, mirrored across **two** domains
-  as of the 2026-07-30 business-model pivot (`bluegull-aqi-8ef.18`) — `aqi.bluegull.org`
-  (prod) / `dev.aqi.bluegull.org` / `stage.aqi.bluegull.org`, and the equivalent
-  `aqi.bluegull.solutions` / `dev.aqi.bluegull.solutions` / `stage.aqi.bluegull.solutions`,
-  each set of three as dot-subdomains under its own single Route53 hosted zone in AWS
-  account `843088391598`. Added, not migrated — both stay live; see "Decisions made so
-  far" for which is registered where. **✅ Both delegations live**: `bluegull.org`'s DNS
-  stays at Squarespace (the registrar) for everything else, `bluegull.solutions`'s
-  actual DNS is at DreamHost (different from its registrar, Squarespace) — the NS
-  record for `aqi` was added at each provider's own panel and confirmed resolving to
-  Route53 (`dig NS` returns the 4 `awsdns` nameservers for both). ACM cert(s) can now
-  be DNS-validated for either. Same `${StackName}.${BaseDomain}` naming pattern as
-  Plant-Tracer's `template.yaml`; `q9r.6` (actually wiring ACM + the API Gateway custom
-  domain in `template.yaml`) still decides which domain(s) `BaseDomain` resolves to.
+- **Custom domain**: three stacks, one hosted zone, **single domain**
+  `bluegull.solutions` — `aqi.bluegull.solutions` (prod) / `dev.aqi.bluegull.solutions`
+  / `stage.aqi.bluegull.solutions`, as dot-subdomains under a single Route53 hosted
+  zone in AWS account `843088391598`. Decided 2026-07-31, reversing a brief detour: the
+  2026-07-30 business-model pivot first added `bluegull.solutions` as a *second*,
+  parallel domain alongside `bluegull.org` (`bluegull-aqi-8ef.18`), but Steve corrected
+  this back to a single domain — no reason to run two parallel domains for one
+  service. `bluegull.solutions`'s actual DNS is at DreamHost (different from its
+  registrar, Squarespace) — the NS record for `aqi` was added at DreamHost's panel and
+  confirmed resolving to Route53 (`dig NS` returns the 4 `awsdns` nameservers).
+  **✅ Delegation live**, ACM cert(s) can be DNS-validated. The earlier
+  `aqi.bluegull.org` hosted zone + delegation (confirmed live 2026-07-28) is unused now
+  but deliberately left in place, not torn down. `q9r.6` (actually wiring ACM + the API
+  Gateway custom domain in `template.yaml`) takes the full per-environment domain name
+  as a parameter — `${StackName}.${BaseDomain}` doesn't literally apply since prod is
+  a bare apex, not `${AWS::StackName}.bluegull.solutions`.
 - **Scaling**: see the dedicated section below — the service must scale horizontally
   as installs grow, and that constrains the cache design, not just the infra config.
 - **CI/CD**: GitHub Actions mirroring Plant-Tracer's `ci-cd.yml` (lint, pytest,
@@ -923,20 +925,22 @@ our per-request opportunistic caching is not.
   AirNow key needed) for the best first-run experience; the settings UI
   (`bluegull-aqi-e70.3`) lets a user switch to Direct mode (their own key) any
   time. Tracked as `bluegull-aqi-8ef.2`.
-- ~~**Domain name** for the backend's custom domain~~ — **DECIDED:** `aqi.bluegull.org`,
-  delegated from `bluegull.org`'s DNS at **Squarespace** (registrar; untouched
-  otherwise) to a Route53 hosted zone created specifically for the subdomain.
-  **Extended 2026-07-30** (`bluegull-aqi-8ef.18`, business-model pivot): a second,
-  equivalent delegation added for `aqi.bluegull.solutions`, whose DNS lives at
-  **DreamHost** (not Squarespace, unlike `bluegull.org`) — not a replacement, both
-  domains stay live.
+- ~~**Domain name** for the backend's custom domain~~ — **DECIDED (2026-07-31,
+  final):** `aqi.bluegull.solutions`, delegated from `bluegull.solutions`'s DNS at
+  **DreamHost** (its actual authoritative DNS, not its registrar Squarespace) to a
+  Route53 hosted zone created specifically for the subdomain. History: originally
+  `aqi.bluegull.org` (delegated at Squarespace, its registrar); the 2026-07-30
+  business-model pivot briefly added `bluegull.solutions` as a *second*, parallel
+  domain (`bluegull-aqi-8ef.18`) rather than replacing it; Steve corrected that
+  2026-07-31 — single domain, `bluegull.solutions` only. The unused
+  `aqi.bluegull.org` hosted zone + delegation is left in place, not torn down.
 - ~~**Should stage deployments use subdomain prefixes?**~~ — **DECIDED:** three
-  named stacks per domain — prod (`aqi.*`), dev (`dev.aqi.*`), staging
-  (`stage.aqi.*`) — all as dot-subdomains under one hosted zone per domain.
-  (First-pass hyphenated names `dev-aqi.bluegull.org`/`stage-aqi.bluegull.org` were
-  reconsidered once it came up that they're DNS *siblings* of `aqi.bluegull.org`, not
-  subdomains, and so couldn't share its hosted zone — would have needed three
-  separate delegations instead of one.)
+  named stacks — prod (`aqi.bluegull.solutions`), dev (`dev.aqi.bluegull.solutions`),
+  staging (`stage.aqi.bluegull.solutions`) — all as dot-subdomains under one hosted
+  zone. (First-pass hyphenated names like `dev-aqi.bluegull.org` were reconsidered
+  once it came up that they're DNS *siblings* of the base domain, not subdomains, and
+  so couldn't share its hosted zone — would have needed three separate delegations
+  instead of one.)
 - ~~**AWS account**~~ — **DECIDED:** `843088391598`, dedicated to this project.
 - **AirNow API key for the service** — not yet registered; also worth confirming
   AirNow's actual published rate limits/ToS once registering, since that bounds how
@@ -2901,3 +2905,15 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   from any branch, prod only from a `vX.Y.Z` tag, enforced both in-workflow and via
   a GitHub Environment tag policy on `prod`. `deploy.yml-OFF` updated accordingly;
   still disabled pending the first manual deploy (`bluegull-aqi-q9r.10`).
+- 2026-07-31 — **Reverted the two-domain approach**: the 2026-07-30 business-model
+  pivot added `bluegull.solutions` as a second domain running *alongside*
+  `bluegull.org` (`bluegull-aqi-8ef.18`, `8ef.19`), not replacing it. While scoping
+  `bluegull-aqi-q9r.6` (wiring Route53 + ACM into `template.yaml`), that "both stay
+  live" framing turned out to mean doubling every custom-domain resource per stack
+  (cert, `ApiGatewayV2::DomainName`, `ApiMapping`, Route53 alias — six domain names
+  across three stacks). Steve caught it and corrected: single domain,
+  `bluegull.solutions` only — no reason to run one service under two domains.
+  Updated the Decisions table, the "Custom domain" architecture bullet, and
+  "Decisions made so far" accordingly. The now-unused `aqi.bluegull.org` Route53
+  hosted zone and Squarespace delegation are left in place (harmless, ~$0.50/mo),
+  not torn down — revisit only if `bluegull.org` is abandoned outright.
