@@ -8,4 +8,10 @@ final class AttributionCopyTests: XCTestCase {
         XCTAssertTrue(AttributionCopy.staticCredit.contains("EPA"))
         XCTAssertTrue(AttributionCopy.staticCredit.contains("AirNow"))
     }
+
+    func testPreliminaryDataDisclaimerMentionsPreliminary() {
+        // Regression test against accidental future edits dropping the
+        // required "preliminary" indication (bluegull-aqi-dc2.4).
+        XCTAssertTrue(AttributionCopy.preliminaryDataDisclaimer.contains("preliminary"))
+    }
 }

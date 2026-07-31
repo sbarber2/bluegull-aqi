@@ -15,4 +15,12 @@ public enum AttributionCopy {
     /// logo lockup, checked live 2026-07-28 -- see doc/DESIGN.md "AirNow
     /// terms review") as a text equivalent; no EPA logo asset is used here.
     public static let staticCredit = "Air quality data from the EPA AirNow program"
+
+    /// The in-product preliminary-data disclaimer the AirNow Data Exchange
+    /// Guidelines require ("the analysis results, displays, or products
+    /// must indicate that these data are preliminary") -- see
+    /// bluegull-aqi-dc2.4 and doc/DESIGN.md "AirNow terms review" finding
+    /// 2. Wording confirmed by Steve 2026-07-31, derived directly from the
+    /// guideline text rather than the iOS app's unrecorded precedent.
+    public static let preliminaryDataDisclaimer = "Data are preliminary and have not been fully verified or validated."
 }

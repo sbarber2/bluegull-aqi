@@ -5,10 +5,8 @@ import BluegullAQIKit
 /// is clicked (bluegull-aqi-e70.11). A "dumb" presentational view -- takes
 /// whatever reading it's given and renders it; wiring a real, live-fetched
 /// `AQIReading` in is separate tracked work (bluegull-aqi-e70.6/e70.7), not
-/// yet done. The preliminary-data disclaimer is deliberately NOT rendered
-/// here -- separately tracked (bluegull-aqi-dc2.4) since its exact
-/// wording/placement is a compliance call for Steve to make, not something
-/// to invent here. Attribution IS rendered (bluegull-aqi-e70.10).
+/// yet done. Attribution (bluegull-aqi-e70.10) and the preliminary-data
+/// disclaimer (bluegull-aqi-dc2.4) are both rendered.
 struct AQIPopoverView: View {
     let reading: AQIReading?
 
@@ -44,6 +42,7 @@ struct AQIPopoverView: View {
                 pollutantList(reading.pollutants)
                 Divider()
                 AttributionFooter(headline: headline)
+                DisclaimerFooter()
             } else {
                 ContentUnavailableView(
                     "No Air Quality Data",

@@ -45,3 +45,15 @@ struct AttributionFooter: View {
         .foregroundStyle(.secondary)
     }
 }
+
+/// The in-product preliminary-data disclaimer (bluegull-aqi-dc2.4) --
+/// shown alongside `AttributionFooter` in both compliance surfaces (the
+/// menu bar popover and the widget's tap-to-expand detail view), same
+/// reuse rationale as that view.
+struct DisclaimerFooter: View {
+    var body: some View {
+        Text(AttributionCopy.preliminaryDataDisclaimer)
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+    }
+}

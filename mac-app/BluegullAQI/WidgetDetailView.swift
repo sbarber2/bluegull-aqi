@@ -4,15 +4,9 @@ import BluegullAQIKit
 /// Reachable via the widget's tap target (`widgetURL` → `WidgetDeepLink`,
 /// bluegull-aqi-mtm.14) -- shown in its own window (see `BluegullAQIApp`)
 /// so a user who has the widget on their desktop but has never opened the
-/// menu bar popover still has a reachable path to attribution
-/// (doc/DESIGN.md "AirNow terms review" findings 1 and 2).
-///
-/// Deliberately does NOT render a preliminary-data disclaimer -- same
-/// reasoning as `AQIPopoverView`'s own doc comment: its exact wording is a
-/// compliance call for Steve to make (bluegull-aqi-dc2.4), not something to
-/// invent here. That's why `dc2.4` depends on this issue rather than the
-/// reverse: this view exists first, `dc2.4` adds the disclaimer into it
-/// once the wording is decided.
+/// menu bar popover still has a reachable path to attribution and the
+/// preliminary-data disclaimer (doc/DESIGN.md "AirNow terms review"
+/// findings 1 and 2; disclaimer wording decided in bluegull-aqi-dc2.4).
 struct WidgetDetailView: View {
     let location: Location?
 
@@ -46,6 +40,7 @@ struct WidgetDetailView: View {
                 }
                 Divider()
                 AttributionFooter(headline: headline)
+                DisclaimerFooter()
             } else {
                 ContentUnavailableView(
                     "No Air Quality Data",

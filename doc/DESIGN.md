@@ -2917,3 +2917,18 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   "Decisions made so far" accordingly. The now-unused `aqi.bluegull.org` Route53
   hosted zone and Squarespace delegation are left in place (harmless, ~$0.50/mo),
   not torn down — revisit only if `bluegull.org` is abandoned outright.
+- 2026-07-31 — Implemented `bluegull-aqi-dc2.4`: the in-product preliminary-data
+  disclaimer, the last piece of the "AirNow terms review" findings 1–2 gating App
+  Store submission (attribution landed earlier via `10h.15`/`e70.10`/`mtm.14`).
+  Wording — "Data are preliminary and have not been fully verified or
+  validated." — derived directly from the guideline's own text and confirmed by
+  Steve, not inferred from the iOS app's unrecorded precedent. New
+  `AttributionCopy.preliminaryDataDisclaimer` in `BluegullAQIKit` and a shared
+  `DisclaimerFooter` view, rendered alongside `AttributionFooter` in both
+  compliance surfaces (`AQIPopoverView`, `WidgetDetailView`). Also removed
+  `dc2.4`'s bd dependency on `e70.6`: the disclaimer is static content added to
+  views that already exist and read from the local App Group cache, so it never
+  actually needed `BluegullServiceClient` (which `e70.6` pulls in transitively,
+  and which was itself stuck behind `q9r.10`'s pending AWS quota increase) — the
+  dependency was a byproduct of "the whole menu bar app should be wired up," not
+  something this task structurally required.
