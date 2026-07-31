@@ -10,17 +10,22 @@ import BluegullAQIKit
 struct AQIPopoverView: View {
     let reading: AQIReading?
 
-    // The "natural home for reaching settings" e70.11 anticipated but
-    // deliberately didn't build -- added here as part of e70.9, which
-    // needs an actual settings flow to drive with a UI test.
-    @State private var showingSettings = false
+    // Opens Settings as its own real window (see BluegullAQIApp's
+    // Window(id: "settings")), NOT a .sheet() -- a .sheet() presented from
+    // inside a MenuBarExtra's .window-style popover is unreliable in
+    // practice: the popover is a lightweight NSPanel that can lose key
+    // status and dismiss itself (taking the sheet down with it) when the
+    // user interacts with certain controls inside, and its cropped-to-the-
+    // popover's-own-size sheet sizing looked visibly wrong besides.
+    // Confirmed both symptoms in a real interactive run, not theorized.
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Spacer()
                 Button {
-                    showingSettings = true
+                    openWindow(id: "settings")
                 } label: {
                     Image(systemName: "gearshape")
                 }
@@ -53,9 +58,6 @@ struct AQIPopoverView: View {
         }
         .padding()
         .frame(width: 300)
-        .sheet(isPresented: $showingSettings) {
-            SettingsView()
-        }
     }
 
     private func pollutantList(_ pollutants: [PollutantReading]) -> some View {

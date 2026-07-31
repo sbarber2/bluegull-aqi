@@ -43,5 +43,15 @@ struct BluegullAQIApp: App {
                 }
         }
         .windowResizability(.contentSize)
+
+        // A real singleton window, not a .sheet() over the MenuBarExtra
+        // popover -- see AQIPopoverView's doc comment for why. .contentSize
+        // resizability + SettingsView's own .fixedSize(vertical: true) are
+        // what actually fix the cropping that was visible under the old
+        // sheet presentation.
+        Window("Settings", id: "settings") {
+            SettingsView()
+        }
+        .windowResizability(.contentSize)
     }
 }
