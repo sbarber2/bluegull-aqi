@@ -3,12 +3,13 @@
 # API. See /doc/DESIGN.md for the full design.
 #
 # Covers bluegull-aqi-q9r.2 (handler), q9r.3 (DynamoDB cache table), q9r.4
-# (SSM-stored AirNow API key), and q9r.31 (Lambda reserved concurrency + API
-# Gateway throttling -- the PRIMARY cost circuit breakers). No WAFv2 rate-
+# (SSM-stored AirNow API key), q9r.31 (Lambda reserved concurrency + API
+# Gateway throttling -- the PRIMARY cost circuit breakers), and q9r.6
+# (Route53 + ACM custom domain, single domain bluegull.solutions per
+# bluegull-aqi-8ef.24 -- see doc/DESIGN.md "Custom domain"). No WAFv2 rate-
 # based rule here on purpose: it can't attach to an HTTP API (v2) at all
 # (bluegull-aqi-q9r.5, resolved as not viable -- see doc/DESIGN.md "Rate
-# limiting"). Deliberately NOT here yet, its own tracked task:
-#   - Route53 + ACM custom domain                     (bluegull-aqi-q9r.6)
+# limiting").
 # -----------------------------------------------------------------------------
 
 AWSTemplateFormatVersion: '2010-09-09'
@@ -17,6 +18,24 @@ Description: >
   BlueGull AQI backend: a rate-limited caching proxy in front of the AirNow API.
 
 Parameters:
+  DomainName:
+    Type: String
+    Description: >
+      Full custom domain name for this stack, e.g. aqi.bluegull.solutions
+      (prod), dev.aqi.bluegull.solutions, or stage.aqi.bluegull.solutions.
+      No default -- deliberately required via parameter_overrides per
+      environment in samconfig.toml, so it's never possible to deploy a
+      stack without explicitly choosing which hostname it answers to. See
+      doc/DESIGN.md "Custom domain" (bluegull-aqi-q9r.6, bluegull-aqi-8ef.24).
+
+  HostedZoneId:
+    Type: String
+    Description: >
+      Route53 hosted zone ID for aqi.bluegull.solutions (single zone shared
+      by all three dot-subdomain stacks). Used for both ACM DNS validation
+      and the alias record pointing DomainName at the API Gateway custom
+      domain.
+
   LogLevel:
     Type: String
     Default: INFO
@@ -97,6 +116,47 @@ Resources:
       DefaultRouteSettings:
         ThrottlingRateLimit: !Ref ApiThrottlingRateLimit
         ThrottlingBurstLimit: !Ref ApiThrottlingBurstLimit
+
+  # DNS-validated: CloudFormation creates the validation record in
+  # HostedZoneId itself and waits for it, so `sam deploy` blocks until the
+  # cert is actually issued -- no separate out-of-band ACM step.
+  AqiCertificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainName
+      ValidationMethod: DNS
+      DomainValidationOptions:
+        - DomainName: !Ref DomainName
+          HostedZoneId: !Ref HostedZoneId
+
+  # Regional (not edge-optimized): AWS::Serverless::HttpApi custom domains
+  # only support regional certs, so this must be in the same region as the
+  # API itself (us-east-2) -- see doc/DESIGN.md "AWS region".
+  AqiApiDomainName:
+    Type: AWS::ApiGatewayV2::DomainName
+    Properties:
+      DomainName: !Ref DomainName
+      DomainNameConfigurations:
+        - CertificateArn: !Ref AqiCertificate
+          EndpointType: REGIONAL
+
+  AqiApiMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    Properties:
+      ApiId: !Ref AqiHttpApi
+      DomainName: !Ref AqiApiDomainName
+      Stage: prod
+
+  AqiApiDnsRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Ref DomainName
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt AqiApiDomainName.RegionalDomainName
+        HostedZoneId: !GetAtt AqiApiDomainName.RegionalHostedZoneId
+        EvaluateTargetHealth: false
 
   AqiCacheTable:
     Type: AWS::DynamoDB::Table
@@ -190,5 +250,9 @@ Resources:
 
 Outputs:
   ApiEndpoint:
-    Description: Default (execute-api) endpoint for the HTTP API -- superseded by the custom domain once bluegull-aqi-q9r.6 lands.
+    Description: Default (execute-api) endpoint for the HTTP API -- the custom domain below is the intended entry point.
     Value: !Sub "https://${AqiHttpApi}.execute-api.${AWS::Region}.amazonaws.com/"
+
+  CustomDomainUrl:
+    Description: Custom domain endpoint for this stack.
+    Value: !Sub "https://${DomainName}/"

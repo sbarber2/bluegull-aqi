@@ -53,6 +53,14 @@ sam build
 sam deploy --config-env dev   # or stage / prod
 ```
 
+Each stack gets a custom domain under `bluegull.solutions`
+(`bluegull-aqi-q9r.6`): `dev.aqi.bluegull.solutions`, `stage.aqi.bluegull.solutions`,
+and `aqi.bluegull.solutions` for prod. ACM cert + DNS validation are handled
+by CloudFormation itself (`AWS::CertificateManager::Certificate` with
+`DomainValidationOptions` pointing at the shared Route53 hosted zone), so a
+plain `sam deploy` blocks until the cert is actually issued -- no separate
+manual ACM step.
+
 CI/CD deploy (`.github/workflows/deploy.yml-OFF`, `bluegull-aqi-q9r.8`) is
 written but disabled until the first manual dev deploy
 (`bluegull-aqi-q9r.10`) has happened -- the stack must exist before CI ever
