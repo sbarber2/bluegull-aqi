@@ -3,9 +3,9 @@ import BluegullAQIKit
 
 /// The `.window`-style popover content shown when the menu bar status item
 /// is clicked (bluegull-aqi-e70.11). A "dumb" presentational view -- takes
-/// whatever reading it's given and renders it; wiring a real, live-fetched
-/// `AQIReading` in is separate tracked work (bluegull-aqi-e70.6/e70.7), not
-/// yet done. Attribution (bluegull-aqi-e70.10) and the preliminary-data
+/// whatever reading it's given and renders it; `AQIRefreshController`
+/// (bluegull-aqi-e70.6/e70.7) is what actually fetches and supplies a live
+/// `AQIReading`. Attribution (bluegull-aqi-e70.10) and the preliminary-data
 /// disclaimer (bluegull-aqi-dc2.4) are both rendered.
 struct AQIPopoverView: View {
     let reading: AQIReading?

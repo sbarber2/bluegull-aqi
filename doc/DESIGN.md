@@ -2946,3 +2946,24 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   it. Removed the test (permanently unable to test anything) and folded real
   verification into `bluegull-aqi-mtm.9`'s scope, since this can only be
   confirmed by hand on a real Mac.
+- 2026-07-31 — Implemented `bluegull-aqi-e70.6`/`e70.7`: the menu bar app's
+  actual fetch pipeline, scoped to Direct mode working fully end-to-end, with
+  zero AWS dependency. Prompted directly by Steve asking whether an
+  installable, AWS-free app already existed — it didn't, even though
+  `AirNowDirectClient`, Keychain storage, and the mode-toggle settings UI were
+  all already done; the menu bar status item never showed a real reading and
+  nothing triggered a fetch. New `AQIFetchCoordinator` (`BluegullAQIKit`, unit
+  tested against fakes) resolves current location, calls `AirNowDirectClient`
+  in `.direct` mode, throws `.serviceModeNotYetAvailable` in `.service` mode
+  (the default per `bluegull-aqi-8ef.2`, since `BluegullServiceClient` doesn't
+  exist yet), and writes successful fetches to the shared App Group cache. New
+  `AQIRefreshController` (app target, thin/untested per
+  `LocationPermissionRequester`'s established precedent) drives the loop on
+  `RefreshScheduler`'s jittered interval, plus an immediate retry once
+  location permission is granted. The status item itself now shows a live
+  colored AQI dot + number (`MenuBarStatusLabel`) instead of a static label.
+  Removed `e70.6`'s bd dependency on `10h.4` (`BluegullServiceClient`) — same
+  correction as `dc2.4`'s: the dependency assumed both modes needed to ship
+  together, but nothing here structurally needs the Service-mode client to
+  exist. `10h.4` gets a documented integration point
+  (`AQIFetchCoordinator`'s `.service` case) for whenever it's built.

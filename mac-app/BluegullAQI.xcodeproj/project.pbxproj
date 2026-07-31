@@ -13,6 +13,7 @@
 		427078BFA65B40AE6C2C05F4 /* BluegullAQIKit in Frameworks */ = {isa = PBXBuildFile; productRef = 29CD4EE984C4002F98DE0F20 /* BluegullAQIKit */; };
 		4460336222EEF14B6FD71337 /* AirNowAPIKeyEntryViewRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F9CF59531242FB1B36E30436 /* AirNowAPIKeyEntryViewRenderTests.swift */; };
 		4C8280DF320781E97397D09D /* AQISummaryComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74E1516B356CC6C7E81C6B68 /* AQISummaryComponents.swift */; };
+		5EEE8A79D015E97DFD3CE50A /* AQIRefreshController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D3DDDAA4F5095D4C7EA2E57 /* AQIRefreshController.swift */; };
 		6E3253DF17C0E8B616192E15 /* WidgetDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 783032363E8C98ACB43C567D /* WidgetDetailView.swift */; };
 		770B489087FA66D99F7A2B5C /* AQIPopoverViewRenderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F293DBAC18F4A253D773482B /* AQIPopoverViewRenderTests.swift */; };
 		871FB0558A605131295E5F3F /* BluegullAQIAppTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75E15CEFFA0C4D84F7C51631 /* BluegullAQIAppTests.swift */; };
@@ -80,6 +81,7 @@
 		3DB2B809FE0F30CFBF19DEAD /* BluegullAQIUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluegullAQIUITests.swift; sourceTree = "<group>"; };
 		4EFEF1A43790D55E8FBF88E5 /* PinnedLocationsViewRenderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PinnedLocationsViewRenderTests.swift; sourceTree = "<group>"; };
 		58E8137294CDD512ABA44CC5 /* AirNowAPIKeyEntryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirNowAPIKeyEntryView.swift; sourceTree = "<group>"; };
+		5D3DDDAA4F5095D4C7EA2E57 /* AQIRefreshController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AQIRefreshController.swift; sourceTree = "<group>"; };
 		69D792FF067E0AD051578B6B /* BluegullAQIWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluegullAQIWidgetBundle.swift; sourceTree = "<group>"; };
 		74E1516B356CC6C7E81C6B68 /* AQISummaryComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AQISummaryComponents.swift; sourceTree = "<group>"; };
 		74E572388F725368967AADD0 /* SelectLocationIntent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectLocationIntent.swift; sourceTree = "<group>"; };
@@ -163,6 +165,7 @@
 				58E8137294CDD512ABA44CC5 /* AirNowAPIKeyEntryView.swift */,
 				0A73E6483B532D53E15C142C /* AQIColor+SwiftUI.swift */,
 				94DF0D90601FFD77A14B6C59 /* AQIPopoverView.swift */,
+				5D3DDDAA4F5095D4C7EA2E57 /* AQIRefreshController.swift */,
 				74E1516B356CC6C7E81C6B68 /* AQISummaryComponents.swift */,
 				8DF9717EF0E478DFF3E50972 /* BluegullAQI.entitlements */,
 				EA88798997F7DDC1CE20DFEB /* BluegullAQIApp.swift */,
@@ -360,6 +363,7 @@
 			files = (
 				D8FDD84174F95B26D605C510 /* AQIColor+SwiftUI.swift in Sources */,
 				01C556A49C92A7B0F6607632 /* AQIPopoverView.swift in Sources */,
+				5EEE8A79D015E97DFD3CE50A /* AQIRefreshController.swift in Sources */,
 				4C8280DF320781E97397D09D /* AQISummaryComponents.swift in Sources */,
 				E1E7507A9B52D1E1782B693D /* AirNowAPIKeyEntryView.swift in Sources */,
 				F40295CE846246E89EBAA39B /* BluegullAQIApp.swift in Sources */,

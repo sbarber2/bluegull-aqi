@@ -11,10 +11,10 @@ struct WidgetDetailView: View {
     let location: Location?
 
     // Reads directly from the App Group cache, the same source
-    // `WidgetTimelineComputer` gives the widget itself -- the container app
-    // has no live fetch pipeline wired up yet (bluegull-aqi-e70.6/e70.7),
-    // so this shows whatever the widget was already showing, not a fresh
-    // fetch trigger.
+    // `WidgetTimelineComputer` gives the widget itself -- shows whatever
+    // `AQIRefreshController` (bluegull-aqi-e70.6/e70.7) last cached, not a
+    // fresh fetch trigger. Opening this view isn't itself a signal to
+    // fetch.
     private let computer: WidgetTimelineComputer?
 
     init(location: Location?, store: SharedCacheStore? = UserDefaultsCacheStore()) {

@@ -57,3 +57,26 @@ struct DisclaimerFooter: View {
             .foregroundStyle(.secondary)
     }
 }
+
+/// The menu bar status item's own content (bluegull-aqi-e70.6) -- distinct
+/// from `AQIHeadlineBadge`, which is sized for the popover/detail view, not
+/// the tiny always-visible menu bar sliver. Falls back to a generic
+/// template icon when there's no reading yet (never fetched, or the most
+/// recent fetch failed with nothing previously cached to fall back to).
+struct MenuBarStatusLabel: View {
+    let reading: AQIReading?
+
+    var body: some View {
+        if let reading, let headline = reading.headlinePollutant,
+           let aqi = headline.nowcastAQI, let category = headline.category {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(category.color.swiftUIColor)
+                    .frame(width: 8, height: 8)
+                Text("\(aqi)")
+            }
+        } else {
+            Image(systemName: "aqi.medium")
+        }
+    }
+}
