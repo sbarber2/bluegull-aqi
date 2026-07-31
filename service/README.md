@@ -46,5 +46,13 @@ the actual key. A bare `make run-local` (no `op run` prefix) will pass the
 literal `op://...` string to AirNow and get a confusing 401 -- the prefix is
 what makes the reference resolve.
 
-Deploying requires AWS credentials for account `843088391598` and is not yet
-wired up as a Makefile target -- see `bluegull-aqi-q9r.8`.
+Deploying requires AWS credentials for account `843088391598`. Manually:
+
+```bash
+sam build
+sam deploy --config-env dev   # or stage / prod
+```
+
+CI/CD deploy (`.github/workflows/deploy.yml-OFF`, `bluegull-aqi-q9r.8`) is
+written but disabled until `bluegull-aqi-q9r.29` (OIDC role) exists and the
+first manual dev deploy (`bluegull-aqi-q9r.10`) has happened.

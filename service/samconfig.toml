@@ -1,5 +1,12 @@
 version = 0.1
 
+# [default...] is for local/manual `sam deploy` (interactive changeset
+# confirmation) -- mirrors [dev...] below. The three named config-envs
+# (bluegull-aqi-q9r.8) are for the GitHub Actions deploy workflow, which
+# passes --config-env and --no-confirm-changeset explicitly. No
+# BaseDomain/HostedZoneId/CertificateArn parameter_overrides yet -- those
+# land with the Route53 + ACM wiring in template.yaml (bluegull-aqi-q9r.6).
+
 [default.deploy.parameters]
 stack_name = "bluegull-aqi-dev"
 resolve_s3 = true
@@ -9,4 +16,37 @@ capabilities = "CAPABILITY_IAM"
 image_repositories = []
 
 [default.global.parameters]
+region = "us-east-2"
+
+[dev.deploy.parameters]
+stack_name = "bluegull-aqi-dev"
+resolve_s3 = true
+s3_prefix = "bluegull-aqi-dev"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+
+[dev.global.parameters]
+region = "us-east-2"
+
+[stage.deploy.parameters]
+stack_name = "bluegull-aqi-stage"
+resolve_s3 = true
+s3_prefix = "bluegull-aqi-stage"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+
+[stage.global.parameters]
+region = "us-east-2"
+
+[prod.deploy.parameters]
+stack_name = "bluegull-aqi-prod"
+resolve_s3 = true
+s3_prefix = "bluegull-aqi-prod"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+
+[prod.global.parameters]
 region = "us-east-2"

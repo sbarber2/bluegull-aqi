@@ -1,0 +1,71 @@
+name: Deploy backend service
+
+# Disabled via the .yml-OFF extension (GitHub Actions only picks up
+# .yml/.yaml under .github/workflows) -- mirrors Plant-Tracer's
+# deploy-dev.yml-OFF/deploy-demo.yml-OFF/deploy-production.yml-OFF until
+# the service is proven out (bluegull-aqi-q9r.8). Turn on by renaming to
+# deploy.yml once:
+#   - bluegull-aqi-q9r.29 has created the OIDC IAM role and set the
+#     AWS_DEPLOY_ROLE_ARN repo secret this workflow assumes below, and
+#   - bluegull-aqi-q9r.10 has done the first manual dev-stage deploy from a
+#     local machine, so the stack already exists before CI ever touches it.
+#
+# Manual trigger only (workflow_dispatch) -- not auto-deployed on push/merge,
+# matching doc/DESIGN.md "CI/CD". No domain parameter_overrides yet -- those
+# land with bluegull-aqi-q9r.6 (Route53 + ACM in template.yaml).
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Stack to deploy
+        type: choice
+        required: true
+        options: [dev, stage, prod]
+
+concurrency: deploy-${{ inputs.environment }}
+
+permissions:
+  id-token: write
+  contents: read
+
+defaults:
+  run:
+    working-directory: service
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-2
+
+      - uses: aws-actions/setup-sam@v3
+        with:
+          use-installer: true
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install Poetry
+        run: pipx install poetry
+
+      - name: Install dependencies
+        run: make install
+
+      - name: Build
+        run: make build
+
+      - name: Deploy
+        run: >
+          sam deploy
+          --config-env ${{ inputs.environment }}
+          --no-confirm-changeset
+          --no-fail-on-empty-changeset
