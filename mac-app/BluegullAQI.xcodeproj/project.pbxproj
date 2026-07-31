@@ -297,6 +297,7 @@
 				LastUpgradeCheck = 1430;
 				TargetAttributes = {
 					2372924C8E8574B3FF80C240 = {
+						DevelopmentTeam = G5DWPBWHQ5;
 						ProvisioningStyle = Automatic;
 					};
 					2CD144F3A5A3634E088A1A34 = {
@@ -307,6 +308,7 @@
 						TestTargetID = 647EFED4004ADB5A066E3B39;
 					};
 					647EFED4004ADB5A066E3B39 = {
+						DevelopmentTeam = G5DWPBWHQ5;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -414,6 +416,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G5DWPBWHQ5;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = BluegullAQI/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -433,6 +436,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G5DWPBWHQ5;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = BluegullAQIWidget/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -543,6 +547,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G5DWPBWHQ5;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = BluegullAQIWidget/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -644,6 +649,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = G5DWPBWHQ5;
 				ENABLE_HARDENED_RUNTIME = YES;
 				INFOPLIST_FILE = BluegullAQI/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (

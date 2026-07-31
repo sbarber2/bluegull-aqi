@@ -23,6 +23,14 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: solutions.bluegull.aqi
         CODE_SIGN_STYLE: Automatic
+        # Steve's Apple Developer team -- the one that registered
+        # solutions.bluegull.aqi's bundle IDs/App Group (bluegull-aqi-
+        # 8ef.5). Belongs in project.yml, not just Xcode's local UI: this
+        # is the actual source `xcodegen generate` reads, so leaving it out
+        # here meant every regeneration (every `make install`/`test-swift`
+        # run) silently wiped whatever team Xcode had picked, forcing a
+        # re-select each time. Not a secret -- a public team identifier.
+        DEVELOPMENT_TEAM: G5DWPBWHQ5
         ENABLE_HARDENED_RUNTIME: true
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
@@ -70,6 +78,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: solutions.bluegull.aqi.widget
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: G5DWPBWHQ5
         ENABLE_HARDENED_RUNTIME: true
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
