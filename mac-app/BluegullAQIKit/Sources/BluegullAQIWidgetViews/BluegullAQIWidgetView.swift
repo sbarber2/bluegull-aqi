@@ -141,6 +141,7 @@ struct MediumWidgetLayout: View {
 
             Spacer(minLength: 0)
         }
+        .padding()
     }
 
     private func pollutantRow(_ pollutant: PollutantReading) -> some View {
@@ -190,6 +191,7 @@ struct LargeWidgetLayout: View {
 
             Spacer(minLength: 0)
         }
+        .padding()
     }
 
     private func pollutantRow(_ pollutant: PollutantReading) -> some View {
