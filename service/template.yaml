@@ -74,6 +74,21 @@ Parameters:
       -- raise per environment via parameter_overrides, not by editing this
       default.
 
+      0 is a special sentinel meaning "no reservation at all" (see
+      HasReservedConcurrency below) -- NOT "reserve zero executions," which
+      would instead throttle the function permanently. Exists because this
+      brand-new account's default Lambda concurrency quota is still only 10
+      (bluegull-aqi-q9r.35), and AWS enforces a hard floor of 10
+      *unreserved* executions account-wide -- with a 10-execution account
+      total, no positive reservation is possible at all until a quota
+      increase lands.
+      Temporary, dev-only: the account's own 10-execution ceiling still
+      bounds this function regardless (nothing else competes for it in this
+      account), so this doesn't meaningfully weaken protection for a
+      personal-scale dev deploy, but it is a real reduction from an explicit
+      per-function guarantee -- revert once the quota increase lands, see
+      bluegull-aqi-q9r.36.
+
   ApiThrottlingRateLimit:
     Type: Number
     Default: 10
@@ -107,6 +122,11 @@ Parameters:
       A conservative placeholder: AirNow's real per-key limit isn't published
       and only appears on the account dashboard after registering
       (bluegull-aqi-8ef.1) -- re-tune once that number is known.
+
+Conditions:
+  # See LambdaReservedConcurrentExecutions's own Description for why 0 is
+  # a sentinel for "skip the reservation," not a real reserved value.
+  HasReservedConcurrency: !Not [!Equals [!Ref LambdaReservedConcurrentExecutions, 0]]
 
 Resources:
   AqiHttpApi:
@@ -231,7 +251,7 @@ Resources:
       Handler: bluegull_aqi_service.lambda_handler.lambda_handler
       Timeout: 30
       MemorySize: 256
-      ReservedConcurrentExecutions: !Ref LambdaReservedConcurrentExecutions
+      ReservedConcurrentExecutions: !If [HasReservedConcurrency, !Ref LambdaReservedConcurrentExecutions, !Ref "AWS::NoValue"]
       Environment:
         Variables:
           LOG_LEVEL: !Ref LogLevel

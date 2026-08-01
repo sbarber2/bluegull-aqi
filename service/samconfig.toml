@@ -8,6 +8,14 @@ version = 0.1
 # DomainName/HostedZoneId (bluegull-aqi-q9r.6): single domain,
 # bluegull.solutions (bluegull-aqi-8ef.24) -- one Route53 hosted zone
 # (Z06150363PJ0MRTG6PK26) shared by all three dot-subdomain stacks.
+#
+# LambdaReservedConcurrentExecutions=0 on dev/default only (TEMPORARY):
+# this account's Lambda concurrency quota is still only 10 pending an AWS
+# support case, and AWS enforces a hard floor of 10 *unreserved*
+# executions account-wide -- with a 10-execution total, no positive
+# reservation is possible at all yet. 0 is template.yaml's sentinel for
+# "skip the reservation" (see its own Description). Revert once the quota
+# increase lands -- filed as bluegull-aqi-q9r.35.
 
 [default.deploy.parameters]
 stack_name = "bluegull-aqi-dev"
@@ -16,7 +24,7 @@ s3_prefix = "bluegull-aqi-dev"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
 image_repositories = []
-parameter_overrides = "DomainName=\"dev.aqi.bluegull.solutions\" HostedZoneId=\"Z06150363PJ0MRTG6PK26\""
+parameter_overrides = "DomainName=\"dev.aqi.bluegull.solutions\" HostedZoneId=\"Z06150363PJ0MRTG6PK26\" LambdaReservedConcurrentExecutions=0"
 
 [default.global.parameters]
 region = "us-east-2"
@@ -28,7 +36,7 @@ s3_prefix = "bluegull-aqi-dev"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
 image_repositories = []
-parameter_overrides = "DomainName=\"dev.aqi.bluegull.solutions\" HostedZoneId=\"Z06150363PJ0MRTG6PK26\""
+parameter_overrides = "DomainName=\"dev.aqi.bluegull.solutions\" HostedZoneId=\"Z06150363PJ0MRTG6PK26\" LambdaReservedConcurrentExecutions=0"
 
 [dev.global.parameters]
 region = "us-east-2"

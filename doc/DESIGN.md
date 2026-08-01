@@ -2981,3 +2981,21 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   already used, rather than inventing a parallel mechanism. Each desktop
   widget and the menu bar now each have their own independent location
   selection, all drawing from the same pinned-locations list.
+- 2026-08-01 — `bluegull-aqi-q9r.10`'s Lambda concurrency quota case is still
+  `CASE_OPENED` after a weekend with no AWS movement. Steve asked whether
+  dev could deploy anyway. Confirmed the real constraint: AWS enforces a
+  hard floor of 10 *unreserved* executions account-wide, and this account's
+  total quota is exactly 10 -- so no positive `ReservedConcurrentExecutions`
+  value is possible right now, not even 1. Made the reservation optional in
+  `template.yaml` (a `HasReservedConcurrency` condition, `!Ref
+  "AWS::NoValue"` when `LambdaReservedConcurrentExecutions` is the sentinel
+  `0`) and set it to `0` on dev only (`samconfig.toml`). Explicitly a
+  temporary, dev-only reduction in protection, not a free lunch: the
+  account's own 10-execution ceiling still bounds this function regardless
+  (nothing else competes for it in this account yet), so the practical
+  difference is small right now, but it's a real step down from an explicit
+  per-function guarantee. Steve's call, made with that tradeoff explicit --
+  not concerned about denial-of-wallet while working solo against dev, and
+  plans to figure out how to disable the service entirely when it's not
+  actively in use. Filed `bluegull-aqi-q9r.36` to revert once the quota
+  increase lands.
