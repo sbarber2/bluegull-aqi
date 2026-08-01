@@ -3,7 +3,8 @@
 # Xcode GUI required. `service/Makefile` already covers the Python side in
 # detail (poetry, DynamoDB Local, SAM); this delegates to it rather than
 # duplicating it.
-.PHONY: test test-swift test-ui test-service snapshots record-snapshots install uninstall
+.PHONY: test test-swift test-ui test-service snapshots record-snapshots install uninstall \
+        service-deploy service-delete service-enable service-disable
 
 MAC_APP_DIR := mac-app
 SERVICE_DIR := service
@@ -40,6 +41,24 @@ test-ui:
 # demand; needs `java`, not Docker).
 test-service:
 	$(MAKE) -C $(SERVICE_DIR) pytest
+
+# Real AWS actions -- all four just delegate to service/Makefile, which
+# owns the actual implementations (deploy/delete/enable/disable) since
+# they need SAM/aws CLI context that lives there. `ENV=stage` (etc.)
+# passed on the command line forwards through automatically (GNU Make
+# exports command-line variable assignments to sub-makes). Default ENV is
+# "dev" -- see service/Makefile's own comment on why.
+service-deploy:
+	$(MAKE) -C $(SERVICE_DIR) deploy
+
+service-delete:
+	$(MAKE) -C $(SERVICE_DIR) delete
+
+service-enable:
+	$(MAKE) -C $(SERVICE_DIR) enable
+
+service-disable:
+	$(MAKE) -C $(SERVICE_DIR) disable
 
 # Renders the widget's small/medium/large/no-data fixtures to PNGs for
 # direct visual inspection (bluegull-aqi-mtm.10) -- a scratch directory,

@@ -46,12 +46,32 @@ the actual key. A bare `make run-local` (no `op run` prefix) will pass the
 literal `op://...` string to AirNow and get a confusing 401 -- the prefix is
 what makes the reference resolve.
 
-Deploying requires AWS credentials for account `843088391598`. Manually:
+Deploying requires AWS credentials for account `843088391598`.
 
 ```bash
-sam build
-sam deploy --config-env dev   # or stage / prod
+make deploy                 # sam build + sam deploy --config-env dev
+make deploy ENV=stage       # or ENV=prod, once those are actually ready
+make delete                 # tear down the whole stack (prompts to confirm)
+make disable                # kill switch: block all Lambda invocations, instant, reversible
+make enable                 # reverse make disable
 ```
+
+(Root-level equivalents also work from the repo root: `make service-deploy`,
+`make service-delete`, `make service-enable`, `make service-disable`.)
+
+`make disable`/`make enable` operate outside CloudFormation entirely -- no
+redeploy needed either direction. They set/clear the deployed Lambda's
+reserved-concurrency override directly (`aws lambda put-function-concurrency
+--reserved-concurrent-executions 0` to block; `delete-function-concurrency`
+to restore), which is different from `template.yaml`'s own `0` sentinel for
+`LambdaReservedConcurrentExecutions` (`bluegull-aqi-q9r.35`) -- that one means
+"no reservation, share the account pool"; this is the opposite, an explicit
+hard block. Useful while the account's Lambda concurrency quota is still
+low (`bluegull-aqi-q9r.36`) and there's no automatic circuit breaker running
+underneath: `make disable` when not actively using the dev stack.
+
+Or run `sam build`/`sam deploy --config-env dev` directly if you'd rather
+not go through `make`.
 
 Each stack gets a custom domain under `bluegull.solutions`
 (`bluegull-aqi-q9r.6`): `dev.aqi.bluegull.solutions`, `stage.aqi.bluegull.solutions`,
