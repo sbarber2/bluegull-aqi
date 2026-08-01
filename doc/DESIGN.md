@@ -2999,3 +2999,18 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   plans to figure out how to disable the service entirely when it's not
   actively in use. Filed `bluegull-aqi-q9r.36` to revert once the quota
   increase lands.
+- 2026-08-01 — **First real backend deploy** (`bluegull-aqi-q9r.10`): stack
+  `bluegull-aqi-dev` live in account `843088391598`/`us-east-2`, using the
+  `q9r.35` no-reserved-concurrency workaround. Had to `sam delete` a stack
+  stuck in `ROLLBACK_COMPLETE` from an earlier pre-workaround attempt first
+  (that state can't be updated, only deleted and recreated — clean, nothing
+  had actually persisted). Verified end-to-end via `curl`: `GET
+  https://dev.aqi.bluegull.solutions/aqi?lat=37.7749&lon=-122.4194` returns
+  real AirNow observations (PM2.5 37/Good, OZONE 17/Good, Bay Area Air
+  District); a second call returns `cached: true`, confirming the DynamoDB
+  cache. ACM DNS validation, the Route53 alias, and the API Gateway custom
+  domain mapping all worked on the first real attempt — the custom domain
+  serves cleanly at the root (`/aqi`, no stage prefix); only the raw
+  fallback `execute-api` URL needs `/prod/aqi`, since it's a named
+  (non-`$default`) HTTP API stage — expected, not a bug, and that URL was
+  always documented as superseded by the custom domain anyway.
