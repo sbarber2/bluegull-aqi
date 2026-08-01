@@ -119,3 +119,48 @@ final class AQIFetchCoordinatorTests: XCTestCase {
         )
     }
 }
+
+/// bluegull-aqi-e70.24: every case needs real, non-empty user-facing text
+/// -- found genuinely missing before this, which is exactly why switching
+/// to Service mode looked like the app had silently broken instead of
+/// clearly saying "this mode isn't ready yet."
+final class UserMessageTests: XCTestCase {
+    func testAQIFetchErrorMessagesAreNonEmptyAndDistinct() {
+        XCTAssertFalse(AQIFetchError.noAPIKeyConfigured.userMessage.isEmpty)
+        XCTAssertFalse(AQIFetchError.serviceModeNotYetAvailable.userMessage.isEmpty)
+        XCTAssertNotEqual(
+            AQIFetchError.noAPIKeyConfigured.userMessage,
+            AQIFetchError.serviceModeNotYetAvailable.userMessage
+        )
+    }
+
+    func testServiceModeMessageMentionsSwitchingToDirect() {
+        // The one message that matters most to get right: it's the direct
+        // fix for the exact confusion Steve hit (switched to Service,
+        // nothing updated, no indication why).
+        XCTAssertTrue(AQIFetchError.serviceModeNotYetAvailable.userMessage.localizedCaseInsensitiveContains("Direct"))
+    }
+
+    func testAirNowErrorWebServiceErrorMessagePassesThroughVerbatim() {
+        let error = AirNowError.webServiceError(statusCode: 401, message: "Invalid API key")
+        XCTAssertEqual(error.userMessage, "Invalid API key")
+    }
+
+    func testAirNowErrorMessagesAreNonEmpty() {
+        let errors: [AirNowError] = [
+            .requestFailed("timed out"),
+            .unexpectedResponse,
+            .httpError(statusCode: 500),
+            .webServiceError(statusCode: 400, message: "bad request"),
+            .decodingFailed("truncated"),
+        ]
+        for error in errors {
+            XCTAssertFalse(error.userMessage.isEmpty)
+        }
+    }
+
+    func testAQIFetchErrorAirNowCaseDelegatesToTheWrappedError() {
+        let inner = AirNowError.webServiceError(statusCode: 401, message: "Invalid API key")
+        XCTAssertEqual(AQIFetchError.airNowError(inner).userMessage, inner.userMessage)
+    }
+}

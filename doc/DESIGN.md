@@ -3014,3 +3014,16 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   fallback `execute-api` URL needs `/prod/aqi`, since it's a named
   (non-`$default`) HTTP API stage — expected, not a bug, and that URL was
   always documented as superseded by the custom domain anyway.
+- 2026-08-01 — Steve found: switching Data Source from Direct to Service in
+  the running app, the location picker stopped updating anything — switching
+  back to Direct fixed it. Root cause confirmed in code, not theorized:
+  `AQIRefreshController.lastError` was tracked correctly the whole time (set
+  to `.serviceModeNotYetAvailable` on every fetch attempt in Service mode,
+  since `BluegullServiceClient` doesn't exist yet), but `AQIPopoverView`
+  never read it — the view only branched on whether `reading` was nil, so a
+  stale Direct-mode reading just sat there frozen with zero indication
+  anything was wrong. Looked exactly like the picker itself was broken.
+  Added `userMessage` to `AirNowError`/`AQIFetchError` and threaded
+  `lastError` through to the popover — an error now shows a clear message
+  *instead of* a stale reading, not alongside it, so switching to a
+  currently-broken mode is never mistakable for a live, current display.

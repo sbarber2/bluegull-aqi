@@ -24,4 +24,23 @@ public enum AirNowError: Error, Equatable, Sendable {
 
     /// The response body wasn't the expected JSON shape.
     case decodingFailed(String)
+
+    /// User-facing text (bluegull-aqi-e70.24) -- `.webServiceError`'s own
+    /// message is AirNow's actual explanation (e.g. "Invalid API key"),
+    /// surfaced verbatim since it's already written for a human, not
+    /// AirNow-internal jargon.
+    public var userMessage: String {
+        switch self {
+        case .requestFailed:
+            return "Couldn't reach AirNow. Check your internet connection."
+        case .unexpectedResponse:
+            return "AirNow returned an unexpected response."
+        case .httpError(let statusCode):
+            return "AirNow returned an error (HTTP \(statusCode))."
+        case .webServiceError(_, let message):
+            return message
+        case .decodingFailed:
+            return "Couldn't understand AirNow's response."
+        }
+    }
 }

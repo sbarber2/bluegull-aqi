@@ -14,6 +14,21 @@ public enum AQIFetchError: Error, Equatable, Sendable {
     case serviceModeNotYetAvailable
 
     case airNowError(AirNowError)
+
+    /// User-facing text (bluegull-aqi-e70.24) -- found genuinely missing:
+    /// switching to Service mode silently failed every fetch with no UI
+    /// indication why, making the whole app look broken/unresponsive
+    /// rather than "this one mode isn't ready yet."
+    public var userMessage: String {
+        switch self {
+        case .noAPIKeyConfigured:
+            return "Enter your AirNow API key in Settings to use Direct mode."
+        case .serviceModeNotYetAvailable:
+            return "Service mode isn't available yet. Switch to Direct mode in Settings to use your own AirNow key."
+        case .airNowError(let error):
+            return error.userMessage
+        }
+    }
 }
 
 /// Fetches a fresh `AQIReading` for a location using whichever client the

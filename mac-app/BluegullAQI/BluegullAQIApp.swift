@@ -24,6 +24,7 @@ struct BluegullAQIApp: App {
         MenuBarExtra {
             AQIPopoverView(
                 reading: refreshController?.latestReading,
+                lastError: refreshController?.lastError,
                 onLocationChange: { Task { await refreshController?.refreshNow() } }
             )
         } label: {

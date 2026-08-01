@@ -11,6 +11,17 @@ import BluegullAQIKit
 struct AQIPopoverView: View {
     let reading: AQIReading?
 
+    // Surfaced instead of (not alongside) `reading` whenever set -- a
+    // real, confirmed gap before this existed: AQIRefreshController
+    // always tracked this correctly, but nothing in the UI ever read it,
+    // so switching to Service mode (which always fails right now --
+    // BluegullServiceClient doesn't exist yet) silently left whatever
+    // Direct-mode reading was already showing frozen in place, with zero
+    // indication anything had gone wrong. Found by Steve in a real run:
+    // "changed the setting from Direct to Service, the app did not
+    // display new values... changed back to direct, all was well."
+    let lastError: AQIFetchError?
+
     // Called after the location picker's selection changes, so the caller
     // (BluegullAQIApp) can trigger an immediate refetch for the newly
     // selected location (bluegull-aqi-e70.21) rather than waiting for the
@@ -45,7 +56,19 @@ struct AQIPopoverView: View {
                 .accessibilityIdentifier("settingsButton")
             }
 
-            if let reading,
+            if let lastError {
+                // Takes priority over `reading` even if a (now-stale)
+                // reading from before the error exists -- showing it
+                // alongside an error would be ambiguous about whether
+                // it's current. Most relevant case: Service mode, which
+                // always fails right now, shouldn't leave a frozen
+                // Direct-mode reading looking like a live one.
+                ContentUnavailableView(
+                    "Can't Show Air Quality",
+                    systemImage: "exclamationmark.triangle",
+                    description: Text(lastError.userMessage)
+                )
+            } else if let reading,
                let headline = reading.headlinePollutant,
                let aqi = headline.nowcastAQI,
                let category = headline.category {

@@ -13,14 +13,14 @@ import BluegullAQIKit
 final class AQIPopoverViewRenderTests: XCTestCase {
     @MainActor
     func testRendersWithoutCrashingWhenEmpty() {
-        let image = render(AQIPopoverView(reading: nil, onLocationChange: {}))
+        let image = render(AQIPopoverView(reading: nil, lastError: nil, onLocationChange: {}))
         XCTAssertNotNil(image)
     }
 
     @MainActor
     func testRendersWithoutCrashingWithData() {
         let reading = sampleReading(reportingAgency: "Bay Area Air District")
-        let image = render(AQIPopoverView(reading: reading, onLocationChange: {}))
+        let image = render(AQIPopoverView(reading: reading, lastError: nil, onLocationChange: {}))
         XCTAssertNotNil(image)
     }
 
@@ -29,7 +29,19 @@ final class AQIPopoverViewRenderTests: XCTestCase {
         // The tier-1 agency credit is absent, but tier 2 (AttributionCopy.staticCredit)
         // must never be omitted (bluegull-aqi-10h.15) -- exercises that fallback path.
         let reading = sampleReading(reportingAgency: nil)
-        let image = render(AQIPopoverView(reading: reading, onLocationChange: {}))
+        let image = render(AQIPopoverView(reading: reading, lastError: nil, onLocationChange: {}))
+        XCTAssertNotNil(image)
+    }
+
+    @MainActor
+    func testRendersWithoutCrashingWithAnErrorEvenWhenAStaleReadingExists() {
+        // bluegull-aqi-e70.24: the error branch must win even when a
+        // (stale) reading is also present -- exactly the state Steve hit
+        // switching to Service mode with a still-cached Direct reading.
+        let reading = sampleReading(reportingAgency: "Bay Area Air District")
+        let image = render(
+            AQIPopoverView(reading: reading, lastError: .serviceModeNotYetAvailable, onLocationChange: {})
+        )
         XCTAssertNotNil(image)
     }
 
