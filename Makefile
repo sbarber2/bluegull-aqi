@@ -3,7 +3,8 @@
 # Xcode GUI required. `service/Makefile` already covers the Python side in
 # detail (poetry, DynamoDB Local, SAM); this delegates to it rather than
 # duplicating it.
-.PHONY: test test-swift test-ui test-service snapshots record-snapshots install uninstall \
+.PHONY: test test-swift test-ui test-service snapshots record-snapshots \
+        app-build app-run app-stop app-clean \
         service-deploy service-delete service-enable service-disable
 
 MAC_APP_DIR := mac-app
@@ -80,30 +81,40 @@ record-snapshots:
 	@echo "Golden images re-recorded -- review the diff before committing."
 
 # Real signed build (NOT CODE_SIGNING_ALLOWED=NO like test-swift -- App
-# Sandbox needs an actual signature to launch at all), then launches the
-# result -- the command-line equivalent of Xcode's own Cmd+R. See
-# doc/DEVINSTALL.md "Install / run". Needs Xcode signed into the Apple ID
-# that registered the solutions.bluegull.aqi bundle IDs/App Group
-# (bluegull-aqi-8ef.5); if signing fails, open the project in Xcode once to
-# resolve/select the team, or pass DEVELOPMENT_TEAM=XXXXXXXXXX here.
-install:
+# Sandbox needs an actual signature to launch at all). See doc/DEVINSTALL.md
+# "Install / run". Needs Xcode signed into the Apple ID that registered the
+# solutions.bluegull.aqi bundle IDs/App Group (bluegull-aqi-8ef.5); if
+# signing fails, open the project in Xcode once to resolve/select the team,
+# or pass DEVELOPMENT_TEAM=XXXXXXXXXX here.
+app-build:
 	cd $(MAC_APP_DIR) && xcodegen generate
 	cd $(MAC_APP_DIR) && xcodebuild build -scheme BluegullAQI -configuration Debug -destination 'platform=macOS' -allowProvisioningUpdates
+
+# Builds, then launches the result -- the command-line equivalent of
+# Xcode's own Cmd+R.
+app-run: app-build
 	@cd $(MAC_APP_DIR) && \
 	app_path=$$(xcodebuild -scheme BluegullAQI -configuration Debug -showBuildSettings -json 2>/dev/null \
 		| python3 -c "import json,sys; d=json.load(sys.stdin); s=next(e for e in d if e['target']=='BluegullAQI')['buildSettings']; print(s['BUILT_PRODUCTS_DIR'] + '/' + s['FULL_PRODUCT_NAME'])") && \
 	echo "Launching $$app_path" && \
 	open "$$app_path"
 
-# Reverses `install` (or any prior Xcode Cmd+R run) -- see doc/DEVINSTALL.md
-# "Uninstall (leave no trace)" for what each step corresponds to. Two
-# things this can't do: reliably clear the Keychain item (`security`'s CLI
-# doesn't consistently target iCloud-synchronizable items the way
-# SecItemAdd's kSecAttrSynchronizable does -- clear it from the app's own
-# Settings before running this, or verify in Keychain Access.app after),
-# and remove a widget placed on the desktop (no CLI for that).
-uninstall:
+# Just stops the running instance -- nothing else. Separate from app-clean
+# since "I want to kill it and rebuild" and "I want to leave no trace" are
+# different, common-enough-to-distinguish needs.
+app-stop:
 	-pkill -x BluegullAQI
+
+# Reverses app-build/app-run (or any prior Xcode Cmd+R run) -- see
+# doc/DEVINSTALL.md "Uninstall (leave no trace)" for what each step
+# corresponds to. Stops the app first (app-stop) before touching its
+# DerivedData build. Two things this can't do: reliably clear the Keychain
+# item (`security`'s CLI doesn't consistently target iCloud-synchronizable
+# items the way SecItemAdd's kSecAttrSynchronizable does -- clear it from
+# the app's own Settings before running this, or verify in Keychain
+# Access.app after), and remove a widget placed on the desktop (no CLI for
+# that).
+app-clean: app-stop
 	rm -rf ~/Library/Developer/Xcode/DerivedData/BluegullAQI-*
 	-security delete-generic-password -s solutions.bluegull.aqi.airnow-api-key -a airnow-api-key >/dev/null 2>&1
 	-defaults delete solutions.bluegull.aqi >/dev/null 2>&1
