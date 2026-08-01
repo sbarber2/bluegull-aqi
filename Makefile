@@ -4,7 +4,7 @@
 # detail (poetry, DynamoDB Local, SAM); this delegates to it rather than
 # duplicating it.
 .PHONY: test test-swift test-ui test-service snapshots record-snapshots \
-        app-build app-run app-stop app-clean \
+        app-build app-run app-launch app-stop app-clean \
         service-deploy service-delete service-enable service-disable
 
 MAC_APP_DIR := mac-app
@@ -91,8 +91,19 @@ app-build:
 	cd $(MAC_APP_DIR) && xcodebuild build -scheme BluegullAQI -configuration Debug -destination 'platform=macOS' -allowProvisioningUpdates
 
 # Builds, then launches the result -- the command-line equivalent of
-# Xcode's own Cmd+R.
+# Xcode's own Cmd+R. `app-build` is .PHONY, so `xcodegen generate` and
+# `xcodebuild build` always run here, every time -- but xcodebuild's own
+# incremental compilation means that's fast (a quick "nothing changed"
+# check), not a true from-scratch rebuild. See app-launch below if you
+# want to skip that check entirely.
 app-run: app-build
+	$(MAKE) app-launch
+
+# Launches whatever's already built, without invoking xcodegen or
+# xcodebuild at all -- for when you know nothing's changed since the last
+# app-build/app-run and just want to relaunch fast. Fails with a clear
+# Xcode error if nothing's been built yet (run app-build/app-run first).
+app-launch:
 	@cd $(MAC_APP_DIR) && \
 	app_path=$$(xcodebuild -scheme BluegullAQI -configuration Debug -showBuildSettings -json 2>/dev/null \
 		| python3 -c "import json,sys; d=json.load(sys.stdin); s=next(e for e in d if e['target']=='BluegullAQI')['buildSettings']; print(s['BUILT_PRODUCTS_DIR'] + '/' + s['FULL_PRODUCT_NAME'])") && \

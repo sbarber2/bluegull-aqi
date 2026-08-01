@@ -17,13 +17,20 @@ in Xcode without going through `make`, generate it yourself first:
 ## Build / run
 
 ```bash
-make app-build   # xcodegen generate + a real signed build, no launch
-make app-run     # app-build, then launches the result
-make app-stop    # stops the running instance
-make app-clean   # app-stop, then removes DerivedData, Keychain item,
-                  # preferences, App Group container, and the location
-                  # permission grant -- see "Clean (leave no trace)" below
+make app-build    # xcodegen generate + a real signed build, no launch
+make app-run      # app-build, then launches the result
+make app-launch   # just launches whatever's already built -- no rebuild
+                   # check at all, for when you know nothing's changed
+make app-stop     # stops the running instance
+make app-clean    # app-stop, then removes DerivedData, Keychain item,
+                   # preferences, App Group container, and the location
+                   # permission grant -- see "Clean (leave no trace)" below
 ```
+
+`app-build` is a `make` `.PHONY` target, so `app-run` always re-invokes
+`xcodegen generate` and `xcodebuild build` -- but `xcodebuild`'s own
+incremental compilation makes that fast when nothing's changed (a quick
+check, not a true rebuild). `app-launch` skips even that check.
 
 `app-build`/`app-run` do a real, signed Debug build (App Sandbox needs an
 actual signature to launch at all — this is not the same as
