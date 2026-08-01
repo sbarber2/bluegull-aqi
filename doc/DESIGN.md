@@ -1182,11 +1182,25 @@ is the practical answer, not a CLI.
 
 ### CI layout
 
-Two GitHub Actions workflows, split by directory like the repo layout: one for
+GitHub Actions workflows, split by directory like the repo layout: one for
 `service/` (lint, pytest against DynamoDB Local, `sam validate`/`sam build` — no
-deploy), one for `mac-app/` (`xcodebuild test` on `macos-latest`, covering unit,
-snapshot, and XCUITest suites). Neither requires an AWS account, an AWS deployment,
-or Docker.
+deploy), one for `mac-app/` (`macos-latest`, delegating to `make test-swift` /
+`make test-ui`), plus a repo-wide secret scan on every push/PR. Neither the
+service nor mac-app workflow requires an AWS account, an AWS deployment, or
+Docker. The (currently disabled, `deploy.yml-OFF`) service deploy workflow is
+separate and manual-trigger-only — see its own header comment.
+
+`mac-app-ci.yml` (bluegull-aqi-10h.9) splits into two jobs rather than one,
+matching `test-swift`/`test-ui`'s own split (see "Testing strategy" →
+"Menu bar app & widget extension"): `test-swift` (BluegullAQIKit unit +
+widget snapshot tests, plus the app-scheme's `BluegullAQITests`) gates
+normally; `test-ui` (the XCUITest suite) runs `continue-on-error: true`,
+since GitHub-hosted macOS runners have no supported way to pre-grant the
+Accessibility/Automation TCC permission `xcodebuild test`'s runner process
+needs for a real GUI-driving suite (no MDM/PPPC profile deployment
+available on an ephemeral VM) — the same constraint that keeps `test-ui`
+out of the default local `make test` target. It still runs, and its
+pass/fail is visible in the Actions UI, just not blocking.
 
 All of it wraps into `make` targets following Plant-Tracer's idiom — e.g.
 `make test-swift`, `make snapshots`, `make test` for everything.
@@ -1220,6 +1234,21 @@ The repo lives at [github.com/sbarber2/bluegull-aqi](https://github.com/sbarber2
 human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
+
+- 2026-08-01 — Implemented bluegull-aqi-10h.9 (`.github/workflows/mac-app-ci.yml`):
+  `macos-latest`, two jobs. `test-swift` runs `make test-swift` (XcodeGen +
+  the app scheme's build/`BluegullAQITests` + the `BluegullAQIKit`
+  package's `swift test`, which also covers the widget snapshot tests) and
+  gates normally. `test-ui` runs `make test-ui` (the XCUITest suite) with
+  `continue-on-error: true` -- GitHub-hosted macOS runners have no
+  supported way to pre-grant the Accessibility/Automation TCC permission
+  the runner process needs, the exact constraint `bluegull-aqi-e70.9`
+  already documented locally (a real, diagnosed 380-second failure, not a
+  guess) as the reason `test-ui` stays out of the default `make test`
+  target. Both jobs install XcodeGen via `brew` only if it isn't already
+  on the runner's `PATH`. Mirrors `service-ci.yml`'s own approach of
+  delegating to `make` targets rather than reimplementing steps inline, so
+  local and CI runs can never drift apart.
 
 - 2026-08-01 — Implemented bluegull-aqi-10h.8 (unit tests for
   `BluegullAQIKit`): most of this bead's scope (model decoding, cache TTL

@@ -1,0 +1,46 @@
+name: macOS app CI
+
+# Builds and tests the menu bar app, widget extension, and BluegullAQIKit
+# shared package on a real macOS runner (bluegull-aqi-10h.9). Delegates to
+# the root Makefile (bluegull-aqi-mtm.13) rather than reimplementing its
+# steps -- same reasoning as service-ci.yml: one source of truth for what
+# "the tests" actually are, checked locally with the exact same commands.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test-swift:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+
+      - name: Build and test (BluegullAQITests + BluegullAQIKit package)
+        run: make test-swift
+
+  test-ui:
+    runs-on: macos-latest
+    # XCUITest needs a logged-in GUI session with Accessibility/Automation
+    # TCC permission granted to the process running `xcodebuild test` --
+    # confirmed locally (bluegull-aqi-e70.9) via a real, diagnosed
+    # 380-second failure in an environment without it, not a guess.
+    # GitHub-hosted macOS runners have no supported way to pre-grant that
+    # TCC permission on an ephemeral VM (no MDM/PPPC profile deployment
+    # available here) -- expected "CI permission wrangling" per this
+    # bead's own description. continue-on-error so this job's outcome is
+    # still visible in the Actions UI without blocking test-swift, which
+    # has no such dependency.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install XcodeGen
+        run: command -v xcodegen >/dev/null || brew install xcodegen
+
+      - name: XCUITest suite (BluegullAQIUITests)
+        run: make test-ui
