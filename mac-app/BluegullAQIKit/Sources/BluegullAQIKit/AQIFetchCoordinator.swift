@@ -5,26 +5,19 @@ public enum AQIFetchError: Error, Equatable, Sendable {
     /// (`AirNowAPIKeyStore`) -- the user needs to visit Settings.
     case noAPIKeyConfigured
 
-    /// Service mode selected, but `BluegullServiceClient` doesn't exist yet
-    /// (bluegull-aqi-10h.4, blocked on the backend's first deploy,
-    /// bluegull-aqi-q9r.10). Surfaced explicitly rather than silently doing
-    /// nothing or crashing -- Service mode is
-    /// `DataSourceModeStore.defaultMode`, so a fresh install hits this until
-    /// the user either switches to Direct mode or the backend ships.
-    case serviceModeNotYetAvailable
-
     case airNowError(AirNowError)
 
     /// User-facing text (bluegull-aqi-e70.24) -- found genuinely missing:
     /// switching to Service mode silently failed every fetch with no UI
     /// indication why, making the whole app look broken/unresponsive
-    /// rather than "this one mode isn't ready yet."
+    /// rather than "this one mode isn't ready yet." Now moot for
+    /// `.serviceModeNotYetAvailable` specifically (bluegull-aqi-10h.4
+    /// wired up a real client), but the pattern -- and `.airNowError`'s
+    /// message -- still matters for every other failure.
     public var userMessage: String {
         switch self {
         case .noAPIKeyConfigured:
             return "Enter your AirNow API key in Settings to use Direct mode."
-        case .serviceModeNotYetAvailable:
-            return "Service mode isn't available yet. Switch to Direct mode in Settings to use your own AirNow key."
         case .airNowError(let error):
             return error.userMessage
         }
@@ -34,19 +27,23 @@ public enum AQIFetchError: Error, Equatable, Sendable {
 /// Fetches a fresh `AQIReading` for a location using whichever client the
 /// user's `DataSourceMode` selects, and writes a successful result into the
 /// shared App Group cache the widget's `TimelineProvider` also reads
-/// (bluegull-aqi-e70.7). Only `.direct` is wired to a real client today --
-/// see `AQIFetchError.serviceModeNotYetAvailable`.
+/// (bluegull-aqi-e70.7). Both `.direct` (`AirNowDirectClient`) and
+/// `.service` (`BluegullServiceClient`, bluegull-aqi-10h.4) are real as of
+/// bluegull-aqi-q9r.10's dev deploy.
 public struct AQIFetchCoordinator: Sendable {
     private let directClient: AirNowDirectClient
+    private let serviceClient: BluegullServiceClient
     private let apiKeyStore: AirNowAPIKeyStore
     private let cache: AppGroupCache
 
     public init(
         directClient: AirNowDirectClient = AirNowDirectClient(),
+        serviceClient: BluegullServiceClient = BluegullServiceClient(),
         apiKeyStore: AirNowAPIKeyStore = AirNowAPIKeyStore(),
         cache: AppGroupCache
     ) {
         self.directClient = directClient
+        self.serviceClient = serviceClient
         self.apiKeyStore = apiKeyStore
         self.cache = cache
     }
@@ -59,7 +56,7 @@ public struct AQIFetchCoordinator: Sendable {
         case .direct:
             return try await fetchDirect(location: location)
         case .service:
-            throw AQIFetchError.serviceModeNotYetAvailable
+            return try await fetchService(location: location)
         }
     }
 
@@ -81,6 +78,18 @@ public struct AQIFetchCoordinator: Sendable {
             // reading.location is the authoritative rounded value a
             // subsequent cache.get(for: someLocation.rounded) needs to
             // match.
+            cache.put(reading, for: reading.location)
+            return reading
+        } catch let error as AirNowError {
+            throw AQIFetchError.airNowError(error)
+        }
+    }
+
+    private func fetchService(location: Location) async throws -> AQIReading {
+        do {
+            let reading = try await serviceClient.fetchCurrentObservations(location: location)
+            // Same reason as fetchDirect: cache under the client's own
+            // rounded location, not the caller's.
             cache.put(reading, for: reading.location)
             return reading
         } catch let error as AirNowError {

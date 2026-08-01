@@ -14,8 +14,8 @@ struct AQIPopoverView: View {
     // Surfaced instead of (not alongside) `reading` whenever set -- a
     // real, confirmed gap before this existed: AQIRefreshController
     // always tracked this correctly, but nothing in the UI ever read it,
-    // so switching to Service mode (which always fails right now --
-    // BluegullServiceClient doesn't exist yet) silently left whatever
+    // so a failed fetch (e.g. Service mode when BluegullServiceClient
+    // didn't exist yet, bluegull-aqi-10h.4) silently left whatever
     // Direct-mode reading was already showing frozen in place, with zero
     // indication anything had gone wrong. Found by Steve in a real run:
     // "changed the setting from Direct to Service, the app did not
@@ -60,9 +60,9 @@ struct AQIPopoverView: View {
                 // Takes priority over `reading` even if a (now-stale)
                 // reading from before the error exists -- showing it
                 // alongside an error would be ambiguous about whether
-                // it's current. Most relevant case: Service mode, which
-                // always fails right now, shouldn't leave a frozen
-                // Direct-mode reading looking like a live one.
+                // it's current -- e.g. a fetch failure after switching
+                // modes shouldn't leave a frozen prior-mode reading
+                // looking like a live one.
                 ContentUnavailableView(
                     "Can't Show Air Quality",
                     systemImage: "exclamationmark.triangle",

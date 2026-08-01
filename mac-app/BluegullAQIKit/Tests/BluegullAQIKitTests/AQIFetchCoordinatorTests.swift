@@ -25,19 +25,73 @@ final class AQIFetchCoordinatorTests: XCTestCase {
     ]
     """
 
+    private let sampleServiceResponseJSON = """
+    {
+        "observations": [
+            {
+                "dateObserved": "2026-07-29",
+                "hourObserved": "14:00",
+                "localTimeZone": "PDT",
+                "reportingAreaName": "San Francisco",
+                "siteID": "060750005",
+                "siteName": "San Francisco",
+                "parameterName": "PM2.5",
+                "nowcastAQI": 31,
+                "aqiCategoryName": "Good",
+                "reportingAgency": "Bay Area Air District",
+                "lookupBehavior": "Closest Reading By Pollutant",
+                "consideredMonitors": "All",
+                "lookupBoundary": "50 Miles"
+            }
+        ],
+        "cached": false
+    }
+    """
+
     override func tearDown() {
         MockURLProtocol.requestHandler = nil
         super.tearDown()
     }
 
-    func testServiceModeThrowsNotYetAvailable() async {
-        let coordinator = makeCoordinator(keychain: InMemoryKeychain())
+    func testServiceModeFetchesAndCaches() async throws {
+        MockURLProtocol.requestHandler = { [sampleServiceResponseJSON] request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (response, Data(sampleServiceResponseJSON.utf8))
+        }
+
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        let coordinator = AQIFetchCoordinator(
+            serviceClient: BluegullServiceClient(urlSession: MockURLProtocol.makeSession()),
+            apiKeyStore: AirNowAPIKeyStore(keychain: InMemoryKeychain()),
+            cache: cache
+        )
+
+        let reading = try await coordinator.fetch(location: location, mode: .service)
+
+        XCTAssertEqual(reading.pollutants.first?.nowcastAQI, 31)
+        XCTAssertEqual(cache.get(for: location.rounded), reading)
+    }
+
+    func testServiceModeFailureWrapsAsAirNowError() async {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 502, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (response, Data(#"{"error": "upstream unavailable"}"#.utf8))
+        }
+
+        let coordinator = AQIFetchCoordinator(
+            serviceClient: BluegullServiceClient(urlSession: MockURLProtocol.makeSession()),
+            apiKeyStore: AirNowAPIKeyStore(keychain: InMemoryKeychain()),
+            cache: AppGroupCache(store: InMemorySharedCacheStore())
+        )
 
         do {
             _ = try await coordinator.fetch(location: location, mode: .service)
-            XCTFail("Expected .serviceModeNotYetAvailable")
+            XCTFail("Expected .airNowError")
         } catch let error as AQIFetchError {
-            XCTAssertEqual(error, .serviceModeNotYetAvailable)
+            guard case .airNowError = error else {
+                XCTFail("Expected .airNowError, got \(error)")
+                return
+            }
         } catch {
             XCTFail("Unexpected error type: \(error)")
         }
@@ -127,18 +181,8 @@ final class AQIFetchCoordinatorTests: XCTestCase {
 final class UserMessageTests: XCTestCase {
     func testAQIFetchErrorMessagesAreNonEmptyAndDistinct() {
         XCTAssertFalse(AQIFetchError.noAPIKeyConfigured.userMessage.isEmpty)
-        XCTAssertFalse(AQIFetchError.serviceModeNotYetAvailable.userMessage.isEmpty)
-        XCTAssertNotEqual(
-            AQIFetchError.noAPIKeyConfigured.userMessage,
-            AQIFetchError.serviceModeNotYetAvailable.userMessage
-        )
-    }
-
-    func testServiceModeMessageMentionsSwitchingToDirect() {
-        // The one message that matters most to get right: it's the direct
-        // fix for the exact confusion Steve hit (switched to Service,
-        // nothing updated, no indication why).
-        XCTAssertTrue(AQIFetchError.serviceModeNotYetAvailable.userMessage.localizedCaseInsensitiveContains("Direct"))
+        let wrapped = AQIFetchError.airNowError(.webServiceError(statusCode: 401, message: "Invalid API key"))
+        XCTAssertNotEqual(AQIFetchError.noAPIKeyConfigured.userMessage, wrapped.userMessage)
     }
 
     func testAirNowErrorWebServiceErrorMessagePassesThroughVerbatim() {

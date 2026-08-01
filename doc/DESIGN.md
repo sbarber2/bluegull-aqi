@@ -1221,6 +1221,28 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-08-01 — Implemented bluegull-aqi-10h.4 (`BluegullServiceClient`):
+  Service mode now calls the real deployed backend
+  (`GET /aqi?lat=&lon=`, bluegull-aqi-q9r.10's dev stack) instead of
+  throwing `AQIFetchError.serviceModeNotYetAvailable` on every fetch
+  (which is exactly what Steve hit switching to Service mode in a real
+  run: "the app did not display new values"). Structurally mirrors
+  `AirNowDirectClient` -- injectable `URLSession`, `Location.rounded`
+  before the request, same `AirNowError` cases -- but no API key
+  parameter (the backend holds its own AirNow key server-side, which is
+  the point of Service mode) and decodes the backend's own wrapper shape
+  (`{"observations": [...], "cached": bool}` / `{"error": "..."}"`, not
+  AirNow's `{"WebServiceError": [...]}"`). `AQIFetchCoordinator.fetch`
+  now wires both `.direct` and `.service` to real clients; the
+  now-impossible `.serviceModeNotYetAvailable` case was removed rather
+  than left dead. `baseURL` is hardcoded to the dev custom domain on
+  purpose -- switching to prod before App Store release is tracked
+  separately (bluegull-aqi-fw4.6) so it isn't silently forgotten. New
+  tests: `BluegullServiceClientTests` (mirroring
+  `AirNowDirectClientTests`) plus `.service`-path success/failure cases
+  added to `AQIFetchCoordinatorTests`. Full `make test-swift` (both the
+  `BluegullAQI` app scheme and the `BluegullAQIKit` package) passing.
+
 - 2026-07-30 — Implemented bluegull-aqi-mtm.13 (Makefile targets wrapping
   the test suites), following Plant-Tracer's Makefile idiom: everything
   runnable from a bash command line, no Xcode GUI needed. New repo-root

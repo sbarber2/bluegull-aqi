@@ -39,8 +39,9 @@ final class AQIPopoverViewRenderTests: XCTestCase {
         // (stale) reading is also present -- exactly the state Steve hit
         // switching to Service mode with a still-cached Direct reading.
         let reading = sampleReading(reportingAgency: "Bay Area Air District")
+        let error = AQIFetchError.airNowError(.webServiceError(statusCode: 502, message: "upstream unavailable"))
         let image = render(
-            AQIPopoverView(reading: reading, lastError: .serviceModeNotYetAvailable, onLocationChange: {})
+            AQIPopoverView(reading: reading, lastError: error, onLocationChange: {})
         )
         XCTAssertNotNil(image)
     }
