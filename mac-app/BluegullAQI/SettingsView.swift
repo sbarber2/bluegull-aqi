@@ -18,6 +18,15 @@ import SwiftUI
 /// here too. The two fighting over sizing authority is exactly what
 /// triggered a real "already being laid out" AppKit recursion warning in
 /// Steve's first interactive run of the `Window`-based version.
+///
+/// `.frame(width: 360)` (a single fixed value) was a second, separate
+/// sizing bug: `.windowResizability(.contentSize)` derives the window's
+/// resizable range directly from the content's reported size range, and a
+/// single fixed width reports min == ideal == max -- the window genuinely
+/// could not be resized horizontally, and 360pt already truncated
+/// DataSourceModeToggle's longer segmented-control labels besides. A real
+/// min/ideal range, not a fixed value, is what makes the window both wide
+/// enough by default and actually draggable-resizable.
 struct SettingsView: View {
     @Environment(\.dismissWindow) private var dismissWindow
 
@@ -38,7 +47,7 @@ struct SettingsView: View {
             PinnedLocationsView()
         }
         .padding()
-        .frame(width: 360)
+        .frame(minWidth: 420, idealWidth: 460)
         .accessibilityIdentifier("settingsView")
     }
 }
