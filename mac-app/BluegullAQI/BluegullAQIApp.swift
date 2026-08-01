@@ -23,6 +23,19 @@ struct BluegullAQIApp: App {
     var body: some Scene {
         MenuBarExtra {
             AQIPopoverView(reading: refreshController?.latestReading)
+        } label: {
+            // .task/.onChange live here, not on AQIPopoverView above --
+            // this label is always rendered (it's the menu bar item
+            // itself), unlike the popover's content, which SwiftUI only
+            // builds the first time the user actually clicks it. The fetch
+            // loop used to start from a .task on the popover content,
+            // which meant the menu bar showed no AQI value at all until
+            // after a first click -- found by Steve in a real run. Now
+            // AQIRefreshController starts itself at construction
+            // (startOnInit), so this .task is just a safety net if that
+            // somehow didn't fire; the .onChange retry genuinely does need
+            // to live somewhere always-rendered, so it's here regardless.
+            MenuBarStatusLabel(reading: refreshController?.latestReading)
                 .task { refreshController?.start() }
                 // Fetch immediately once permission is actually granted,
                 // rather than waiting for the scheduled loop's first
@@ -31,8 +44,6 @@ struct BluegullAQIApp: App {
                 .onChange(of: locationPermission.authorizationStatus) {
                     Task { await refreshController?.refreshNow() }
                 }
-        } label: {
-            MenuBarStatusLabel(reading: refreshController?.latestReading)
         }
         .menuBarExtraStyle(.window)
 
@@ -45,10 +56,11 @@ struct BluegullAQIApp: App {
         .windowResizability(.contentSize)
 
         // A real singleton window, not a .sheet() over the MenuBarExtra
-        // popover -- see AQIPopoverView's doc comment for why. .contentSize
-        // resizability + SettingsView's own .fixedSize(vertical: true) are
-        // what actually fix the cropping that was visible under the old
-        // sheet presentation.
+        // popover -- see AQIPopoverView's doc comment for why.
+        // .windowResizability(.contentSize) alone sizes it to
+        // SettingsView's content; deliberately no additional .fixedSize()
+        // there too (see that file's own doc comment on the layout-
+        // recursion bug that combination caused).
         Window("Settings", id: "settings") {
             SettingsView()
         }

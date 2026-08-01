@@ -27,9 +27,20 @@ final class AQIRefreshController {
     /// degradation as `UserDefaultsCacheStore` elsewhere; there's nowhere
     /// to cache a result or read a previous one, so this controller simply
     /// can't do its job.
+    ///
+    /// `startOnInit` defaults to true and actually starts the fetch loop
+    /// here, at construction -- same pattern as
+    /// `LocationPermissionRequester`'s `requestOnInit`. Originally this was
+    /// triggered by a `.task` on `AQIPopoverView` instead, which was a real
+    /// bug: that view is the *popover's content*, which SwiftUI only builds
+    /// the first time the user actually clicks the menu bar icon -- so the
+    /// menu bar label showed no AQI value at all until after a first click,
+    /// found by Steve in a real run. `false` exists for callers (tests,
+    /// previews) that want construction without the side effect.
     init?(
         locationResolver: LocationResolver = LocationResolver(),
-        store: SharedCacheStore? = UserDefaultsCacheStore()
+        store: SharedCacheStore? = UserDefaultsCacheStore(),
+        startOnInit: Bool = true
     ) {
         guard let store else { return nil }
         self.locationResolver = locationResolver
@@ -37,6 +48,9 @@ final class AQIRefreshController {
         coordinator = AQIFetchCoordinator(cache: cache)
         scheduler = RefreshScheduler(store: store)
         latestReading = cache.mostRecentEntry()
+        if startOnInit {
+            start()
+        }
     }
 
     /// Starts the fetch-then-reschedule loop. Idempotent -- a second call
