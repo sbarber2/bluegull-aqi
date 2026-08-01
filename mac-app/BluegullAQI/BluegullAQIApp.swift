@@ -47,7 +47,20 @@ struct BluegullAQIApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        WindowGroup(id: "widget-detail") {
+        // Window, NOT WindowGroup -- a WindowGroup without a `for:` data
+        // binding is SwiftUI's "main content window" pattern, and macOS
+        // auto-opens ONE instance of it at launch whether or not anything
+        // ever requests it. That's a real bug this shipped with: an
+        // unwanted widget-detail window (showing whatever was last cached,
+        // including attribution/disclaimer) was silently open before the
+        // user ever tapped the widget, and very likely holding focus in
+        // front of the Settings window when the gear button tried to open
+        // it -- found by Steve in a real run ("clicking the gear brought
+        // up the AQI detail panel instead of Settings, and I could never
+        // reach Settings at all"). `Window` is a true singleton and does
+        // not auto-present -- matches how Settings itself is already
+        // declared below.
+        Window("Air Quality Detail", id: "widget-detail") {
             WidgetDetailView(location: widgetDetailLocation)
                 .onOpenURL { url in
                     widgetDetailLocation = WidgetDeepLink.location(from: url)

@@ -26,6 +26,10 @@ struct AQIPopoverView: View {
             HStack {
                 Spacer()
                 Button {
+                    // LSUIElement (agent) apps aren't reliably made
+                    // frontmost just by a window being created -- explicit
+                    // activation is what actually brings it forward.
+                    NSApp.activate(ignoringOtherApps: true)
                     openWindow(id: "settings")
                 } label: {
                     Image(systemName: "gearshape")
