@@ -55,6 +55,27 @@ final class WidgetTimelineComputerTests: XCTestCase {
         XCTAssertGreaterThan(computer.nextReloadDate(after: now), now)
     }
 
+    // MARK: - lastSuccessfulFetchDate (bluegull-aqi-dc2.1)
+
+    func testCurrentSnapshotSurfacesLastSuccessfulFetchDateEvenOnceTheEntryHasExpired() {
+        let store = InMemorySharedCacheStore()
+        let cache = AppGroupCache(store: store)
+        let now = Date()
+        cache.put(reading, for: location, ttl: 1, now: now)
+        cache.recordSuccessfulFetch(now: now)
+
+        let computer = WidgetTimelineComputer(store: store)
+        let snapshot = computer.currentSnapshot(now: now.addingTimeInterval(2))
+
+        XCTAssertNil(snapshot.reading)
+        XCTAssertEqual(snapshot.lastSuccessfulFetchDate, now)
+    }
+
+    func testCurrentSnapshotLastSuccessfulFetchDateIsNilWhenNeverFetched() {
+        let computer = WidgetTimelineComputer(store: InMemorySharedCacheStore())
+        XCTAssertNil(computer.currentSnapshot().lastSuccessfulFetchDate)
+    }
+
     // MARK: - Per-instance location configuration (bluegull-aqi-mtm.3)
 
     func testCurrentSnapshotForASpecificLocationReturnsThatLocationsEntry() {

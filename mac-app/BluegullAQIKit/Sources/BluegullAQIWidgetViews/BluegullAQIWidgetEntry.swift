@@ -17,15 +17,28 @@ public struct BluegullAQIWidgetEntry: TimelineEntry {
     // location the widget is actually showing.
     public let configuredLocation: Location?
 
-    public init(date: Date, reading: AQIReading?, configuredLocation: Location? = nil) {
+    // See WidgetTimelineSnapshot's own doc comment (bluegull-aqi-dc2.1) --
+    // survives `reading` going nil once its own cache entry expires, so the
+    // widget's empty state can say "last updated X ago" instead of an
+    // unqualified "No Data."
+    public let lastSuccessfulFetchDate: Date?
+
+    public init(
+        date: Date,
+        reading: AQIReading?,
+        configuredLocation: Location? = nil,
+        lastSuccessfulFetchDate: Date? = nil
+    ) {
         self.date = date
         self.reading = reading
         self.configuredLocation = configuredLocation
+        self.lastSuccessfulFetchDate = lastSuccessfulFetchDate
     }
 
     public init(_ snapshot: WidgetTimelineSnapshot, configuredLocation: Location? = nil) {
         date = snapshot.date
         reading = snapshot.reading
         self.configuredLocation = configuredLocation
+        lastSuccessfulFetchDate = snapshot.lastSuccessfulFetchDate
     }
 }

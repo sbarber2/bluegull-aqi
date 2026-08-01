@@ -117,6 +117,12 @@ public struct AppGroupCache: Sendable {
 
     private static let keyPrefix = "aqi-cache-"
 
+    /// Deliberately outside `keyPrefix` -- `pruneIfNeeded`/`mostRecentEntry`
+    /// only walk keys starting with `keyPrefix` and would otherwise try (and
+    /// fail) to decode this as an `AQICacheEntry` and delete it as junk on
+    /// the very next `put()`.
+    private static let lastSuccessfulFetchKey = "aqi-last-successful-fetch-at"
+
     private let store: SharedCacheStore
 
     public init(store: SharedCacheStore) {
@@ -149,6 +155,26 @@ public struct AppGroupCache: Sendable {
 
     public func remove(for location: Location) {
         store.set(nil, forKey: Self.key(for: location))
+    }
+
+    /// Records that a fetch just succeeded, independent of any single
+    /// location's own TTL-bounded entry (bluegull-aqi-dc2.1) -- this is the
+    /// one piece of "when did we last actually hear from AirNow" that
+    /// survives a per-location entry expiring and being swept. Deliberately
+    /// just a timestamp, not full `AQIReading` data, so it doesn't reopen
+    /// the retention-bounding concerns `AQICacheEntry`'s own doc comment
+    /// already addresses.
+    public func recordSuccessfulFetch(now: Date = Date()) {
+        store.set(try? JSONEncoder().encode(now), forKey: Self.lastSuccessfulFetchKey)
+    }
+
+    /// nil if a fetch has never succeeded (fresh install, or the App Group
+    /// suite was just cleared) -- distinct from "the most recent fetch's
+    /// data has since expired," which still returns a date here even once
+    /// `get`/`mostRecentEntry` no longer have anything to show for it.
+    public func lastSuccessfulFetchDate() -> Date? {
+        guard let data = store.data(forKey: Self.lastSuccessfulFetchKey) else { return nil }
+        return try? JSONDecoder().decode(Date.self, from: data)
     }
 
     /// The most recently fetched, still-valid cached reading across every

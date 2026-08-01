@@ -11,12 +11,11 @@ import BluegullAQIKit
 ///   `testSmallLowAQI`/`testSmallHazardousAQI`/`testSmallBeyondScaleAQI`.
 /// - Full pollutant breakdown overflowing the large widget --
 ///   `testLargeManyPollutants`.
-/// - Missing-data states -- `test*NoData`. "Stale-cache" doesn't yet have a
-///   *distinct* visual state to snapshot: `WidgetTimelineComputer` already
-///   collapses an expired cache entry to the same nil reading as "never
-///   fetched" (see its own tests), and giving stale data its own look is
-///   dc2.1's separate, not-yet-built scope -- these tests cover what
-///   actually renders today.
+/// - Missing-data states -- `test*NoData` (never fetched) vs. `test*StaleData`
+///   (a fetch succeeded at some point, but that entry's since expired --
+///   bluegull-aqi-dc2.1's distinct visual state, driven by
+///   `AppGroupCache.lastSuccessfulFetchDate()` surviving the per-location
+///   entry's own TTL expiry).
 /// - Light/dark mode -- `testLargeTypicalDarkMode`.
 ///
 /// Deliberately NOT covered here: Dynamic Type. `ImageRenderer` does not
@@ -67,6 +66,11 @@ final class BluegullAQIWidgetSnapshotTests: XCTestCase {
     }
 
     @MainActor
+    func testSmallStaleData() {
+        assertSnapshot(staleEntry, family: .systemSmall, size: Self.smallSize, name: "small-stale-data")
+    }
+
+    @MainActor
     func testMediumTypical() {
         let entry = entry(withPollutants: [
             pollutant("PM2.5", aqi: 78, category: "Moderate"),
@@ -87,6 +91,11 @@ final class BluegullAQIWidgetSnapshotTests: XCTestCase {
     @MainActor
     func testMediumNoData() {
         assertSnapshot(entry(reading: nil), family: .systemMedium, size: Self.mediumSize, name: "medium-no-data")
+    }
+
+    @MainActor
+    func testMediumStaleData() {
+        assertSnapshot(staleEntry, family: .systemMedium, size: Self.mediumSize, name: "medium-stale-data")
     }
 
     @MainActor
@@ -112,6 +121,11 @@ final class BluegullAQIWidgetSnapshotTests: XCTestCase {
     @MainActor
     func testLargeNoData() {
         assertSnapshot(entry(reading: nil), family: .systemLarge, size: Self.largeSize, name: "large-no-data")
+    }
+
+    @MainActor
+    func testLargeStaleData() {
+        assertSnapshot(staleEntry, family: .systemLarge, size: Self.largeSize, name: "large-stale-data")
     }
 
     @MainActor
@@ -148,6 +162,18 @@ final class BluegullAQIWidgetSnapshotTests: XCTestCase {
 
     private func entry(reading: AQIReading?) -> BluegullAQIWidgetEntry {
         BluegullAQIWidgetEntry(date: fixedDate, reading: reading)
+    }
+
+    // A prior fetch succeeded (3 hours before `fixedDate`, deterministically
+    // formatted via en_US RelativeDateTimeFormatter -- see
+    // BluegullAQIWidgetView's own `staleCaption`), but that entry has since
+    // expired, so `reading` is nil same as the "never fetched" case.
+    private var staleEntry: BluegullAQIWidgetEntry {
+        BluegullAQIWidgetEntry(
+            date: fixedDate,
+            reading: nil,
+            lastSuccessfulFetchDate: fixedDate.addingTimeInterval(-3 * 3600)
+        )
     }
 
     private func entry(withPollutants pollutants: [PollutantReading]) -> BluegullAQIWidgetEntry {

@@ -22,9 +22,17 @@ final class AQIRefreshController {
     private(set) var latestReading: AQIReading?
     private(set) var lastError: AQIFetchError?
 
+    // bluegull-aqi-dc2.1: when a fetch last actually succeeded, independent
+    // of `latestReading`'s own per-location cache TTL -- lets the UI show
+    // "updated X ago" (and keep showing `latestReading` through a
+    // transient failure) instead of the failure hiding otherwise-good data
+    // with no explanation of how old it is.
+    private(set) var lastFetchedAt: Date?
+
     private let locationResolver: LocationResolver
     private let pinnedLocationsStore: PinnedLocationsStore
     private let coordinator: AQIFetchCoordinator
+    private let cache: AppGroupCache
     private let scheduler: RefreshScheduler
     private var refreshTask: Task<Void, Never>?
 
@@ -50,10 +58,11 @@ final class AQIRefreshController {
         guard let store else { return nil }
         self.locationResolver = locationResolver
         pinnedLocationsStore = PinnedLocationsStore(store: store)
-        let cache = AppGroupCache(store: store)
+        cache = AppGroupCache(store: store)
         coordinator = AQIFetchCoordinator(cache: cache)
         scheduler = RefreshScheduler(store: store)
         latestReading = cache.mostRecentEntry()
+        lastFetchedAt = cache.lastSuccessfulFetchDate()
         if startOnInit {
             start()
         }
@@ -88,6 +97,7 @@ final class AQIRefreshController {
         do {
             let location = try await resolveLocation(currentLocationSelection())
             latestReading = try await coordinator.fetch(location: location, mode: mode)
+            lastFetchedAt = cache.lastSuccessfulFetchDate()
             lastError = nil
         } catch let error as AQIFetchError {
             lastError = error

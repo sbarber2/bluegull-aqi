@@ -70,6 +70,59 @@ final class AQIFetchCoordinatorTests: XCTestCase {
 
         XCTAssertEqual(reading.pollutants.first?.nowcastAQI, 31)
         XCTAssertEqual(cache.get(for: location.rounded), reading)
+        // bluegull-aqi-dc2.1: a successful fetch also records the
+        // TTL-independent marker the stale-cache UI relies on.
+        XCTAssertNotNil(cache.lastSuccessfulFetchDate())
+    }
+
+    func testServiceModeRateLimitedResponseThrowsServiceModeRateLimited() async {
+        // bluegull-aqi-dc2.2: a 429, whether from lambda_handler.py's own
+        // cache-miss budget or API Gateway stage throttling rejecting the
+        // request before the Lambda even runs (no {"error": ...} body in
+        // that case), must not surface as a generic .airNowError.
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 429, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (response, Data(#"{"error": "Air quality data temporarily unavailable; please try again shortly"}"#.utf8))
+        }
+
+        let coordinator = AQIFetchCoordinator(
+            serviceClient: BluegullServiceClient(urlSession: MockURLProtocol.makeSession()),
+            apiKeyStore: AirNowAPIKeyStore(keychain: InMemoryKeychain()),
+            cache: AppGroupCache(store: InMemorySharedCacheStore())
+        )
+
+        do {
+            _ = try await coordinator.fetch(location: location, mode: .service)
+            XCTFail("Expected .serviceModeRateLimited")
+        } catch let error as AQIFetchError {
+            XCTAssertEqual(error, .serviceModeRateLimited)
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
+        }
+    }
+
+    func testServiceModeRateLimitWithoutAParseableBodyStillThrowsServiceModeRateLimited() async {
+        // The API Gateway stage-throttling case specifically: no JSON body
+        // at all, since the request never reached lambda_handler.py.
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 429, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (response, Data("Too Many Requests".utf8))
+        }
+
+        let coordinator = AQIFetchCoordinator(
+            serviceClient: BluegullServiceClient(urlSession: MockURLProtocol.makeSession()),
+            apiKeyStore: AirNowAPIKeyStore(keychain: InMemoryKeychain()),
+            cache: AppGroupCache(store: InMemorySharedCacheStore())
+        )
+
+        do {
+            _ = try await coordinator.fetch(location: location, mode: .service)
+            XCTFail("Expected .serviceModeRateLimited")
+        } catch let error as AQIFetchError {
+            XCTAssertEqual(error, .serviceModeRateLimited)
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
+        }
     }
 
     func testServiceModeFailureWrapsAsAirNowError() async {
@@ -134,6 +187,7 @@ final class AQIFetchCoordinatorTests: XCTestCase {
         // Fetching writes the cache too -- e70.7's whole point -- not just
         // returns the value to the caller.
         XCTAssertEqual(cache.get(for: location.rounded), reading)
+        XCTAssertNotNil(cache.lastSuccessfulFetchDate())
     }
 
     func testDirectModeAirNowFailureWrapsAsAirNowError() async {
@@ -206,5 +260,11 @@ final class UserMessageTests: XCTestCase {
     func testAQIFetchErrorAirNowCaseDelegatesToTheWrappedError() {
         let inner = AirNowError.webServiceError(statusCode: 401, message: "Invalid API key")
         XCTAssertEqual(AQIFetchError.airNowError(inner).userMessage, inner.userMessage)
+    }
+
+    func testServiceModeRateLimitedMessageMentionsDirectMode() {
+        // bluegull-aqi-dc2.2's actual ask: nudge toward Direct mode, not
+        // just say "something went wrong."
+        XCTAssertTrue(AQIFetchError.serviceModeRateLimited.userMessage.localizedCaseInsensitiveContains("Direct"))
     }
 }

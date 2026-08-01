@@ -1221,6 +1221,61 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-08-01 — Implemented bluegull-aqi-10h.8 (unit tests for
+  `BluegullAQIKit`): most of this bead's scope (model decoding, cache TTL
+  with an injected clock, Keychain round-trip) already had coverage from
+  earlier work. The one genuinely missing piece was the contract test the
+  issue calls out by name: `ClientContractTests` now feeds
+  `AirNowDirectClient` and `BluegullServiceClient` structurally-equivalent
+  fixture payloads (same pollutant data, each API's own envelope shape --
+  a bare array vs. `{"observations": [...], "cached": bool}`) and asserts
+  they decode to identical `AQIReading` values, proving the "client code
+  doesn't care which source answered" design claim rather than just
+  asserting it in a doc comment.
+
+- 2026-08-01 — Implemented bluegull-aqi-dc2.1 (stale-cache/offline states)
+  and bluegull-aqi-dc2.2 (rate-limit UX for Service mode) together, since
+  both turned out to hinge on the same underlying gap: `AppGroupCache`
+  only ever exposed AQI *data*, never *when it was last actually fetched*
+  once a per-location entry expired and got swept (bluegull-aqi-10h.12's
+  retention bounding).
+  - **New**: `AppGroupCache.recordSuccessfulFetch()`/
+    `lastSuccessfulFetchDate()` -- a single small timestamp, deliberately
+    outside the `AQICacheEntry`/`aqi-cache-` retention machinery (doesn't
+    reopen that type's own data-minimization reasoning), that survives a
+    location's own entry expiring. `AQIFetchCoordinator` records it on
+    every successful fetch, both modes.
+  - **Menu bar**: `AQIRefreshController` now tracks `lastFetchedAt` and
+    keeps `latestReading` on screen through a failed refresh instead of
+    the failure replacing it. `AQIPopoverView` shows the reading plus a
+    compact orange warning banner (`lastError.userMessage`) when both
+    exist, an "Updated X ago" caption (live-updating
+    `Text(_:style:.relative)`), and only falls back to the full-page
+    `ContentUnavailableView` when there's truly no reading at all.
+    Revisits `e70.24`'s original "error always wins" behavior now that
+    there's a real staleness signal to show instead of just hiding
+    perfectly good cached data over one transient failure.
+  - **Widget**: `WidgetTimelineSnapshot`/`BluegullAQIWidgetEntry` carry
+    `lastSuccessfulFetchDate` through to `BluegullAQIWidgetView`, which
+    now distinguishes "never fetched" ("No Data") from "fetched before,
+    but that entry's since expired" ("Data Unavailable" / "Last updated X
+    ago", formatted deterministically against the Timeline entry's own
+    `date`, not the live wall clock, for golden-image snapshot stability).
+    New golden PNGs: `{small,medium,large}-stale-data`.
+  - **Rate limiting** (dc2.2): `AQIFetchCoordinator.fetchService` now
+    recognizes a 429 (either `lambda_handler.py`'s own cache-miss budget
+    or API Gateway stage throttling rejecting the request before the
+    Lambda runs -- confirmed the latter has no `{"error": ...}` body, per
+    `doc/DESIGN.md` "Rate limiting") and throws the new
+    `AQIFetchError.serviceModeRateLimited` instead of the generic
+    `.airNowError`, with a message that explicitly nudges toward Direct
+    mode -- the one thing a shared-service throttle doesn't apply to.
+  - New/updated tests: `AppGroupCacheTests`, `WidgetTimelineComputerTests`,
+    `AQIFetchCoordinatorTests` (both the recording and the 429 paths, with
+    and without a parseable error body), `BluegullAQIWidgetSnapshotTests`
+    (3 new stale-state goldens), `AQIPopoverViewRenderTests` (reading+
+    banner vs. no-reading-at-all paths). Full `make test-swift` passing.
+
 - 2026-08-01 — Implemented bluegull-aqi-10h.4 (`BluegullServiceClient`):
   Service mode now calls the real deployed backend
   (`GET /aqi?lat=&lon=`, bluegull-aqi-q9r.10's dev stack) instead of

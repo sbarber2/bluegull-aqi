@@ -9,9 +9,18 @@ public struct WidgetTimelineSnapshot: Sendable, Equatable {
     public let date: Date
     public let reading: AQIReading?
 
-    public init(date: Date, reading: AQIReading?) {
+    /// When a fetch last actually succeeded, anywhere -- independent of
+    /// `reading`'s own per-location TTL, and still set even once `reading`
+    /// has gone nil because that entry expired (bluegull-aqi-dc2.1). Powers
+    /// distinguishing "never fetched" from "went stale" in the widget's
+    /// empty state, instead of both collapsing to the same unqualified "No
+    /// Data."
+    public let lastSuccessfulFetchDate: Date?
+
+    public init(date: Date, reading: AQIReading?, lastSuccessfulFetchDate: Date? = nil) {
         self.date = date
         self.reading = reading
+        self.lastSuccessfulFetchDate = lastSuccessfulFetchDate
     }
 }
 
@@ -48,7 +57,7 @@ public struct WidgetTimelineComputer: Sendable {
     /// pre-`mtm.3` unconfigured case.
     public func currentSnapshot(for location: Location? = nil, now: Date = Date()) -> WidgetTimelineSnapshot {
         let reading = location.map { cache.get(for: $0, now: now) } ?? cache.mostRecentEntry(now: now)
-        return WidgetTimelineSnapshot(date: now, reading: reading)
+        return WidgetTimelineSnapshot(date: now, reading: reading, lastSuccessfulFetchDate: cache.lastSuccessfulFetchDate())
     }
 
     public func nextReloadDate(after now: Date = Date()) -> Date {

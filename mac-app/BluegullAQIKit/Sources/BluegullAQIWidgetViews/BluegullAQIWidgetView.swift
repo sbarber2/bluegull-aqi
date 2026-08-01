@@ -1,3 +1,4 @@
+import Foundation
 import SwiftUI
 import WidgetKit
 import BluegullAQIKit
@@ -44,11 +45,13 @@ public struct BluegullAQIWidgetView: View {
                     LargeWidgetLayout(aqi: aqi, category: category, reading: reading)
                 }
             } else {
-                // Deliberately minimal -- distinguishing "never fetched" from
-                // "cache expired" from "genuinely offline" is dc2.1's
-                // dedicated scope, not this task's. This is just "nothing to
-                // show yet."
-                noDataView
+                // bluegull-aqi-dc2.1: distinguishes "never fetched" (no
+                // reading, no successful fetch ever recorded -- fresh
+                // install) from "went stale" (a fetch succeeded at some
+                // point, but that entry's since expired and been swept,
+                // bluegull-aqi-10h.12) -- rather than both collapsing to the
+                // same unqualified "No Data."
+                emptyStateView
             }
         }
         // Required since macOS 14/iOS 17 -- a widget that never calls this
@@ -62,16 +65,42 @@ public struct BluegullAQIWidgetView: View {
         .containerBackground(.background, for: .widget)
     }
 
-    private var noDataView: some View {
+    private var emptyStateView: some View {
         VStack(spacing: 4) {
             Image(systemName: "aqi.medium")
                 .font(.title2)
                 .foregroundStyle(.secondary)
-            Text("No Data")
+            Text(emptyStateHeadline)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if let staleCaption {
+                Text(staleCaption)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
         }
+        .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var emptyStateHeadline: String {
+        staleCaption == nil ? "No Data" : "Data Unavailable"
+    }
+
+    // Formatted relative to `entry.date` (the Timeline's own "now" at
+    // render time), not the live wall clock -- WidgetKit's `Text(_:style:)`
+    // live-relative formatting is meant for real-time UI and isn't
+    // deterministic for this package's golden-image snapshot tests
+    // (bluegull-aqi-mtm.11), which render well after `entry.date` and need
+    // byte-stable output. `AQIPopoverView`'s menu bar equivalent uses the
+    // live style instead -- that view has no such snapshot-determinism
+    // constraint.
+    private var staleCaption: String? {
+        guard let lastSuccessfulFetchDate = entry.lastSuccessfulFetchDate else { return nil }
+        let formatter = RelativeDateTimeFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        let relative = formatter.localizedString(for: lastSuccessfulFetchDate, relativeTo: entry.date)
+        return "Last updated \(relative)"
     }
 }
 

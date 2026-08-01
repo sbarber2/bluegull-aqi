@@ -154,6 +154,50 @@ final class AppGroupCacheTests: XCTestCase {
         XCTAssertTrue(store.allKeys().isEmpty, "expired entry should have been deleted, not just skipped")
     }
 
+    // MARK: - lastSuccessfulFetchDate (bluegull-aqi-dc2.1)
+
+    func testLastSuccessfulFetchDateIsNilWhenNeverRecorded() {
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        XCTAssertNil(cache.lastSuccessfulFetchDate())
+    }
+
+    func testRecordSuccessfulFetchThenReadRoundTrips() {
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        let now = Date()
+        cache.recordSuccessfulFetch(now: now)
+        XCTAssertEqual(cache.lastSuccessfulFetchDate(), now)
+    }
+
+    func testLastSuccessfulFetchDateSurvivesItsEntryExpiringAndBeingSwept() {
+        // The whole point (bluegull-aqi-dc2.1): once the per-location entry
+        // is gone, this is still the one way left to say "we did hear back,
+        // just a while ago" instead of collapsing to the same state as
+        // "never fetched."
+        let store = InMemorySharedCacheStore()
+        let cache = AppGroupCache(store: store)
+        let now = Date()
+        cache.put(reading, for: location, ttl: 1, now: now)
+        cache.recordSuccessfulFetch(now: now)
+
+        let afterExpiry = now.addingTimeInterval(2)
+        XCTAssertNil(cache.get(for: location, now: afterExpiry))
+        XCTAssertEqual(cache.lastSuccessfulFetchDate(), now)
+    }
+
+    func testRecordSuccessfulFetchIsNotSweptAsJunkByPruning() {
+        // pruneIfNeeded walks every key under `store`, not just its own --
+        // confirms the marker's key deliberately falls outside
+        // AppGroupCache's own "aqi-cache-" prefix so it never gets treated
+        // as an undecodable AQICacheEntry and deleted.
+        let store = InMemorySharedCacheStore()
+        let cache = AppGroupCache(store: store)
+        cache.recordSuccessfulFetch()
+
+        cache.put(reading, for: location)
+
+        XCTAssertNotNil(cache.lastSuccessfulFetchDate())
+    }
+
     func testPruningNeverTouchesKeysOutsideItsOwnPrefix() {
         // A store shared for other purposes shouldn't have unrelated data
         // swept away by AppGroupCache's own housekeeping.
