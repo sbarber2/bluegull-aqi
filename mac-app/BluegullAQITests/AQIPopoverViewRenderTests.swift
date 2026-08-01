@@ -13,14 +13,14 @@ import BluegullAQIKit
 final class AQIPopoverViewRenderTests: XCTestCase {
     @MainActor
     func testRendersWithoutCrashingWhenEmpty() {
-        let image = render(AQIPopoverView(reading: nil))
+        let image = render(AQIPopoverView(reading: nil, onLocationChange: {}))
         XCTAssertNotNil(image)
     }
 
     @MainActor
     func testRendersWithoutCrashingWithData() {
         let reading = sampleReading(reportingAgency: "Bay Area Air District")
-        let image = render(AQIPopoverView(reading: reading))
+        let image = render(AQIPopoverView(reading: reading, onLocationChange: {}))
         XCTAssertNotNil(image)
     }
 
@@ -29,7 +29,7 @@ final class AQIPopoverViewRenderTests: XCTestCase {
         // The tier-1 agency credit is absent, but tier 2 (AttributionCopy.staticCredit)
         // must never be omitted (bluegull-aqi-10h.15) -- exercises that fallback path.
         let reading = sampleReading(reportingAgency: nil)
-        let image = render(AQIPopoverView(reading: reading))
+        let image = render(AQIPopoverView(reading: reading, onLocationChange: {}))
         XCTAssertNotNil(image)
     }
 

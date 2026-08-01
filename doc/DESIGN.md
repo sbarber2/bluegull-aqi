@@ -30,7 +30,7 @@ GitHub Actions CI/CD, Route53/ACM custom domain.
 | Distribution | Mac App Store. Apple Developer Program membership already active. |
 | Business model / monetization | **For-profit** (changed 2026-07-30 — originally planned as non-profit). Collects money via the App Store (In-App Purchase/subscription/paid app — exact mechanism still open, a pricing detail for `bluegull-aqi-fw4`) to cover infrastructure costs, with flexibility to eventually pay Steve for ongoing operations. Reopens the AirNow commercial-use question the original terms review left unresolved — tracked at P0 in `bluegull-aqi-8ef.15`. |
 | Web service client auth / rate limiting | Anonymous, no per-install keys, no login. Not IP-based -- AWS WAFv2 can't attach to an HTTP API (v2), only REST APIs/ALB/etc. (found and corrected 2026-07-30, bluegull-aqi-q9r.5). Relies instead on API Gateway stage throttling, Lambda reserved concurrency, and a global cache-miss budget (bluegull-aqi-q9r.32). |
-| Menu bar app data scope | The menu bar extra (status item) itself shows current overall AQI only — no room for more. Clicking it opens a `.window`-style popover with full detail (pollutant breakdown, attribution, preliminary-data disclaimer), matching the widget's content. This is the guaranteed access point for compliance content regardless of whether the user has placed the desktop widget. |
+| Menu bar app data scope | The menu bar extra (status item) itself shows overall AQI only — no room for more. Clicking it opens a `.window`-style popover with full detail (pollutant breakdown, attribution, preliminary-data disclaimer), matching the widget's content. This is the guaranteed access point for compliance content regardless of whether the user has placed the desktop widget. **Location defaults to current location, but is independently switchable to any pinned location** via its own picker in the popover (`bluegull-aqi-e70.21`) — separate from each desktop widget's own per-instance selection (`bluegull-aqi-mtm.3`); both draw from the same pinned-locations list but don't share a selection. |
 | Widget data scope | Current AQI **and** full per-pollutant breakdown (PM2.5, PM10, ozone, etc.). |
 | Location scope | Current location (CoreLocation) **and** user-pinned locations (zip/address, geocoded locally via `CLGeocoder`/MapKit — no backend geocoding endpoint needed). |
 | Refresh cadence | Hourly, matching AirNow's own publish cadence. |
@@ -2967,3 +2967,17 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
   together, but nothing here structurally needs the Service-mode client to
   exist. `10h.4` gets a documented integration point
   (`AQIFetchCoordinator`'s `.service` case) for whenever it's built.
+- 2026-08-01 — A real interactive run (finally possible once the fetch
+  pipeline and the Settings-window bugs above were fixed) surfaced a genuine
+  UX gap: pinned locations in Settings had no visible effect on anything.
+  Root cause, confirmed in code, wasn't a bug — it's exactly what "Menu bar
+  app data scope" already documents (current location only) — but the
+  Settings UI gave no hint that pinned locations are scoped to *widget
+  instances only* (`SelectLocationIntent`, `bluegull-aqi-mtm.3`), not the
+  menu bar. Resolved both ways, per Steve's request: added a clarifying
+  caption to `PinnedLocationsView`, and gave the menu bar app its own
+  independent location picker (`bluegull-aqi-e70.21`) reusing the same
+  `LocationOption`/`WidgetLocationOptions` types the widget's own picker
+  already used, rather than inventing a parallel mechanism. Each desktop
+  widget and the menu bar now each have their own independent location
+  selection, all drawing from the same pinned-locations list.

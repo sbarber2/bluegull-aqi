@@ -29,6 +29,17 @@ struct PinnedLocationsView: View {
             Text("Pinned Locations")
                 .font(.headline)
 
+            // Real confusion Steve hit directly: these looked like they
+            // should affect the menu bar/popover somehow, but they don't
+            // -- only each desktop widget's own per-instance "Edit
+            // Widget" configuration reads this list (bluegull-aqi-mtm.3).
+            // The menu bar's own location picker (bluegull-aqi-e70.21)
+            // reads the exact same list, but its selection is completely
+            // independent of any widget's.
+            Text("Each desktop widget can be set to show one of these locations (or Current Location) individually — right-click the widget and choose Edit Widget. The menu bar's own location, set from its location picker, is separate.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             ForEach(locations) { pinned in
                 HStack {
                     TextField("Name", text: labelBinding(for: pinned))

@@ -11,6 +11,12 @@ import BluegullAQIKit
 struct AQIPopoverView: View {
     let reading: AQIReading?
 
+    // Called after the location picker's selection changes, so the caller
+    // (BluegullAQIApp) can trigger an immediate refetch for the newly
+    // selected location (bluegull-aqi-e70.21) rather than waiting for the
+    // next scheduled refresh, up to an hour away.
+    let onLocationChange: () -> Void
+
     // Opens Settings as its own real window (see BluegullAQIApp's
     // Window(id: "settings")), NOT a .sheet() -- a .sheet() presented from
     // inside a MenuBarExtra's .window-style popover is unreliable in
@@ -24,6 +30,7 @@ struct AQIPopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
+                MenuBarLocationPicker(onChange: onLocationChange)
                 Spacer()
                 Button {
                     // LSUIElement (agent) apps aren't reliably made

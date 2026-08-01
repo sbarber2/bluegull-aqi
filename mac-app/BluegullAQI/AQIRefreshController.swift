@@ -3,15 +3,19 @@ import Observation
 import BluegullAQIKit
 
 /// Drives the container app's actual fetch loop (bluegull-aqi-e70.6/e70.7):
-/// resolves the user's current location, fetches via whichever
-/// `DataSourceMode` is selected, and writes a successful result to the
-/// shared App Group cache the widget's `TimelineProvider` also reads, then
-/// reschedules itself on `RefreshScheduler`'s jittered interval.
+/// resolves whichever location the menu bar is currently set to show
+/// (bluegull-aqi-e70.21 -- current location by default, or a specific
+/// pinned location), fetches via whichever `DataSourceMode` is selected,
+/// and writes a successful result to the shared App Group cache the
+/// widget's `TimelineProvider` also reads, then reschedules itself on
+/// `RefreshScheduler`'s jittered interval.
 ///
 /// Deliberately a thin app-level wrapper, not unit tested itself -- the
 /// same reasoning as `LocationPermissionRequester`'s own doc comment. The
 /// actual fetch/cache/mode-selection logic lives in `AQIFetchCoordinator`
-/// (`BluegullAQIKit`), which is unit tested with injected fakes.
+/// (`BluegullAQIKit`), which is unit tested with injected fakes; so is the
+/// location-selection resolution logic this reads
+/// (`MenuBarLocationSelectionStore.selection(id:availableOptions:)`).
 @Observable
 @MainActor
 final class AQIRefreshController {
@@ -19,6 +23,7 @@ final class AQIRefreshController {
     private(set) var lastError: AQIFetchError?
 
     private let locationResolver: LocationResolver
+    private let pinnedLocationsStore: PinnedLocationsStore
     private let coordinator: AQIFetchCoordinator
     private let scheduler: RefreshScheduler
     private var refreshTask: Task<Void, Never>?
@@ -44,6 +49,7 @@ final class AQIRefreshController {
     ) {
         guard let store else { return nil }
         self.locationResolver = locationResolver
+        pinnedLocationsStore = PinnedLocationsStore(store: store)
         let cache = AppGroupCache(store: store)
         coordinator = AQIFetchCoordinator(cache: cache)
         scheduler = RefreshScheduler(store: store)
@@ -73,12 +79,14 @@ final class AQIRefreshController {
     }
 
     /// Fetches immediately, outside the scheduled cadence -- used for the
-    /// first attempt right after location permission is granted, so a user
-    /// doesn't wait up to an hour for the first real reading.
+    /// first attempt right after location permission is granted, and after
+    /// the user changes which location the menu bar shows
+    /// (bluegull-aqi-e70.21), so neither waits up to an hour for the next
+    /// scheduled attempt.
     func refreshNow() async {
         let mode = currentMode()
         do {
-            let location = try await locationResolver.currentLocation()
+            let location = try await resolveLocation(currentLocationSelection())
             latestReading = try await coordinator.fetch(location: location, mode: mode)
             lastError = nil
         } catch let error as AQIFetchError {
@@ -90,6 +98,22 @@ final class AQIRefreshController {
             // couldn't resolve a location.
             lastError = nil
         }
+    }
+
+    /// A pinned selection resolves to its stored Location directly (no
+    /// GPS involved); .currentLocation is the only case that needs the
+    /// live resolver.
+    private func resolveLocation(_ selection: LocationOption) async throws -> Location {
+        if let pinned = selection.pinnedLocation {
+            return pinned
+        }
+        return try await locationResolver.currentLocation()
+    }
+
+    private func currentLocationSelection() -> LocationOption {
+        let options = WidgetLocationOptions.all(from: pinnedLocationsStore)
+        let id = UserDefaults.standard.string(forKey: MenuBarLocationSelectionStore.userDefaultsKey)
+        return MenuBarLocationSelectionStore.selection(id: id, availableOptions: options)
     }
 
     private func currentMode() -> DataSourceMode {

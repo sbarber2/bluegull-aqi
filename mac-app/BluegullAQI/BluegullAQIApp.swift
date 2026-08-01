@@ -22,7 +22,10 @@ struct BluegullAQIApp: App {
 
     var body: some Scene {
         MenuBarExtra {
-            AQIPopoverView(reading: refreshController?.latestReading)
+            AQIPopoverView(
+                reading: refreshController?.latestReading,
+                onLocationChange: { Task { await refreshController?.refreshNow() } }
+            )
         } label: {
             // .task/.onChange live here, not on AQIPopoverView above --
             // this label is always rendered (it's the menu bar item
