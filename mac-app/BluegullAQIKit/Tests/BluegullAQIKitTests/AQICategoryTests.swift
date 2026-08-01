@@ -96,6 +96,28 @@ final class AQICategoryTests: XCTestCase {
         XCTAssertEqual(color.hex, hex, file: file, line: line)
     }
 
+    /// bluegull-aqi-mtm.19: verified against AirNow's own AQI Legend panel
+    /// image, which pairs each official color with black or white text --
+    /// Good/Moderate/USG (the lighter ones) get black, Unhealthy/Very
+    /// Unhealthy/Hazardous (the darker ones) get white. `isLight` must
+    /// reproduce exactly that pairing for all 6 official colors, not just
+    /// happen to be directionally plausible.
+    func testIsLightMatchesAirNowsOwnLegendTextColorChoice() {
+        XCTAssertTrue(AQICategory.good.color.isLight, "Good (#00E400) should read as light -- black text")
+        XCTAssertTrue(AQICategory.moderate.color.isLight, "Moderate (#FFFF00) should read as light -- black text")
+        XCTAssertTrue(
+            AQICategory.unhealthyForSensitiveGroups.color.isLight,
+            "USG (#FF7E00) should read as light -- black text"
+        )
+        XCTAssertFalse(AQICategory.unhealthy.color.isLight, "Unhealthy (#FF0000) should read as dark -- white text")
+        XCTAssertFalse(
+            AQICategory.veryUnhealthy.color.isLight,
+            "Very Unhealthy (#8F3F97) should read as dark -- white text"
+        )
+        XCTAssertFalse(AQICategory.hazardous.color.isLight, "Hazardous (#7E0023) should read as dark -- white text")
+        XCTAssertFalse(AQICategory.beyondAQI.color.isLight, "Beyond-scale shares Hazardous's color -- white text")
+    }
+
     func testCodableRoundTrip() throws {
         for category: AQICategory in [.good, .moderate, .unhealthyForSensitiveGroups, .unhealthy, .veryUnhealthy, .hazardous, .beyondAQI] {
             let data = try JSONEncoder().encode(category)

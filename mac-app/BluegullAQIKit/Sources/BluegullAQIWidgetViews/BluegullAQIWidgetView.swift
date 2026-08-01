@@ -159,9 +159,15 @@ struct MediumWidgetLayout: View {
             Text(pollutant.parameterName)
                 .font(.caption)
             if let pollutantAQI = pollutant.nowcastAQI, let pollutantCategory = pollutant.category {
+                // See LargeWidgetLayout's own pollutantRow for why this is
+                // a colored background + contrasting text, not colored
+                // text (bluegull-aqi-mtm.19).
                 Text("\(pollutantAQI)")
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(pollutantCategory.color.swiftUIColor)
+                    .foregroundStyle(pollutantCategory.color.contrastingTextColor)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(pollutantCategory.color.swiftUIColor, in: RoundedRectangle(cornerRadius: 4))
             }
         }
     }
@@ -213,9 +219,18 @@ struct LargeWidgetLayout: View {
                 .font(.caption)
             Spacer()
             if let pollutantAQI = pollutant.nowcastAQI, let pollutantCategory = pollutant.category {
+                // Colored background + black/white contrasting text, not
+                // colored text on the widget's plain background -- plain-
+                // colored text had poor contrast for the lighter
+                // categories (Good/Moderate/USG), found by Steve against
+                // AirNow's own AQI Legend panel styling
+                // (bluegull-aqi-mtm.19).
                 Text("\(pollutantAQI)")
                     .font(.caption.monospacedDigit())
-                    .foregroundStyle(pollutantCategory.color.swiftUIColor)
+                    .foregroundStyle(pollutantCategory.color.contrastingTextColor)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(pollutantCategory.color.swiftUIColor, in: RoundedRectangle(cornerRadius: 4))
             } else {
                 // Raw-concentration-only entry, no computed AQI supplied --
                 // never invent one (bluegull-aqi-10h.17).

@@ -120,4 +120,19 @@ public struct AQIColor: Sendable, Equatable, Codable {
         let b = Int(blue)
         return String(format: "#%02X%02X%02X", r, g, b)
     }
+
+    /// Perceived brightness via the standard broadcast-luma weighting
+    /// (ITU-R BT.601: 0.299R + 0.587G + 0.114B, weighted by how sensitive
+    /// human vision is to each channel) -- true when this color reads as
+    /// "light" against the conventional 128-of-255 midpoint. Used to
+    /// choose readable black-or-white text over a background filled with
+    /// this color (bluegull-aqi-mtm.19): plain colored text on a plain
+    /// background -- the previous approach -- has poor contrast for the
+    /// lighter categories (Good, Moderate, USG), which is what prompted
+    /// this. Verified against AirNow's own AQI Legend panel, which uses
+    /// exactly this pairing (black text on Good/Moderate/USG, white on
+    /// Unhealthy/Very Unhealthy/Hazardous) for all 6 official colors.
+    public var isLight: Bool {
+        (red * 299 + green * 587 + blue * 114) / 1000 >= 128
+    }
 }

@@ -11,4 +11,11 @@ extension AQIColor {
     var swiftUIColor: Color {
         Color(.sRGB, red: red / 255, green: green / 255, blue: blue / 255, opacity: 1)
     }
+
+    /// Black or white, whichever is readable as text over this color used
+    /// as a background fill -- see `AQIColor.isLight`'s own doc comment
+    /// (bluegull-aqi-mtm.19).
+    var contrastingTextColor: Color {
+        isLight ? .black : .white
+    }
 }

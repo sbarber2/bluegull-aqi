@@ -101,9 +101,18 @@ struct AQIPopoverView: View {
                 .font(.body)
             Spacer()
             if let aqi = pollutant.nowcastAQI, let category = pollutant.category {
+                // Colored background + black/white contrasting text, not
+                // colored text on the popover's plain background --
+                // plain-colored text had poor contrast for the lighter
+                // categories (Good/Moderate/USG), found by Steve against
+                // AirNow's own AQI Legend panel styling
+                // (bluegull-aqi-mtm.19).
                 Text("\(aqi)")
                     .font(.body.monospacedDigit())
-                    .foregroundStyle(category.color.swiftUIColor)
+                    .foregroundStyle(category.color.contrastingTextColor)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(category.color.swiftUIColor, in: RoundedRectangle(cornerRadius: 4))
             } else {
                 // Raw-concentration-only entry, no computed AQI supplied --
                 // never invent one (bluegull-aqi-10h.17).
