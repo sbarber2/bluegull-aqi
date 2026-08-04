@@ -57,7 +57,7 @@ struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
 }
 
 struct BluegullAQIWidget: Widget {
-    let kind = "BluegullAQIWidget"
+    let kind = BluegullWidgetKind.aqi
 
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: kind, intent: SelectLocationIntent.self, provider: BluegullAQIWidgetTimelineProvider()) { entry in

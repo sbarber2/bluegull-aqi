@@ -89,7 +89,7 @@ struct AQIPopoverView: View {
                     updatedCaption(lastFetchedAt)
                 }
                 Divider()
-                pollutantList(reading.pollutants)
+                PollutantListView(pollutants: reading.pollutants)
                 Divider()
                 AttributionFooter(headline: headline)
                 DisclaimerFooter()
@@ -144,43 +144,6 @@ struct AQIPopoverView: View {
         (Text("Updated ") + Text(date, style: .relative))
             .font(.caption2)
             .foregroundStyle(.secondary)
-    }
-
-    private func pollutantList(_ pollutants: [PollutantReading]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // parameterName is unique within one AQIReading -- one array
-            // entry per pollutant, per PollutantReading's own doc comment.
-            ForEach(pollutants, id: \.parameterName) { pollutant in
-                pollutantRow(pollutant)
-            }
-        }
-    }
-
-    private func pollutantRow(_ pollutant: PollutantReading) -> some View {
-        HStack {
-            Text(PollutantCopy.spelledOutName(forParameterName: pollutant.parameterName))
-                .font(.body)
-            Spacer()
-            if let aqi = pollutant.nowcastAQI, let category = pollutant.category {
-                // Colored background + black/white contrasting text, not
-                // colored text on the popover's plain background --
-                // plain-colored text had poor contrast for the lighter
-                // categories (Good/Moderate/USG), found by Steve against
-                // AirNow's own AQI Legend panel styling
-                // (bluegull-aqi-mtm.19).
-                Text("\(aqi)")
-                    .font(.body.monospacedDigit())
-                    .foregroundStyle(category.color.contrastingTextColor)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(category.color.swiftUIColor, in: RoundedRectangle(cornerRadius: 4))
-            } else {
-                // Raw-concentration-only entry, no computed AQI supplied --
-                // never invent one (bluegull-aqi-10h.17).
-                Text("—")
-                    .foregroundStyle(.secondary)
-            }
-        }
     }
 
 }

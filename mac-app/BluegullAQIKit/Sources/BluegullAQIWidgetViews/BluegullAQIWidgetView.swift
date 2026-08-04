@@ -164,6 +164,15 @@ struct MediumWidgetLayout: View {
                     .frame(width: 10, height: 10)
                 Text("\(aqi)")
                     .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
+                // Otherwise the headline number is unlabeled: otherPollutants
+                // deliberately excludes the headline itself from the side
+                // list below (bluegull-aqi-0u4), so without this the widget
+                // can read as if only the *other* pollutant exists at all --
+                // confirmed against a real reading where the headline was
+                // PM2.5 and the only visible name on screen was "OZONE."
+                Text(headline.parameterName)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
                 Text(category.descriptor)
                     .font(.caption)
                     .foregroundStyle(.secondary)
