@@ -57,7 +57,19 @@ Once it's running:
    Dock icon, no main window, by design). You'll see either a generic AQI
    icon (no data yet) or, once it has a reading, a colored dot + number.
 
-2. **Grant location access** when macOS prompts you.
+2. **Grant location access** when macOS prompts you. Expect this prompt
+   again after every rebuild that actually recompiles (`app-build`/
+   `app-run` with source changes since the last build), not just the
+   first run -- confirmed via a controlled test (`bd show
+   bluegull-aqi-5k3`): relaunching the *same already-built* binary
+   persists the grant fine (with or without `make widget-reset` in
+   between), but a genuine recompile produces a materially different
+   signed binary, and an unnotarized Xcode Development-signed build
+   doesn't get the "trust this as an update" treatment TCC extends to a
+   notarized/App-Store release under the same team + bundle ID. Not a bug
+   in this project, and not fixable from the Makefile/app code -- it's
+   inherent to local dev builds, and goes away entirely once the app
+   ships properly notarized.
 
 3. **Switch to Direct mode**: click the menu bar icon → gear icon →
    Settings → "Data Source" → **Direct (use my own AirNow key)** → paste
