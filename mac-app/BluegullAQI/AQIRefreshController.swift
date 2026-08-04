@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import WidgetKit
 import BluegullAQIKit
 
 /// Drives the container app's actual fetch loop (bluegull-aqi-e70.6/e70.7):
@@ -9,6 +10,19 @@ import BluegullAQIKit
 /// and writes a successful result to the shared App Group cache the
 /// widget's `TimelineProvider` also reads, then reschedules itself on
 /// `RefreshScheduler`'s jittered interval.
+///
+/// Also keeps every currently-placed desktop widget's own independently-
+/// configured location fresh (bluegull-aqi-igu), not just the menu bar's:
+/// each widget instance's `SelectLocationIntent` (bluegull-aqi-mtm.3) can
+/// point at a different pinned location than the menu bar shows
+/// (bluegull-aqi-e70.21 -- deliberately separate selections, doc/
+/// DESIGN.md), and the widget extension itself can never fetch (no
+/// background networking there). Before this, a widget pointed anywhere
+/// other than the menu bar's own current selection simply never got a
+/// cache entry at all -- confirmed against a real Group Container dump
+/// (bluegull-aqi-igu): a third pinned location, never selected in the
+/// menu bar, had never been fetched even though a widget could be (and
+/// visually appeared to be) configured to show it.
 ///
 /// Deliberately a thin app-level wrapper, not unit tested itself -- the
 /// same reasoning as `LocationPermissionRequester`'s own doc comment. The
@@ -91,11 +105,31 @@ final class AQIRefreshController {
     /// first attempt right after location permission is granted, and after
     /// the user changes which location the menu bar shows
     /// (bluegull-aqi-e70.21), so neither waits up to an hour for the next
-    /// scheduled attempt.
+    /// scheduled attempt. Also refreshes every other location a placed
+    /// widget is independently configured to show (bluegull-aqi-igu, see
+    /// this type's own doc comment) -- those never update the observable
+    /// properties below, which describe the menu bar's own display only.
     func refreshNow() async {
         let mode = currentMode()
+
+        // Resolves live GPS at most once per call, however many callers
+        // below (the menu bar's own selection, plus every placed widget)
+        // ask for "current location" -- `pinned` is nil for that case.
+        var resolvedCurrentLocation: Location?
+        func resolve(_ pinned: Location?) async -> Location? {
+            if let pinned { return pinned }
+            if let resolvedCurrentLocation { return resolvedCurrentLocation }
+            let resolved = try? await locationResolver.currentLocation()
+            resolvedCurrentLocation = resolved
+            return resolved
+        }
+
+        var menuBarLocation: Location?
         do {
-            let location = try await resolveLocation(currentLocationSelection())
+            guard let location = await resolve(currentLocationSelection().pinnedLocation) else {
+                throw LocationResolverError.locationUnavailable("current location unavailable")
+            }
+            menuBarLocation = location
             latestReading = try await coordinator.fetch(location: location, mode: mode)
             lastFetchedAt = cache.lastSuccessfulFetchDate()
             lastError = nil
@@ -108,16 +142,34 @@ final class AQIRefreshController {
             // couldn't resolve a location.
             lastError = nil
         }
+
+        // `.rounded` matches AppGroupCache's own cache-key precision, so a
+        // widget pointed at the same ~1km cell as the menu bar's own
+        // selection doesn't trigger a second, redundant fetch.
+        var handled: Set<Location> = Set([menuBarLocation?.rounded].compactMap { $0 })
+        for widgetPinnedLocation in await activeWidgetLocations() {
+            guard let location = await resolve(widgetPinnedLocation) else { continue }
+            guard handled.insert(location.rounded).inserted else { continue }
+            // Best-effort: a failure here shouldn't touch `lastError`,
+            // which describes the menu bar's own fetch above. The widget
+            // just keeps showing whatever's still validly cached (or "No
+            // Data") until a later cycle succeeds.
+            _ = try? await coordinator.fetch(location: location, mode: mode)
+        }
     }
 
-    /// A pinned selection resolves to its stored Location directly (no
-    /// GPS involved); .currentLocation is the only case that needs the
-    /// live resolver.
-    private func resolveLocation(_ selection: LocationOption) async throws -> Location {
-        if let pinned = selection.pinnedLocation {
-            return pinned
-        }
-        return try await locationResolver.currentLocation()
+    /// Every location a currently-placed widget instance is configured to
+    /// show (bluegull-aqi-mtm.3) -- `nil` per entry means "current
+    /// location" (not-yet-configured or explicitly selected; both collapse
+    /// to the same nil, same as `BluegullAQIWidgetTimelineProvider.entry
+    /// (for:)`'s own handling of the intent). Empty on any WidgetCenter
+    /// failure or if nothing's actually placed on the desktop -- this
+    /// never blocks the menu bar's own fetch above.
+    private func activeWidgetLocations() async -> [Location?] {
+        guard let infos = try? await WidgetCenter.shared.currentConfigurations() else { return [] }
+        return infos
+            .filter { $0.kind == BluegullWidgetKind.aqi }
+            .map { ($0.configuration as? SelectLocationIntent)?.location?.location }
     }
 
     private func currentLocationSelection() -> LocationOption {
@@ -132,5 +184,18 @@ final class AQIRefreshController {
             return DataSourceModeStore.defaultMode
         }
         return mode
+    }
+}
+
+private extension WidgetCenter {
+    /// `getCurrentConfigurations` is completion-handler-only; wrapped here
+    /// so `activeWidgetLocations()` above can just `await` it like
+    /// everything else in this file's fetch path.
+    func currentConfigurations() async throws -> [WidgetInfo] {
+        try await withCheckedThrowingContinuation { continuation in
+            getCurrentConfigurations { result in
+                continuation.resume(with: result)
+            }
+        }
     }
 }

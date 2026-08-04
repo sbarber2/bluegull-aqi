@@ -7,6 +7,13 @@ import BluegullAQIKit
 /// menu bar popover still has a reachable path to attribution and the
 /// preliminary-data disclaimer (doc/DESIGN.md "AirNow terms review"
 /// findings 1 and 2; disclaimer wording decided in bluegull-aqi-dc2.4).
+///
+/// Also shows the full pollutant breakdown (`PollutantListView`,
+/// bluegull-aqi-mtm.15's pollutant-breakdown slice, pulled forward from
+/// its original POST-v1 deferral 2026-08-01) -- the widget face itself
+/// only shows the breakdown at `.systemLarge` (`LargeWidgetLayout`); this
+/// is the one place small/medium widget users can see it without also
+/// opening the menu bar popover.
 struct WidgetDetailView: View {
     let location: Location?
 
@@ -38,6 +45,8 @@ struct WidgetDetailView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Divider()
+                PollutantListView(pollutants: reading.pollutants)
                 Divider()
                 AttributionFooter(headline: headline)
                 DisclaimerFooter()
