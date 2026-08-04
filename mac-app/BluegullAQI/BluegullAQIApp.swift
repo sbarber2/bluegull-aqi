@@ -25,18 +25,34 @@ struct BluegullAQIApp: App {
     // the existing instance instead of relaunching" behavior is a
     // LaunchServices convenience, not something SwiftUI/AppKit enforces on
     // its own -- and it's bypassed by whatever launch path the desktop
-    // widget gallery's "Edit Widgets" uses to start this app, producing a
-    // second MenuBarExtra icon. This runs in `init()`, before `body` is
-    // ever evaluated and therefore before the MenuBarExtra scene can build
-    // -- `exit(0)`, not `NSApp.terminate`, because AppKit's own lifecycle
-    // isn't fully spun up yet this early, so terminate risks the menu bar
-    // item flashing into existence first.
+    // widget gallery uses to start this app, producing a second MenuBarExtra
+    // icon. This runs in `init()`, before `body` is ever evaluated and
+    // therefore before the MenuBarExtra scene can build.
+    //
+    // An earlier version of this guard just listed
+    // NSRunningApplication.runningApplications and activated/exited based
+    // on what it found -- a check-then-act race: two launch attempts close
+    // together (e.g. placing two widgets back-to-back) could both run the
+    // check before either was visible to the other, so both survived.
+    // `flock` on a file in the App Group container is atomic at the kernel
+    // level instead -- no gap between "check" and "act" for two processes
+    // to race through. The fd is deliberately never closed: held for the
+    // process's whole lifetime, released automatically (and crash-safely,
+    // no stale-lock cleanup needed) when the process exits. `exit(0)`, not
+    // `NSApp.terminate`, because AppKit's own lifecycle isn't fully spun up
+    // yet this early, so terminate risks the menu bar item flashing into
+    // existence first.
     init() {
-        let bundleID = Bundle.main.bundleIdentifier!
-        let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
-            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
-        if let existing = others.first {
-            existing.activate()
+        let lockURL = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: UserDefaultsCacheStore.appGroupIdentifier)!
+            .appendingPathComponent("instance.lock")
+        let fd = open(lockURL.path, O_CREAT | O_RDWR, 0o600)
+        if fd == -1 || flock(fd, LOCK_EX | LOCK_NB) != 0 {
+            // Someone else already holds the lock -- best-effort bring them
+            // forward (purely a UX nicety; the lock above is what actually
+            // decides who survives), then get out of the way.
+            let bundleID = Bundle.main.bundleIdentifier!
+            NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).first?.activate()
             exit(0)
         }
     }
@@ -87,7 +103,7 @@ struct BluegullAQIApp: App {
         // not auto-present -- matches how Settings itself is already
         // declared below.
         Window("Air Quality Detail", id: "widget-detail") {
-            WidgetDetailView(location: widgetDetailLocation)
+            WidgetDetailView(location: widgetDetailLocation, refreshController: refreshController)
                 .onOpenURL { url in
                     widgetDetailLocation = WidgetDeepLink.location(from: url)
                 }

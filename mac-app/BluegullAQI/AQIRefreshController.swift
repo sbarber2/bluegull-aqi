@@ -50,6 +50,11 @@ final class AQIRefreshController {
     private let scheduler: RefreshScheduler
     private let menuBarLocationMirror: SharedMenuBarLocationStore
     private var refreshTask: Task<Void, Never>?
+    private var widgetSettleTask: Task<Void, Never>?
+
+    // Much shorter than RefreshScheduler's ~1-hour cadence -- see
+    // `widgetSettleLoop()`'s own doc comment (bluegull-aqi-mtm.21).
+    private static let widgetSettleInterval: TimeInterval = 20
 
     /// nil if the App Group suite couldn't be opened -- same graceful-
     /// degradation as `UserDefaultsCacheStore` elsewhere; there's nowhere
@@ -93,6 +98,9 @@ final class AQIRefreshController {
         refreshTask = Task { [weak self] in
             await self?.runLoop()
         }
+        widgetSettleTask = Task { [weak self] in
+            await self?.widgetSettleLoop()
+        }
     }
 
     private func runLoop() async {
@@ -100,6 +108,25 @@ final class AQIRefreshController {
             await refreshNow()
             let interval = scheduler.nextRefreshDate().timeIntervalSinceNow
             try? await Task.sleep(for: .seconds(max(interval, 1)))
+        }
+    }
+
+    /// A much shorter-interval companion to `runLoop()`'s hourly cadence,
+    /// specifically for noticing a widget that was just placed or pointed
+    /// at a new location (bluegull-aqi-mtm.21). The container app has no
+    /// other signal tied to "a widget's configuration just changed" --
+    /// the widget extension can't tell it directly (no background
+    /// networking there to piggyback a request on) -- so this polls
+    /// instead. Cheap to run often: `activeWidgetLocations()` is a local
+    /// `WidgetCenter` query, not a network call, and
+    /// `refreshWidgetLocations` below only actually fetches a genuine
+    /// cache miss -- an already-valid entry is a no-op, so this doesn't
+    /// multiply AirNow request volume the way unconditionally re-fetching
+    /// on every tick would.
+    private func widgetSettleLoop() async {
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(Self.widgetSettleInterval))
+            await refreshWidgetLocations(mode: currentMode())
         }
     }
 
@@ -169,14 +196,39 @@ final class AQIRefreshController {
         // `.rounded` matches AppGroupCache's own cache-key precision, so a
         // widget pointed at the same ~1km cell as the menu bar's own
         // selection doesn't trigger a second, redundant fetch.
-        var handled: Set<Location> = Set([menuBarLocation?.rounded].compactMap { $0 })
+        let handled: Set<Location> = Set([menuBarLocation?.rounded].compactMap { $0 })
+        await refreshWidgetLocations(mode: mode, alreadyHandled: handled)
+    }
+
+    /// Fetches every placed widget's independently-configured location
+    /// that's a genuine cache miss (bluegull-aqi-igu/mtm.21) -- skips
+    /// anything already validly cached, so calling this often
+    /// (`widgetSettleLoop`) doesn't re-fetch data that's still fresh.
+    /// `alreadyHandled` lets `refreshNow()`'s own call skip a widget
+    /// pointed at the same ~1km cell its menu bar fetch just handled in
+    /// the same pass.
+    private func refreshWidgetLocations(mode: DataSourceMode, alreadyHandled: Set<Location> = []) async {
+        var handled = alreadyHandled
+        var resolvedCurrentLocation: Location?
+        func resolve(_ pinned: Location?) async -> Location? {
+            if let pinned { return pinned }
+            if let resolvedCurrentLocation { return resolvedCurrentLocation }
+            let resolved = try? await locationResolver.currentLocation()
+            resolvedCurrentLocation = resolved
+            return resolved
+        }
+
         for widgetPinnedLocation in await activeWidgetLocations() {
             guard let location = await resolve(widgetPinnedLocation) else { continue }
             guard handled.insert(location.rounded).inserted else { continue }
+            // Skip a location that's already validly cached -- this is
+            // what keeps `widgetSettleLoop`'s frequent polling cheap
+            // instead of multiplying AirNow request volume.
+            guard cache.get(for: location) == nil else { continue }
             // Best-effort: a failure here shouldn't touch `lastError`,
             // which describes the menu bar's own fetch above. The widget
             // just keeps showing whatever's still validly cached (or "No
-            // Data") until a later cycle succeeds.
+            // Data") until a later attempt succeeds.
             guard let reading = try? await coordinator.fetch(location: location, mode: mode) else { continue }
             // Same current-location mirroring as the menu bar's own fetch
             // above, for a widget independently configured to "Current
@@ -185,6 +237,26 @@ final class AQIRefreshController {
             if widgetPinnedLocation == nil {
                 cache.putCurrentLocation(reading)
             }
+        }
+    }
+
+    /// On-demand fetch for a single location, for a consumer that notices
+    /// a cache miss right now rather than waiting for either loop above
+    /// (bluegull-aqi-mtm.21) -- currently just `WidgetDetailView`, which
+    /// runs in this same process and has direct access, unlike the widget
+    /// extension itself. A no-op if `location` (or live GPS, for nil)
+    /// already has a valid cached entry.
+    func fetchIfNeeded(for location: Location?) async {
+        let resolvedLocation: Location?
+        if let location {
+            resolvedLocation = location
+        } else {
+            resolvedLocation = try? await locationResolver.currentLocation()
+        }
+        guard let resolvedLocation, cache.get(for: resolvedLocation) == nil else { return }
+        guard let reading = try? await coordinator.fetch(location: resolvedLocation, mode: currentMode()) else { return }
+        if location == nil {
+            cache.putCurrentLocation(reading)
         }
     }
 

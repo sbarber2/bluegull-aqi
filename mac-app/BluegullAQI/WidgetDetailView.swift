@@ -16,21 +16,24 @@ import BluegullAQIKit
 /// opening the menu bar popover.
 struct WidgetDetailView: View {
     let location: Location?
+    let refreshController: AQIRefreshController?
 
     // Reads directly from the App Group cache, the same source
-    // `WidgetTimelineComputer` gives the widget itself -- shows whatever
-    // `AQIRefreshController` (bluegull-aqi-e70.6/e70.7) last cached, not a
-    // fresh fetch trigger. Opening this view isn't itself a signal to
-    // fetch.
+    // `WidgetTimelineComputer` gives the widget itself.
     private let computer: WidgetTimelineComputer?
 
-    init(location: Location?, store: SharedCacheStore? = UserDefaultsCacheStore()) {
-        self.location = location
-        computer = store.map(WidgetTimelineComputer.init(store:))
-    }
+    // `@State`, not a computed property, so a fetch triggered below can
+    // actually update what's on screen (bluegull-aqi-mtm.21) -- opening
+    // this view used to not be a signal to fetch at all, which meant a
+    // widget pointed at a location nothing else had ever fetched just
+    // stayed on "No Data" forever, even with this window open and staring
+    // right at it.
+    @State private var reading: AQIReading?
 
-    private var reading: AQIReading? {
-        computer?.currentSnapshot(for: location).reading
+    init(location: Location?, refreshController: AQIRefreshController? = nil, store: SharedCacheStore? = UserDefaultsCacheStore()) {
+        self.location = location
+        self.refreshController = refreshController
+        computer = store.map(WidgetTimelineComputer.init(store:))
     }
 
     var body: some View {
@@ -61,5 +64,16 @@ struct WidgetDetailView: View {
         .padding()
         .frame(width: 320)
         .accessibilityIdentifier("widgetDetailView")
+        // `.task(id:)`, not `.task` -- this is a singleton Window
+        // (bluegull-aqi-mtm.14), so a second widget tap while it's already
+        // open reuses the same view with a new `location` rather than
+        // creating a fresh one; re-running for the new id is what makes
+        // that case fetch too, not just the window's first-ever open.
+        .task(id: location) {
+            reading = computer?.currentSnapshot(for: location).reading
+            guard reading == nil else { return }
+            await refreshController?.fetchIfNeeded(for: location)
+            reading = computer?.currentSnapshot(for: location).reading
+        }
     }
 }

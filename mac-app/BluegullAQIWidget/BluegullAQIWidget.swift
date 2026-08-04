@@ -80,7 +80,7 @@ struct BluegullAQIWidget: Widget {
         // Not "Local air quality" (bluegull-aqi-mtm.20) -- that implies
         // wherever-you-are, which stopped being true once each widget
         // instance can be pinned to a location you aren't at.
-        .description("Air quality for a location you choose.")
+        .description("Air quality at a glance.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }
