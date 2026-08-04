@@ -126,10 +126,22 @@ app-stop:
 # Access.app after), and remove a widget placed on the desktop (no CLI for
 # that).
 app-clean: app-stop
+	# Before the DerivedData wipe below, not after -- tccutil needs to
+	# resolve the bundle identifier via LaunchServices, which it can't do
+	# once the built .app is gone ("No such bundle identifier"). This
+	# ordering only helps if a build currently exists, though: tccutil
+	# needs *some* registered BluegullAQI.app to resolve against, built or
+	# not deleted yet -- if app-clean is run a second time with no
+	# `app-build`/`app-run` in between, there's nothing to resolve and this
+	# fails every time regardless of order (confirmed empirically, not just
+	# reasoned about). `-` ignores that failure rather than aborting the
+	# rest of this target and skipping the reminders below -- if you
+	# specifically need the location-permission reset to actually take
+	# effect, run `app-build` first.
+	-tccutil reset Location solutions.bluegull.aqi
 	rm -rf ~/Library/Developer/Xcode/DerivedData/BluegullAQI-*
 	-security delete-generic-password -s solutions.bluegull.aqi.airnow-api-key -a airnow-api-key >/dev/null 2>&1
 	-defaults delete solutions.bluegull.aqi >/dev/null 2>&1
 	rm -rf ~/Library/Group\ Containers/group.solutions.bluegull.aqi
-	tccutil reset Location solutions.bluegull.aqi
 	@echo "Done. Verify the AirNow key is actually gone via Keychain Access.app (see comment above)."
 	@echo "If you placed the widget on your desktop, remove it manually (right-click > Remove Widget)."
