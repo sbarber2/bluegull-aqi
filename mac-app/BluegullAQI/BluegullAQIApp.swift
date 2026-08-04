@@ -4,16 +4,41 @@ import BluegullAQIKit
 
 @main
 struct BluegullAQIApp: App {
-    // Drives the actual fetch loop (bluegull-aqi-e70.6/e70.7) -- nil only
-    // if the App Group suite couldn't be opened, in which case the popover
-    // falls back to its empty state permanently, the same as before this
-    // existed.
-    @State private var refreshController = AQIRefreshController()
+    // True when XCTest is hosting this process, not a real launch --
+    // `BluegullAQITests` needs a *running* app as its test host
+    // (TEST_HOST/BUNDLE_LOADER), which means this exact struct's `init()`/
+    // `@State` initializers run for real under `make test-swift` unless
+    // guarded. Found because they weren't: every test-swift run re-fired
+    // the real Location permission dialog (test-swift builds with
+    // CODE_SIGNING_ALLOWED=NO, so TCC sees an unrecognized identity each
+    // time and treats it as undecided) and started a real
+    // AQIRefreshController fetch loop hitting CoreLocation/the network --
+    // and if a real signed instance happened to already be running, the
+    // single-instance flock below saw it, exited immediately, and failed
+    // the whole test run ("Early unexpected exit"), confirmed as a real
+    // failure earlier in this project's history, not a hypothetical.
+    // `XCTestConfigurationFilePath` is the standard env var XCTest sets on
+    // whatever process it's hosting inside, regardless of which specific
+    // test bundle is running.
+    private static var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    // Drives the actual fetch loop (bluegull-aqi-e70.6/e70.7) -- nil if the
+    // App Group suite couldn't be opened (the popover falls back to its
+    // empty state permanently, same as before this existed) or if
+    // `isRunningTests` (bluegull-aqi-o4b's test-swift investigation) --
+    // `AQIRefreshController.init?` already models "nothing to drive the
+    // popover with" as nil, so this reuses that instead of a separate flag.
+    @State private var refreshController = isRunningTests ? nil : AQIRefreshController()
 
     // Requesting on launch is a minimal, real trigger point -- `@State`'s
     // initial value is created exactly once per app launch, so this fires
     // the request (if needed) once, not on every scene rebuild.
-    @State private var locationPermission = LocationPermissionRequester(requestOnInit: true)
+    // `requestOnInit: !isRunningTests` -- see `isRunningTests`'s own doc
+    // comment; `LocationPermissionRequester` already supports this exact
+    // no-op mode for previews, tests just needed to actually opt into it.
+    @State private var locationPermission = LocationPermissionRequester(requestOnInit: !isRunningTests)
 
     // Set from the incoming widgetURL when the widget's tap target opens
     // the detail window (bluegull-aqi-mtm.14) -- nil until then, which
@@ -43,6 +68,10 @@ struct BluegullAQIApp: App {
     // yet this early, so terminate risks the menu bar item flashing into
     // existence first.
     init() {
+        // See `isRunningTests`'s own doc comment -- without this, the test
+        // host process races the real single-instance lock and exits
+        // immediately whenever a real signed instance is already running.
+        guard !Self.isRunningTests else { return }
         let lockURL = FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: UserDefaultsCacheStore.appGroupIdentifier)!
             .appendingPathComponent("instance.lock")
