@@ -81,10 +81,14 @@ final class WidgetTimelineComputerTests: XCTestCase {
     func testCurrentSnapshotForASpecificLocationReturnsThatLocationsEntry() {
         let store = InMemorySharedCacheStore()
         let otherLocation = Location(latitude: 40.7128, longitude: -74.0060)
-        let otherReading = AQIReading(location: otherLocation, pollutants: reading.pollutants)
+        let otherReading = AQIReading(location: otherLocation.rounded, pollutants: reading.pollutants)
         let cache = AppGroupCache(store: store)
         cache.put(reading, for: location)
-        cache.put(otherReading, for: otherLocation)
+        // `.rounded` -- AQIFetchCoordinator always caches under the fetch
+        // client's own rounded location (bluegull-aqi-10h.11), never the
+        // raw pin; writing under the raw `otherLocation` here would test a
+        // write path production code never takes.
+        cache.put(otherReading, for: otherLocation.rounded)
 
         let computer = WidgetTimelineComputer(store: store)
         XCTAssertEqual(computer.currentSnapshot(for: otherLocation).reading, otherReading)
@@ -100,6 +104,23 @@ final class WidgetTimelineComputerTests: XCTestCase {
 
         let computer = WidgetTimelineComputer(store: store)
         XCTAssertNil(computer.currentSnapshot(for: requestedButUncachedLocation).reading)
+    }
+
+    func testCurrentSnapshotForAPinFindsTheEntryCachedUnderItsRoundedCoordinates() {
+        // Regression for bluegull-aqi-nmn: AQIFetchCoordinator always caches
+        // under the fetch client's own *rounded* location, never the raw
+        // pin (bluegull-aqi-10h.11) -- every prior test in this file wrote
+        // and read back the exact same unrounded Location value, which
+        // can't catch a missing `.rounded()` on the read side. This mirrors
+        // real usage: write rounded (as the coordinator does), read with
+        // the widget's raw configured pin (as `BluegullAQIWidget` does).
+        let store = InMemorySharedCacheStore()
+        let rawPin = Location(latitude: 40.780729, longitude: -73.9920338)
+        let roundedReading = AQIReading(location: rawPin.rounded, pollutants: reading.pollutants)
+        AppGroupCache(store: store).put(roundedReading, for: rawPin.rounded)
+
+        let computer = WidgetTimelineComputer(store: store)
+        XCTAssertEqual(computer.currentSnapshot(for: rawPin).reading, roundedReading)
     }
 
     func testCurrentSnapshotWithNoLocationFallsBackToMostRecentEntry() {

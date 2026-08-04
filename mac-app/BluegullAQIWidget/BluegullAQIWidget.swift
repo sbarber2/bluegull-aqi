@@ -15,6 +15,7 @@ import BluegullAQIWidgetViews
 /// `SelectLocationIntent` says which location it shows.
 struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
     private let computer: WidgetTimelineComputer?
+    private let requestedLocations: WidgetRequestedLocationsStore
 
     init(store: SharedCacheStore? = UserDefaultsCacheStore()) {
         // The App Group suite couldn't be opened -- rather than crash
@@ -22,6 +23,7 @@ struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
         // container-app failure), degrade to "no data to show," the same
         // state as a genuine cache miss.
         computer = store.map(WidgetTimelineComputer.init(store:))
+        requestedLocations = WidgetRequestedLocationsStore(store: store)
     }
 
     func placeholder(in context: Context) -> BluegullAQIWidgetEntry {
@@ -46,6 +48,14 @@ struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
         // currentSnapshot(for:) already treats as "fall back to whatever
         // was most recently cached."
         let configuredLocation = configuration.location?.location
+        // Relays this instance's configured location to the container app
+        // (bluegull-aqi-o4b) -- see WidgetRequestedLocationsStore's own doc
+        // comment for why this, and not WidgetCenter, is what
+        // AQIRefreshController actually reads. Every entry computation
+        // re-records it (not just placement), which is what lets a removed
+        // widget's entry naturally age out instead of needing an explicit
+        // removal signal that doesn't exist.
+        requestedLocations.recordSeen(configuredLocation, now: now)
         // .name is already the right display string either way --
         // "Current Location" for the explicit synthetic option, or the
         // pinned location's own label. A not-yet-configured instance

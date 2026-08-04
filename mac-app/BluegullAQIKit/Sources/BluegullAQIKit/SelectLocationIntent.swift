@@ -1,10 +1,8 @@
 import AppIntents
 
-/// The `WidgetCenter`/`getCurrentConfigurations` `kind` string identifying
-/// the widget extension's own `Widget` (`BluegullAQIWidget.swift`) --
-/// shared here so the container app can filter `WidgetInfo` results
-/// against it (bluegull-aqi-igu) without duplicating the literal in two
-/// targets that can drift apart.
+/// The widget extension's own `Widget.kind` string
+/// (`BluegullAQIWidget.swift`) -- shared here so it's a single literal, not
+/// duplicated across targets that can drift apart.
 public enum BluegullWidgetKind {
     public static let aqi = "BluegullAQIWidget"
 }

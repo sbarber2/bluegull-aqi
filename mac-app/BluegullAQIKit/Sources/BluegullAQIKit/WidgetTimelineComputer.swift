@@ -59,7 +59,14 @@ public struct WidgetTimelineComputer: Sendable {
     /// location) only when GPS has never successfully resolved at all, e.g.
     /// a fresh install or permission never granted.
     public func currentSnapshot(for location: Location? = nil, now: Date = Date()) -> WidgetTimelineSnapshot {
-        let reading = location.map { cache.get(for: $0, now: now) }
+        // `.rounded` -- `AQIFetchCoordinator` caches under the fetch
+        // client's own rounded location (bluegull-aqi-10h.11), never the
+        // caller's raw one, so a lookup with the widget's raw configured
+        // pin missed every time (bluegull-aqi-nmn): every widget with a
+        // distinct pinned location showed "Data Unavailable" forever, since
+        // `reading` here was always nil despite a valid cache entry
+        // existing under the rounded key.
+        let reading = location.map { cache.get(for: $0.rounded, now: now) }
             ?? cache.getCurrentLocation(now: now)
             ?? cache.mostRecentEntry(now: now)
         return WidgetTimelineSnapshot(date: now, reading: reading, lastSuccessfulFetchDate: cache.lastSuccessfulFetchDate())

@@ -4,12 +4,13 @@
 # detail (poetry, DynamoDB Local, SAM); this delegates to it rather than
 # duplicating it.
 .PHONY: test test-swift test-ui test-service snapshots record-snapshots \
-        app-build app-run app-launch app-stop app-clean \
+        app-build app-run app-launch app-stop app-clean widget-reset \
         service-deploy service-delete service-enable service-disable
 
 MAC_APP_DIR := mac-app
 SERVICE_DIR := service
 SNAPSHOT_SCRATCH_DIR := /tmp/bluegull-widget-snapshots
+LSREGISTER := /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
 
 # Everything except test-ui -- see that target's own comment for why it's
 # not part of the default run.
@@ -116,6 +117,39 @@ app-launch:
 app-stop:
 	-pkill -x BluegullAQI
 
+# Fixes the widget silently disappearing from the Notification Center/
+# desktop widget gallery -- diagnosed 2026-08-04: after a DerivedData wipe
+# (or an Xcode "Clean Build Folder"), LaunchServices is left with two
+# registrations for solutions.bluegull.aqi.widget -- the live one plus a
+# stale one pointing at a DerivedData hash that no longer exists on disk.
+# `chronod` (the widget host) can't tell which is authoritative, so it
+# silently drops the extension: `log show --predicate 'process == "chronod"'`
+# shows "Ignoring restricted or unknown extension solutions.bluegull.aqi.widget"
+# even though `pluginkit -m` still lists it as registered. Logging out and
+# back in does NOT clear this -- it's LaunchServices database state, not
+# anything session-scoped.
+# Finds every LaunchServices registration under any BluegullAQI-* DerivedData
+# hash (stale or current -- lsregister re-adds the current one cleanly next
+# launch) and unregisters it, then restarts chronod so it drops its cached
+# "ignoring" state. Safe/reversible: LaunchServices re-indexes automatically,
+# but chronod restarting briefly resets every widget on the Mac, not just
+# this app's, while it re-registers.
+widget-reset:
+	@paths=$$($(LSREGISTER) -dump 2>/dev/null \
+		| grep -E '^[[:space:]]*path:.*DerivedData/BluegullAQI-.*/BluegullAQI(Widget\.appex|\.app)( \(0x[0-9a-fA-F]+\))?$$' \
+		| sed -E 's/^[[:space:]]*path:[[:space:]]+(.*) \(0x[0-9a-fA-F]+\)$$/\1/' \
+		| sort -u); \
+	if [ -z "$$paths" ]; then \
+		echo "No LaunchServices registrations found for BluegullAQI -- nothing to reset."; \
+	else \
+		echo "$$paths" | while IFS= read -r p; do \
+			echo "Unregistering $$p"; \
+			$(LSREGISTER) -u -v "$$p" >/dev/null 2>&1 || true; \
+		done; \
+	fi
+	-killall chronod
+	@echo "Widget registration reset. Relaunch the app (app-launch/app-run), then re-check the widget gallery."
+
 # Reverses app-build/app-run (or any prior Xcode Cmd+R run) -- see
 # doc/DEVINSTALL.md "Uninstall (leave no trace)" for what each step
 # corresponds to. Stops the app first (app-stop) before touching its
@@ -125,7 +159,7 @@ app-stop:
 # the app's own Settings before running this, or verify in Keychain
 # Access.app after), and remove a widget placed on the desktop (no CLI for
 # that).
-app-clean: app-stop
+app-clean: app-stop widget-reset
 	# Before the DerivedData wipe below, not after -- tccutil needs to
 	# resolve the bundle identifier via LaunchServices, which it can't do
 	# once the built .app is gone ("No such bundle identifier"). This
@@ -138,6 +172,13 @@ app-clean: app-stop
 	# rest of this target and skipping the reminders below -- if you
 	# specifically need the location-permission reset to actually take
 	# effect, run `app-build` first.
+	#
+	# widget-reset (in the prerequisite list, so it runs before any of this)
+	# unregisters BluegullAQI/BluegullAQIWidget from LaunchServices while
+	# the DerivedData below still exists to resolve against -- the exact
+	# same resolve-before-delete constraint as tccutil above. Skipping it
+	# here would recreate the stale-registration widget-gallery bug this
+	# target was added to prevent.
 	-tccutil reset Location solutions.bluegull.aqi
 	rm -rf ~/Library/Developer/Xcode/DerivedData/BluegullAQI-*
 	-security delete-generic-password -s solutions.bluegull.aqi.airnow-api-key -a airnow-api-key >/dev/null 2>&1
