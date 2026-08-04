@@ -46,12 +46,20 @@ struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
         // currentSnapshot(for:) already treats as "fall back to whatever
         // was most recently cached."
         let configuredLocation = configuration.location?.location
+        // .name is already the right display string either way --
+        // "Current Location" for the explicit synthetic option, or the
+        // pinned location's own label. A not-yet-configured instance
+        // (configuration.location entirely nil, not just .location.location)
+        // has no name to draw on yet, so this falls back to the same
+        // synthetic name (bluegull-aqi-mtm.20).
+        let locationName = configuration.location?.name ?? LocationOptionEntity.currentLocation.name
         guard let computer else {
-            return BluegullAQIWidgetEntry(date: now, reading: nil, configuredLocation: configuredLocation)
+            return BluegullAQIWidgetEntry(date: now, reading: nil, configuredLocation: configuredLocation, locationName: locationName)
         }
         return BluegullAQIWidgetEntry(
             computer.currentSnapshot(for: configuredLocation, now: now),
-            configuredLocation: configuredLocation
+            configuredLocation: configuredLocation,
+            locationName: locationName
         )
     }
 }
@@ -69,7 +77,10 @@ struct BluegullAQIWidget: Widget {
                 .widgetURL(WidgetDeepLink.url(for: entry.configuredLocation))
         }
         .configurationDisplayName(NowCastCopy.headline)
-        .description("Local air quality at a glance.")
+        // Not "Local air quality" (bluegull-aqi-mtm.20) -- that implies
+        // wherever-you-are, which stopped being true once each widget
+        // instance can be pinned to a location you aren't at.
+        .description("Air quality for a location you choose.")
         .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
     }
 }

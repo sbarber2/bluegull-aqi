@@ -70,8 +70,20 @@ public struct LocationOptionQuery: EntityQuery {
         allOptions()
     }
 
+    // A newly-placed widget starts out as a one-time snapshot of whatever
+    // the menu bar currently shows (bluegull-aqi-mtm.20), not the
+    // synthetic "Current Location" option -- `SharedMenuBarLocationStore`
+    // is how the container app mirrors that selection into the App Group,
+    // since this runs in the widget extension process, which can't read
+    // `MenuBarLocationSelectionStore`'s own `UserDefaults.standard`. Falls
+    // back to `.currentLocation` if nothing's been mirrored yet (fresh
+    // install, before the container app's first `refreshNow()`) or the
+    // mirrored ID no longer matches anything (its pinned location was since
+    // deleted) -- same fallback `MenuBarLocationSelectionStore.selection
+    // (id:availableOptions:)` uses for the analogous case.
     public func defaultResult() async -> LocationOptionEntity? {
-        .currentLocation
+        let mirroredID = SharedMenuBarLocationStore().load()
+        return allOptions().first { $0.id == mirroredID } ?? .currentLocation
     }
 
     private func allOptions() -> [LocationOptionEntity] {

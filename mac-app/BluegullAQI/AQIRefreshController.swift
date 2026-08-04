@@ -48,6 +48,7 @@ final class AQIRefreshController {
     private let coordinator: AQIFetchCoordinator
     private let cache: AppGroupCache
     private let scheduler: RefreshScheduler
+    private let menuBarLocationMirror: SharedMenuBarLocationStore
     private var refreshTask: Task<Void, Never>?
 
     /// nil if the App Group suite couldn't be opened -- same graceful-
@@ -75,6 +76,7 @@ final class AQIRefreshController {
         cache = AppGroupCache(store: store)
         coordinator = AQIFetchCoordinator(cache: cache)
         scheduler = RefreshScheduler(store: store)
+        menuBarLocationMirror = SharedMenuBarLocationStore(store: store)
         latestReading = cache.mostRecentEntry()
         lastFetchedAt = cache.lastSuccessfulFetchDate()
         if startOnInit {
@@ -112,6 +114,18 @@ final class AQIRefreshController {
     func refreshNow() async {
         let mode = currentMode()
 
+        // Mirrors the menu bar's current selection into the App Group
+        // (bluegull-aqi-mtm.20): `MenuBarLocationSelectionStore` itself is
+        // deliberately `UserDefaults.standard` (container-app-only), which
+        // the widget extension process can't read -- so a newly-placed
+        // widget's `LocationOptionQuery.defaultResult()` couldn't otherwise
+        // see it. App Intents only calls `defaultResult()` once, at
+        // placement time, so this mirror only ever seeds a *starting*
+        // value for a new widget -- it's not a live link, and later menu
+        // bar changes don't touch already-placed widgets.
+        let menuBarSelection = currentLocationSelection()
+        menuBarLocationMirror.save(persistenceID: menuBarSelection.persistenceID)
+
         // Resolves live GPS at most once per call, however many callers
         // below (the menu bar's own selection, plus every placed widget)
         // ask for "current location" -- `pinned` is nil for that case.
@@ -126,11 +140,20 @@ final class AQIRefreshController {
 
         var menuBarLocation: Location?
         do {
-            guard let location = await resolve(currentLocationSelection().pinnedLocation) else {
+            guard let location = await resolve(menuBarSelection.pinnedLocation) else {
                 throw LocationResolverError.locationUnavailable("current location unavailable")
             }
             menuBarLocation = location
-            latestReading = try await coordinator.fetch(location: location, mode: mode)
+            let reading = try await coordinator.fetch(location: location, mode: mode)
+            latestReading = reading
+            // nil selection means the menu bar itself is showing live GPS
+            // -- mirror that into the dedicated current-location slot
+            // (bluegull-aqi-mtm.20) so a widget configured for "Current
+            // Location" can read it directly instead of guessing via
+            // mostRecentEntry().
+            if menuBarSelection.pinnedLocation == nil {
+                cache.putCurrentLocation(reading)
+            }
             lastFetchedAt = cache.lastSuccessfulFetchDate()
             lastError = nil
         } catch let error as AQIFetchError {
@@ -154,7 +177,14 @@ final class AQIRefreshController {
             // which describes the menu bar's own fetch above. The widget
             // just keeps showing whatever's still validly cached (or "No
             // Data") until a later cycle succeeds.
-            _ = try? await coordinator.fetch(location: location, mode: mode)
+            guard let reading = try? await coordinator.fetch(location: location, mode: mode) else { continue }
+            // Same current-location mirroring as the menu bar's own fetch
+            // above, for a widget independently configured to "Current
+            // Location" while the menu bar itself shows a pinned location
+            // (bluegull-aqi-mtm.20).
+            if widgetPinnedLocation == nil {
+                cache.putCurrentLocation(reading)
+            }
         }
     }
 

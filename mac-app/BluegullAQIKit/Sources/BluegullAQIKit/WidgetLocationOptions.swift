@@ -1,3 +1,5 @@
+import Foundation
+
 /// One widget-configuration location choice (bluegull-aqi-mtm.3): either
 /// the synthetic "current location" option, or one of the user's pinned
 /// locations (bluegull-aqi-e70.5).
@@ -76,5 +78,41 @@ public enum MenuBarLocationSelectionStore {
             return .currentLocation
         }
         return match
+    }
+}
+
+/// Mirrors `MenuBarLocationSelectionStore`'s current selection into the App
+/// Group (bluegull-aqi-mtm.20) -- `MenuBarLocationSelectionStore` itself is
+/// deliberately `UserDefaults.standard` (container-app-only, see its own
+/// doc comment above), which the widget extension process can't read at
+/// all. Written by `AQIRefreshController` every `refreshNow()` (the same
+/// place that already resolves the menu bar's current selection); read by
+/// `LocationOptionQuery.defaultResult()` in the widget extension to seed a
+/// newly-placed widget's starting configuration with a one-time snapshot of
+/// whatever the menu bar currently shows. App Intents only calls
+/// `defaultResult()` once, at placement time, so this is never a live
+/// link -- an already-placed widget is unaffected by later menu bar
+/// changes, same as any other explicitly-configured widget.
+public struct SharedMenuBarLocationStore: Sendable {
+    private static let key = "menu-bar-location-selection-mirror"
+
+    private let store: SharedCacheStore?
+
+    public init(store: SharedCacheStore? = UserDefaultsCacheStore()) {
+        self.store = store
+    }
+
+    /// Persists `persistenceID` (`LocationOption.persistenceID`) -- a no-op
+    /// if the App Group suite couldn't be opened.
+    public func save(persistenceID: String) {
+        guard let store, let data = try? JSONEncoder().encode(persistenceID) else { return }
+        store.set(data, forKey: Self.key)
+    }
+
+    /// nil if never written, the App Group suite couldn't be opened, or the
+    /// stored value is undecodable.
+    public func load() -> String? {
+        guard let store, let data = store.data(forKey: Self.key) else { return nil }
+        return try? JSONDecoder().decode(String.self, from: data)
     }
 }

@@ -38,11 +38,11 @@ public struct BluegullAQIWidgetView: View {
                let category = headline.category {
                 switch family {
                 case .systemSmall:
-                    SmallWidgetLayout(aqi: aqi, category: category)
+                    SmallWidgetLayout(aqi: aqi, category: category, locationName: entry.locationName)
                 case .systemMedium:
-                    MediumWidgetLayout(aqi: aqi, category: category, reading: reading, headline: headline)
+                    MediumWidgetLayout(aqi: aqi, category: category, reading: reading, headline: headline, locationName: entry.locationName)
                 default:
-                    LargeWidgetLayout(aqi: aqi, category: category, reading: reading)
+                    LargeWidgetLayout(aqi: aqi, category: category, reading: reading, locationName: entry.locationName)
                 }
             } else {
                 // bluegull-aqi-dc2.1: distinguishes "never fetched" (no
@@ -67,6 +67,14 @@ public struct BluegullAQIWidgetView: View {
 
     private var emptyStateView: some View {
         VStack(spacing: 4) {
+            // So two "No Data" widgets pointed at different locations
+            // (bluegull-aqi-mtm.20) don't look identical -- the whole
+            // reason to distinguish them is moot if neither says which
+            // location it's actually waiting on data for.
+            Text(entry.locationName)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
             Image(systemName: "aqi.medium")
                 .font(.title2)
                 .foregroundStyle(.secondary)
@@ -116,9 +124,18 @@ struct SmallWidgetLayout: View {
     @ScaledMetric(relativeTo: .largeTitle) private var aqiFontSize: CGFloat = 36
     let aqi: Int
     let category: AQICategory
+    let locationName: String
 
     var body: some View {
         VStack(spacing: 6) {
+            // bluegull-aqi-mtm.20: every widget shows its own location now,
+            // not just whichever one the menu bar happens to be showing --
+            // this is what actually makes that visible.
+            Text(locationName)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
             Circle()
                 .fill(category.color.swiftUIColor)
                 .frame(width: 12, height: 12)
@@ -146,6 +163,7 @@ struct MediumWidgetLayout: View {
     let category: AQICategory
     let reading: AQIReading
     let headline: PollutantReading
+    let locationName: String
 
     private var otherPollutants: [PollutantReading] {
         Array(
@@ -157,37 +175,46 @@ struct MediumWidgetLayout: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Circle()
-                    .fill(category.color.swiftUIColor)
-                    .frame(width: 10, height: 10)
-                Text("\(aqi)")
-                    .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
-                // Otherwise the headline number is unlabeled: otherPollutants
-                // deliberately excludes the headline itself from the side
-                // list below (bluegull-aqi-0u4), so without this the widget
-                // can read as if only the *other* pollutant exists at all --
-                // confirmed against a real reading where the headline was
-                // PM2.5 and the only visible name on screen was "OZONE."
-                Text(headline.parameterName)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                Text(category.descriptor)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+        VStack(alignment: .leading, spacing: 4) {
+            // bluegull-aqi-mtm.20: every widget shows its own location now,
+            // not just whichever one the menu bar happens to be showing.
+            Text(locationName)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
 
-            if !otherPollutants.isEmpty {
-                Divider()
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(otherPollutants, id: \.parameterName) { pollutant in
-                        pollutantRow(pollutant)
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Circle()
+                        .fill(category.color.swiftUIColor)
+                        .frame(width: 10, height: 10)
+                    Text("\(aqi)")
+                        .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
+                    // Otherwise the headline number is unlabeled: otherPollutants
+                    // deliberately excludes the headline itself from the side
+                    // list below (bluegull-aqi-0u4), so without this the widget
+                    // can read as if only the *other* pollutant exists at all --
+                    // confirmed against a real reading where the headline was
+                    // PM2.5 and the only visible name on screen was "OZONE."
+                    Text(headline.parameterName)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    Text(category.descriptor)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if !otherPollutants.isEmpty {
+                    Divider()
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(otherPollutants, id: \.parameterName) { pollutant in
+                            pollutantRow(pollutant)
+                        }
                     }
                 }
-            }
 
-            Spacer(minLength: 0)
+                Spacer(minLength: 0)
+            }
         }
         .padding()
     }
@@ -222,9 +249,17 @@ struct LargeWidgetLayout: View {
     let aqi: Int
     let category: AQICategory
     let reading: AQIReading
+    let locationName: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            // bluegull-aqi-mtm.20: every widget shows its own location now,
+            // not just whichever one the menu bar happens to be showing.
+            Text(locationName)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Circle()
                     .fill(category.color.swiftUIColor)

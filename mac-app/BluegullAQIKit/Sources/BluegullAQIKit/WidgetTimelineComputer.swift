@@ -52,11 +52,16 @@ public struct WidgetTimelineComputer: Sendable {
     /// *only* that location's cache entry, never falling back to a
     /// different location's data (a user who picked "Work" should see "no
     /// data yet" rather than "Home"'s AQI by surprise). `nil` covers both
-    /// "current location" (the widget can't resolve that itself -- see
-    /// `AppGroupCache.mostRecentEntry()`'s own doc comment) and the
-    /// pre-`mtm.3` unconfigured case.
+    /// "current location" (the widget can't resolve that itself) and the
+    /// pre-`mtm.3` unconfigured case -- that reads `getCurrentLocation()`,
+    /// the most recent live-GPS fetch specifically (bluegull-aqi-mtm.20),
+    /// falling back to `mostRecentEntry()` (whatever's most recent, any
+    /// location) only when GPS has never successfully resolved at all, e.g.
+    /// a fresh install or permission never granted.
     public func currentSnapshot(for location: Location? = nil, now: Date = Date()) -> WidgetTimelineSnapshot {
-        let reading = location.map { cache.get(for: $0, now: now) } ?? cache.mostRecentEntry(now: now)
+        let reading = location.map { cache.get(for: $0, now: now) }
+            ?? cache.getCurrentLocation(now: now)
+            ?? cache.mostRecentEntry(now: now)
         return WidgetTimelineSnapshot(date: now, reading: reading, lastSuccessfulFetchDate: cache.lastSuccessfulFetchDate())
     }
 

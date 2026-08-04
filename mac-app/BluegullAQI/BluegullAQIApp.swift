@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import BluegullAQIKit
 
@@ -19,6 +20,26 @@ struct BluegullAQIApp: App {
     // WidgetDetailView already treats as "current location"/most-recently-
     // cached, the same fallback the widget itself uses.
     @State private var widgetDetailLocation: Location?
+
+    // Single-instance guard (bluegull-aqi-e70.25): macOS's usual "activate
+    // the existing instance instead of relaunching" behavior is a
+    // LaunchServices convenience, not something SwiftUI/AppKit enforces on
+    // its own -- and it's bypassed by whatever launch path the desktop
+    // widget gallery's "Edit Widgets" uses to start this app, producing a
+    // second MenuBarExtra icon. This runs in `init()`, before `body` is
+    // ever evaluated and therefore before the MenuBarExtra scene can build
+    // -- `exit(0)`, not `NSApp.terminate`, because AppKit's own lifecycle
+    // isn't fully spun up yet this early, so terminate risks the menu bar
+    // item flashing into existence first.
+    init() {
+        let bundleID = Bundle.main.bundleIdentifier!
+        let others = NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .filter { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }
+        if let existing = others.first {
+            existing.activate()
+            exit(0)
+        }
+    }
 
     var body: some Scene {
         MenuBarExtra {

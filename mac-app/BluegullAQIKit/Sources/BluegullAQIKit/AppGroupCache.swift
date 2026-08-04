@@ -123,6 +123,17 @@ public struct AppGroupCache: Sendable {
     /// the very next `put()`.
     private static let lastSuccessfulFetchKey = "aqi-last-successful-fetch-at"
 
+    /// Also deliberately outside `keyPrefix`, same reasoning as
+    /// `lastSuccessfulFetchKey` above -- holds the most recent successful
+    /// live-GPS fetch specifically, so a widget configured for "Current
+    /// Location" (a nil `SelectLocationIntent.location`, bluegull-aqi-
+    /// mtm.20) can look up *that* reading directly instead of falling back
+    /// to `mostRecentEntry()`'s "whatever's most recent anywhere," which
+    /// was really a pre-per-instance-configuration stopgap (see that
+    /// method's own doc comment) and made every "Current Location" widget
+    /// mirror whichever location the menu bar happened to fetch last.
+    private static let currentLocationKey = "aqi-cache-current-location"
+
     private let store: SharedCacheStore
 
     public init(store: SharedCacheStore) {
@@ -208,6 +219,36 @@ public struct AppGroupCache: Sendable {
         }
 
         return newest?.reading
+    }
+
+    /// Records a successful live-GPS fetch under its own stable key
+    /// (bluegull-aqi-mtm.20), independent of the coordinate-keyed entry
+    /// `AQIFetchCoordinator` already writes via `put(_:for:)` -- GPS
+    /// coordinates drift call-to-call, so there's no fixed coordinate key a
+    /// "Current Location" reader could look up directly otherwise. Same
+    /// TTL/expiry semantics as `put(_:for:)`.
+    public func putCurrentLocation(_ reading: AQIReading, ttl: TimeInterval = defaultTTL, now: Date = Date()) {
+        let entry = AQICacheEntry(reading: reading, fetchedAt: now, expiresAt: now.addingTimeInterval(ttl))
+        guard let data = try? JSONEncoder().encode(entry) else { return }
+        store.set(data, forKey: Self.currentLocationKey)
+    }
+
+    /// nil on a miss -- absent, undecodable, or expired (deleted here too,
+    /// same as `get(for:)`). This is the *specific* "what did live GPS
+    /// resolve to most recently" answer -- see `currentLocationKey`'s doc
+    /// comment for why a widget showing "Current Location" should prefer
+    /// this over `mostRecentEntry()`.
+    public func getCurrentLocation(now: Date = Date()) -> AQIReading? {
+        guard let data = store.data(forKey: Self.currentLocationKey) else { return nil }
+        guard let entry = try? JSONDecoder().decode(AQICacheEntry.self, from: data) else {
+            store.set(nil, forKey: Self.currentLocationKey)
+            return nil
+        }
+        guard !entry.isExpired(now: now) else {
+            store.set(nil, forKey: Self.currentLocationKey)
+            return nil
+        }
+        return entry.reading
     }
 
     private func pruneIfNeeded(now: Date) {
