@@ -72,6 +72,12 @@ struct BluegullAQIApp: App {
         // host process races the real single-instance lock and exits
         // immediately whenever a real signed instance is already running.
         guard !Self.isRunningTests else { return }
+        // Before anything reads the mode (the fetch loop starts as soon as
+        // `refreshController` is constructed, just below) -- moves a
+        // pre-existing Direct-mode choice out of UserDefaults.standard,
+        // where this setting lived before the widget needed to read it too
+        // (bluegull-aqi-mtm.24). No-op after the first launch.
+        DataSourceModeStore.migrateFromStandardIfNeeded()
         let lockURL = FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: UserDefaultsCacheStore.appGroupIdentifier)!
             .appendingPathComponent("instance.lock")

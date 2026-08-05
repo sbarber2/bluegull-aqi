@@ -11,27 +11,15 @@ import BluegullAQIKit
 /// widget's `TimelineProvider` also reads, then reschedules itself on
 /// `RefreshScheduler`'s jittered interval.
 ///
-/// Also keeps every currently-placed desktop widget's own independently-
-/// configured location fresh (bluegull-aqi-igu), not just the menu bar's:
-/// each widget instance's `SelectLocationIntent` (bluegull-aqi-mtm.3) can
-/// point at a different pinned location than the menu bar shows
-/// (bluegull-aqi-e70.21 -- deliberately separate selections, doc/
-/// DESIGN.md), and the widget extension itself can never fetch (no
-/// background networking there). Before this, a widget pointed anywhere
-/// other than the menu bar's own current selection simply never got a
-/// cache entry at all -- confirmed against a real Group Container dump
-/// (bluegull-aqi-igu): a third pinned location, never selected in the
-/// menu bar, had never been fetched even though a widget could be (and
-/// visually appeared to be) configured to show it.
-///
-/// Which locations to fetch for comes from `WidgetRequestedLocationsStore`,
-/// not `WidgetCenter.getCurrentConfigurations()` (bluegull-aqi-o4b) --
-/// confirmed against real placed widgets that the latter always returns
-/// `nil` `configuration` for this app's `AppIntentConfiguration`-based
-/// widgets, so every widget was being treated as "current location"
-/// regardless of its actual pin. The widget extension's own
-/// `TimelineProvider` receives the real configuration directly from
-/// WidgetKit and writes it into that store itself; see its own doc comment.
+/// Concerned only with the **menu bar's own** displayed location, as of
+/// bluegull-aqi-mtm.24. Placed widgets now fetch their own configured
+/// locations directly in the widget extension process, so this no longer
+/// enumerates or refreshes them. The previous arrangement (bluegull-aqi-igu,
+/// then bluegull-aqi-o4b's `WidgetRequestedLocationsStore` relay plus a 20s
+/// settle loop) existed only because the widget couldn't fetch; once it
+/// could, that whole path became redundant work -- measured 2026-08-05 as
+/// roughly 2x the necessary outbound request volume, with both processes
+/// fetching the same locations.
 ///
 /// Deliberately a thin app-level wrapper, not unit tested itself -- the
 /// same reasoning as `LocationPermissionRequester`'s own doc comment. The
@@ -58,13 +46,7 @@ final class AQIRefreshController {
     private let cache: AppGroupCache
     private let scheduler: RefreshScheduler
     private let menuBarLocationMirror: SharedMenuBarLocationStore
-    private let requestedLocations: WidgetRequestedLocationsStore
     private var refreshTask: Task<Void, Never>?
-    private var widgetSettleTask: Task<Void, Never>?
-
-    // Much shorter than RefreshScheduler's ~1-hour cadence -- see
-    // `widgetSettleLoop()`'s own doc comment (bluegull-aqi-mtm.21).
-    private static let widgetSettleInterval: TimeInterval = 20
 
     /// nil if the App Group suite couldn't be opened -- same graceful-
     /// degradation as `UserDefaultsCacheStore` elsewhere; there's nowhere
@@ -92,7 +74,6 @@ final class AQIRefreshController {
         coordinator = AQIFetchCoordinator(cache: cache)
         scheduler = RefreshScheduler(store: store)
         menuBarLocationMirror = SharedMenuBarLocationStore(store: store)
-        requestedLocations = WidgetRequestedLocationsStore(store: store)
         latestReading = cache.mostRecentEntry()
         lastFetchedAt = cache.lastSuccessfulFetchDate()
         if startOnInit {
@@ -109,9 +90,6 @@ final class AQIRefreshController {
         refreshTask = Task { [weak self] in
             await self?.runLoop()
         }
-        widgetSettleTask = Task { [weak self] in
-            await self?.widgetSettleLoop()
-        }
     }
 
     private func runLoop() async {
@@ -122,34 +100,12 @@ final class AQIRefreshController {
         }
     }
 
-    /// A much shorter-interval companion to `runLoop()`'s hourly cadence,
-    /// specifically for noticing a widget that was just placed or pointed
-    /// at a new location (bluegull-aqi-mtm.21). The container app has no
-    /// event tied to "a widget's configuration just changed" -- the widget
-    /// extension relays what it's showing into `WidgetRequestedLocationsStore`
-    /// (bluegull-aqi-o4b), but only when WidgetKit itself decides to
-    /// recompute that instance's timeline, on its own schedule -- so this
-    /// polls that store instead of waiting on it. Cheap to run often:
-    /// `activeWidgetLocations()` is a local UserDefaults read, not a
-    /// network call, and `refreshWidgetLocations` below only actually
-    /// fetches a genuine cache miss -- an already-valid entry is a no-op,
-    /// so this doesn't multiply AirNow request volume the way
-    /// unconditionally re-fetching on every tick would.
-    private func widgetSettleLoop() async {
-        while !Task.isCancelled {
-            try? await Task.sleep(for: .seconds(Self.widgetSettleInterval))
-            await refreshWidgetLocations(mode: currentMode())
-        }
-    }
-
     /// Fetches immediately, outside the scheduled cadence -- used for the
     /// first attempt right after location permission is granted, and after
     /// the user changes which location the menu bar shows
     /// (bluegull-aqi-e70.21), so neither waits up to an hour for the next
-    /// scheduled attempt. Also refreshes every other location a placed
-    /// widget is independently configured to show (bluegull-aqi-igu, see
-    /// this type's own doc comment) -- those never update the observable
-    /// properties below, which describe the menu bar's own display only.
+    /// scheduled attempt. Concerns only the menu bar's own location: placed
+    /// widgets fetch their own (bluegull-aqi-mtm.24).
     func refreshNow() async {
         let mode = currentMode()
 
@@ -165,9 +121,8 @@ final class AQIRefreshController {
         let menuBarSelection = currentLocationSelection()
         menuBarLocationMirror.save(persistenceID: menuBarSelection.persistenceID)
 
-        // Resolves live GPS at most once per call, however many callers
-        // below (the menu bar's own selection, plus every placed widget)
-        // ask for "current location" -- `pinned` is nil for that case.
+        // `pinned` is nil for the "current location" case; this resolves
+        // live GPS at most once per call.
         var resolvedCurrentLocation: Location?
         func resolve(_ pinned: Location?) async -> Location? {
             if let pinned { return pinned }
@@ -177,12 +132,10 @@ final class AQIRefreshController {
             return resolved
         }
 
-        var menuBarLocation: Location?
         do {
             guard let location = await resolve(menuBarSelection.pinnedLocation) else {
                 throw LocationResolverError.locationUnavailable("current location unavailable")
             }
-            menuBarLocation = location
             let reading = try await coordinator.fetch(location: location, mode: mode)
             latestReading = reading
             // nil selection means the menu bar itself is showing live GPS
@@ -195,6 +148,13 @@ final class AQIRefreshController {
             }
             lastFetchedAt = cache.lastSuccessfulFetchDate()
             lastError = nil
+            // A widget pinned to the same location the menu bar just
+            // fetched now has fresher data available than whatever it last
+            // rendered. Nudging is the only sanctioned way to surface that
+            // before its own reload policy fires (bluegull-aqi-mtm.12).
+            // Advisory, not a repaint -- and unlike the deleted settle
+            // loop, this fires at most once per menu bar refresh.
+            WidgetCenter.shared.reloadTimelines(ofKind: BluegullWidgetKind.aqi)
         } catch let error as AQIFetchError {
             lastError = error
         } catch {
@@ -204,75 +164,10 @@ final class AQIRefreshController {
             // couldn't resolve a location.
             lastError = nil
         }
-
-        // `.rounded` matches AppGroupCache's own cache-key precision, so a
-        // widget pointed at the same ~1km cell as the menu bar's own
-        // selection doesn't trigger a second, redundant fetch.
-        let handled: Set<Location> = Set([menuBarLocation?.rounded].compactMap { $0 })
-        await refreshWidgetLocations(mode: mode, alreadyHandled: handled)
-    }
-
-    /// Fetches every placed widget's independently-configured location
-    /// that's a genuine cache miss (bluegull-aqi-igu/mtm.21) -- skips
-    /// anything already validly cached, so calling this often
-    /// (`widgetSettleLoop`) doesn't re-fetch data that's still fresh.
-    /// `alreadyHandled` lets `refreshNow()`'s own call skip a widget
-    /// pointed at the same ~1km cell its menu bar fetch just handled in
-    /// the same pass.
-    private func refreshWidgetLocations(mode: DataSourceMode, alreadyHandled: Set<Location> = []) async {
-        var handled = alreadyHandled
-        var resolvedCurrentLocation: Location?
-        var fetchedAnything = false
-        func resolve(_ pinned: Location?) async -> Location? {
-            if let pinned { return pinned }
-            if let resolvedCurrentLocation { return resolvedCurrentLocation }
-            let resolved = try? await locationResolver.currentLocation()
-            resolvedCurrentLocation = resolved
-            return resolved
-        }
-
-        for widgetPinnedLocation in activeWidgetLocations() {
-            guard let location = await resolve(widgetPinnedLocation) else { continue }
-            guard handled.insert(location.rounded).inserted else { continue }
-            // Skip a location that's already validly cached -- this is
-            // what keeps `widgetSettleLoop`'s frequent polling cheap
-            // instead of multiplying AirNow request volume. `.rounded`,
-            // same as `handled` above -- the cache is keyed by rounded
-            // coords (bluegull-aqi-10h.11); without this the miss check
-            // never matched and every tick re-fetched every widget's
-            // location, forever (bluegull-aqi-nmn).
-            guard cache.get(for: location.rounded) == nil else { continue }
-            // Best-effort: a failure here shouldn't touch `lastError`,
-            // which describes the menu bar's own fetch above. The widget
-            // just keeps showing whatever's still validly cached (or "No
-            // Data") until a later attempt succeeds.
-            guard let reading = try? await coordinator.fetch(location: location, mode: mode) else { continue }
-            fetchedAnything = true
-            // Same current-location mirroring as the menu bar's own fetch
-            // above, for a widget independently configured to "Current
-            // Location" while the menu bar itself shows a pinned location
-            // (bluegull-aqi-mtm.20).
-            if widgetPinnedLocation == nil {
-                cache.putCurrentLocation(reading)
-            }
-        }
-
-        // Without this, a widget's own `Timeline` reload policy (up to
-        // `RefreshScheduler`'s ~1-hour cadence, set the moment it was
-        // placed/configured) is the only thing that would ever ask it to
-        // recompute -- so freshly-cached data above could sit unseen on
-        // screen for up to an hour despite fetching promptly. This is the
-        // sanctioned way to force that (bluegull-aqi-mtm.12: no CLI exists;
-        // WidgetCenter.reloadTimelines from app code is the only supported
-        // path). Only when something was actually fetched, so an
-        // already-settled desktop doesn't reload every 20s for nothing.
-        if fetchedAnything {
-            WidgetCenter.shared.reloadTimelines(ofKind: BluegullWidgetKind.aqi)
-        }
     }
 
     /// On-demand fetch for a single location, for a consumer that notices
-    /// a cache miss right now rather than waiting for either loop above
+    /// a cache miss right now rather than waiting for the scheduled loop
     /// (bluegull-aqi-mtm.21) -- currently just `WidgetDetailView`, which
     /// runs in this same process and has direct access, unlike the widget
     /// extension itself. A no-op if `location` (or live GPS, for nil)
@@ -284,29 +179,13 @@ final class AQIRefreshController {
         } else {
             resolvedLocation = try? await locationResolver.currentLocation()
         }
-        // `.rounded` -- same cache-key contract as refreshWidgetLocations
-        // above (bluegull-aqi-nmn).
+        // `.rounded` -- AppGroupCache is keyed by rounded coords
+        // (bluegull-aqi-10h.11/nmn).
         guard let resolvedLocation, cache.get(for: resolvedLocation.rounded) == nil else { return }
         guard let reading = try? await coordinator.fetch(location: resolvedLocation, mode: currentMode()) else { return }
         if location == nil {
             cache.putCurrentLocation(reading)
         }
-    }
-
-    /// Every location a currently-placed widget instance is configured to
-    /// show, per `WidgetRequestedLocationsStore` (bluegull-aqi-o4b) -- a
-    /// pinned entry for each distinct pin some widget last reported, plus
-    /// one `nil` (meaning "current location") if any widget is currently
-    /// configured that way. Empty if nothing's actually placed on the
-    /// desktop, or nothing's been recorded yet (fresh install, before any
-    /// widget's `TimelineProvider` has run) -- this never blocks the menu
-    /// bar's own fetch above.
-    private func activeWidgetLocations() -> [Location?] {
-        var locations: [Location?] = requestedLocations.activePinnedLocations()
-        if requestedLocations.isCurrentLocationRequested() {
-            locations.append(nil)
-        }
-        return locations
     }
 
     private func currentLocationSelection() -> LocationOption {
@@ -315,11 +194,9 @@ final class AQIRefreshController {
         return MenuBarLocationSelectionStore.selection(id: id, availableOptions: options)
     }
 
+    // App Group-backed as of bluegull-aqi-mtm.24, so this and the widget
+    // extension's own fetch path read the same selection.
     private func currentMode() -> DataSourceMode {
-        guard let raw = UserDefaults.standard.string(forKey: DataSourceModeStore.userDefaultsKey),
-              let mode = DataSourceMode(rawValue: raw) else {
-            return DataSourceModeStore.defaultMode
-        }
-        return mode
+        DataSourceModeStore.currentMode()
     }
 }

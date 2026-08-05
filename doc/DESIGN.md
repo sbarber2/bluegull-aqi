@@ -189,9 +189,20 @@ Two distinct pieces, both from SwiftUI's `MenuBarExtra`:
 
 The container app also owns: location permission flow, settings UI (data-source mode
 toggle, AirNow key entry, pinned-locations list management — likely reached from
-within the popover, e.g. a gear icon, rather than a separate window), and the actual
-network fetch (WidgetKit extensions have restricted background networking, so the
-container app does the fetching and hands results to the widget via the App Group).
+within the popover, e.g. a gear icon, rather than a separate window), and **location
+resolution** (CoreLocation), which the widget extension still has no entitlement for.
+
+It no longer owns *all* networking. Through `bluegull-aqi-o4b` the container app was
+the only process that fetched, and the widget read its results from the App Group.
+That was justified here as "WidgetKit extensions have restricted background
+networking" — which conflated two different limits: WidgetKit's background *refresh
+budget* (real: it governs how often a provider is invoked unprompted) with network
+access *while a provider is running* (not restricted). The cost of that conflation
+was measured in `bluegull-aqi-mtm.22`: pointing a widget at a new location took 3–5
+minutes to show a value, because the widget had to relay what it wanted to the app
+and wait to be served. The widget now fetches for itself on a cache miss
+(`bluegull-aqi-mtm.24`) — the same operation takes ~0.3s, and widgets keep working
+with the container app closed.
 
 ### Widget extension (WidgetKit)
 
@@ -199,8 +210,11 @@ container app does the fetching and hands results to the widget via the App Grou
 - Shows current AQI + full pollutant breakdown.
 - Per-instance configurable (which pinned location, or "current location") via App
   Intents (`WidgetConfigurationIntent`).
-- `TimelineProvider` reads from the App Group cache written by the container app; does
-  not fetch network or location itself.
+- `TimelineProvider` reads the shared App Group cache, and **fetches the network
+  itself on a cache miss** for a specifically-pinned location (`bluegull-aqi-mtm.24`)
+  rather than waiting on the container app. Still does **not** resolve location
+  itself (no location entitlement): a widget set to "Current Location" renders
+  whatever GPS the container app last resolved into the shared cache.
 - **Tap-to-expand**: the whole widget is a tap target (`widgetURL`) that deep-links
   into the container app, which opens a detail view — the same pattern Apple's own
   Weather widget uses. v1 scope for that view is attribution + the preliminary-data
@@ -501,12 +515,17 @@ version, since availability can depend on more than just the OS (see below).
 
 Two caveats that matter for this project specifically:
 
-- **Extension-type restriction is moot here.** App Attest is only available from
-  the main app plus Action and SSO app extensions — not from a WidgetKit extension.
-  That would matter if the widget made its own network calls, but it doesn't: the
-  container app owns all networking and hands results to the widget through the App
-  Group cache ("Widget extension (WidgetKit)" above). So App Attest, if adopted,
-  would only ever need to run in the main app.
+- **Extension-type restriction now bites.** App Attest is only available from the
+  main app plus Action and SSO app extensions — not from a WidgetKit extension. This
+  was previously moot, because the container app made every network call. As of
+  `bluegull-aqi-mtm.24` the widget extension calls the Service endpoint directly, so
+  a meaningful share of traffic would originate somewhere App Attest cannot run.
+  Adopting it therefore means deciding what to do about widget-originated requests —
+  accept them unattested (which largely defeats the point, since an attacker would
+  just claim to be the widget), route them back through the container app (which
+  reintroduces exactly the latency `mtm.22`/`mtm.24` removed), or find another
+  abuse-prevention mechanism. Worth settling *before* committing to App Attest, not
+  after.
 - **Requires full security mode + SIP enabled.** On macOS, App Attest keys are
   policy-bound to the Mac being in full security mode with System Integrity
   Protection on. A user who's disabled SIP (not rare among developers/power users)
@@ -1235,6 +1254,43 @@ human-readable snapshot, but the Dolt remote is the actual sync mechanism.
 
 ## Changelog
 
+- 2026-08-05 — **The widget extension now fetches for itself**
+  (`bluegull-aqi-mtm.23` spike, `mtm.24` productionization) — a deliberate
+  reversal of the "container app owns all networking" decision, prompted by Steve
+  raising that the design didn't accommodate the responsiveness requirement and
+  that menu-bar primacy was too fragile a base for widgets. Both points were
+  correct.
+  - The original rationale ("WidgetKit extensions have restricted background
+    networking") conflated WidgetKit's background *refresh budget* with network
+    access *while a provider runs*. Only the former is restricted. Evidence the
+    widget already had what it needed: `chronod` logs show the extension receiving
+    its correct configured location within milliseconds of the user setting it
+    (`intent = { location = { title = Syracuse } }`), while the cross-process
+    `WidgetCenter.getCurrentConfigurations()` the app relied on returned `nil`
+    configuration for every instance (`bluegull-aqi-o4b`).
+  - Measured: configuring a widget to an uncached location went from **3–5 minutes
+    to 0.343s**. Backend was never the bottleneck (dev endpoint answers in
+    122–311ms). Widgets also now work with the container app not running at all.
+  - Deleted as redundant: `WidgetRequestedLocationsStore` (the `o4b` relay), the 20s
+    `widgetSettleLoop`, and `AQIRefreshController`'s widget-location enumeration.
+    With both processes fetching, outbound volume was ~2x what was needed (8
+    requests in a sample window); after removal, the same scenario used 2.
+  - `DataSourceModeStore` moved from `UserDefaults.standard` to the App Group, with
+    a one-time migration — the widget has to know which mode is selected now, and
+    a stale mirror would mean fetching via the wrong client entirely.
+  - Still NOT delegated to the widget: CoreLocation. "Current Location" widgets read
+    whatever GPS the container app last resolved.
+  - Knock-on consequence recorded above under App Attest: it cannot run in a
+    WidgetKit extension, so this decision has to be settled before adopting it.
+- 2026-08-05 — Fixed `bluegull-aqi-10h.21`, found while instrumenting the above:
+  `PollutantReading` declared `siteID`, `siteName`, and `lookupBoundary` as
+  non-optional `String`, but AirNow returns `null` for all three when a reporting
+  area aggregates across monitors (`lookupBehavior: "Highest Reading From Assigned
+  Sites"`). One null against a non-optional `Codable` field fails the *entire*
+  decode, so any such location showed "Data Unavailable" permanently — in both data
+  source modes and both processes. Confirmed live: Boston (42.36,-71.06) returns
+  nulls and failed; Chicago (41.88,-87.63) returns real site values and worked.
+  Nothing renders these fields; they're kept for payload fidelity.
 - 2026-08-01 — Implemented bluegull-aqi-10h.9 (`.github/workflows/mac-app-ci.yml`):
   `macos-latest`, two jobs. `test-swift` runs `make test-swift` (XcodeGen +
   the app scheme's build/`BluegullAQITests` + the `BluegullAQIKit`

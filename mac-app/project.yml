@@ -92,11 +92,23 @@ targets:
       properties:
         # Required for Mac App Store distribution.
         com.apple.security.app-sandbox: true
-        # Shared cache written by the container app -- the widget extension
-        # does NOT get its own network/location entitlements: it reads the
-        # App Group cache only, never fetches itself (doc/DESIGN.md "Widget
-        # extension (WidgetKit)": "does not fetch network or location
-        # itself" -- restricted background networking is exactly why).
+        # bluegull-aqi-mtm.23/mtm.24: the widget extension fetches for
+        # itself on an exact cache miss, instead of waiting for the
+        # container app to notice and fetch on its behalf. The previous
+        # comment here cited "restricted background networking" as the
+        # reason to withhold this -- that conflates WidgetKit's background
+        # *refresh budget* (real: how often a provider is invoked
+        # unprompted) with network access *while the provider runs* (not
+        # restricted). A configuration change is a user-initiated trigger,
+        # and the widget process demonstrably receives its configured
+        # location promptly (bluegull-aqi-o4b logs) -- it just had no way
+        # to act on it, which is the whole 3-5 minute delay in mtm.22.
+        #
+        # Still NO location entitlement: "Current Location" widgets keep
+        # reading the container app's resolved GPS from the App Group.
+        com.apple.security.network.client: true
+        # Shared cache -- now written by both processes, not just the
+        # container app.
         com.apple.security.application-groups:
           - group.solutions.bluegull.aqi
 

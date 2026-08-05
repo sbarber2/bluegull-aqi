@@ -10,7 +10,12 @@ import BluegullAQIKit
 /// Composed into `SettingsView` (bluegull-aqi-e70.9), reachable via
 /// `AQIPopoverView`'s gear icon.
 struct DataSourceModeToggle: View {
-    @AppStorage(DataSourceModeStore.userDefaultsKey) private var mode: DataSourceMode = DataSourceModeStore.defaultMode
+    // `store:` the App Group suite, not the default `UserDefaults.standard`
+    // (bluegull-aqi-mtm.24) -- the widget extension fetches for itself now
+    // and has to read the same selection this writes. See
+    // `DataSourceModeStore`'s own doc comment.
+    @AppStorage(DataSourceModeStore.userDefaultsKey, store: DataSourceModeStore.sharedDefaults)
+    private var mode: DataSourceMode = DataSourceModeStore.defaultMode
 
     var body: some View {
         Picker("Data Source", selection: $mode) {

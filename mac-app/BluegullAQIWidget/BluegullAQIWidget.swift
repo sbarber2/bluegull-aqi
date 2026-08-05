@@ -7,15 +7,21 @@ import BluegullAQIWidgetViews
 /// reload-policy logic lives in `BluegullAQIKit.WidgetTimelineComputer`
 /// (bluegull-aqi-mtm.2), specifically so it's unit-testable at all (an
 /// `app-extension` target can't be linked against by a separate test
-/// target -- see that type's doc comment). Never fetches network or
-/// location itself (doc/DESIGN.md "Widget extension (WidgetKit)").
+/// target -- see that type's doc comment).
+///
+/// Fetches the network itself on a cache miss, as of bluegull-aqi-mtm.24 --
+/// it no longer depends on the container app to do that for it. Still does
+/// NOT resolve location itself (no location entitlement): "Current
+/// Location" widgets read whatever GPS the container app last resolved.
 ///
 /// `AppIntentTimelineProvider`, not plain `TimelineProvider`, as of
 /// bluegull-aqi-mtm.3 -- each widget instance's configured
 /// `SelectLocationIntent` says which location it shows.
 struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
     private let computer: WidgetTimelineComputer?
-    private let requestedLocations: WidgetRequestedLocationsStore
+    // nil for the same App-Group-unavailable reason as `computer` above --
+    // there'd be nowhere to write a result, so there's no point fetching one.
+    private let coordinator: AQIFetchCoordinator?
 
     init(store: SharedCacheStore? = UserDefaultsCacheStore()) {
         // The App Group suite couldn't be opened -- rather than crash
@@ -23,7 +29,7 @@ struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
         // container-app failure), degrade to "no data to show," the same
         // state as a genuine cache miss.
         computer = store.map(WidgetTimelineComputer.init(store:))
-        requestedLocations = WidgetRequestedLocationsStore(store: store)
+        coordinator = store.map { AQIFetchCoordinator(cache: AppGroupCache(store: $0)) }
     }
 
     func placeholder(in context: Context) -> BluegullAQIWidgetEntry {
@@ -35,9 +41,39 @@ struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
     }
 
     func timeline(for configuration: SelectLocationIntent, in context: Context) async -> Timeline<BluegullAQIWidgetEntry> {
-        let now = Date()
+        var now = Date()
+        var resolved = entry(for: configuration, now: now)
+
+        // Fetch right here, in this process, on an exact cache miss for a
+        // specifically-pinned location (bluegull-aqi-mtm.23/mtm.24) --
+        // rather than rendering "Data Unavailable" and waiting for the
+        // container app to notice and fetch on our behalf, which measured
+        // 3-5 minutes end-to-end (bluegull-aqi-mtm.22) versus 0.343s for
+        // this path on a real user-configured location. WidgetKit hands
+        // this provider the correct configuration promptly; it was only
+        // ever the *acting* on it that had to round-trip through another
+        // process.
+        //
+        // Deliberately NOT done for a nil configured location ("Current
+        // Location"): resolving GPS needs a location entitlement this
+        // extension still doesn't have, so those keep reading whatever the
+        // container app last resolved.
+        //
+        // Failure is silent by design -- `resolved` simply stays as the
+        // cache produced it, which is the same empty/stale state this
+        // returned before any of this existed. A widget is the wrong
+        // surface for an error dialog, and the menu bar popover already
+        // surfaces fetch errors properly (bluegull-aqi-e70.24).
+        if resolved.reading == nil,
+           let pinned = configuration.location?.location,
+           let coordinator {
+            _ = try? await coordinator.fetch(location: pinned, mode: DataSourceModeStore.currentMode())
+            now = Date()
+            resolved = entry(for: configuration, now: now)
+        }
+
         let nextReload = computer?.nextReloadDate(after: now) ?? now.addingTimeInterval(RefreshScheduler.defaultInterval)
-        return Timeline(entries: [entry(for: configuration, now: now)], policy: .after(nextReload))
+        return Timeline(entries: [resolved], policy: .after(nextReload))
     }
 
     private func entry(for configuration: SelectLocationIntent, now: Date = Date()) -> BluegullAQIWidgetEntry {
@@ -48,14 +84,6 @@ struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
         // currentSnapshot(for:) already treats as "fall back to whatever
         // was most recently cached."
         let configuredLocation = configuration.location?.location
-        // Relays this instance's configured location to the container app
-        // (bluegull-aqi-o4b) -- see WidgetRequestedLocationsStore's own doc
-        // comment for why this, and not WidgetCenter, is what
-        // AQIRefreshController actually reads. Every entry computation
-        // re-records it (not just placement), which is what lets a removed
-        // widget's entry naturally age out instead of needing an explicit
-        // removal signal that doesn't exist.
-        requestedLocations.recordSeen(configuredLocation, now: now)
         // .name is already the right display string either way --
         // "Current Location" for the explicit synthetic option, or the
         // pinned location's own label. A not-yet-configured instance
