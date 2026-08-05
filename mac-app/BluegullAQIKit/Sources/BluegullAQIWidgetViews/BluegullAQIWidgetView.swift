@@ -139,6 +139,7 @@ struct SmallWidgetLayout: View {
             Circle()
                 .fill(category.color.swiftUIColor)
                 .frame(width: 12, height: 12)
+                .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 1))
             Text("\(aqi)")
                 .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
             Text(category.descriptor)
@@ -188,6 +189,7 @@ struct MediumWidgetLayout: View {
                     Circle()
                         .fill(category.color.swiftUIColor)
                         .frame(width: 10, height: 10)
+                        .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.75))
                     Text("\(aqi)")
                         .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
                     // Otherwise the headline number is unlabeled: otherPollutants
@@ -264,6 +266,7 @@ struct LargeWidgetLayout: View {
                 Circle()
                     .fill(category.color.swiftUIColor)
                     .frame(width: 12, height: 12)
+                    .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 1))
                 Text("\(aqi)")
                     .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
                 Text(category.descriptor)

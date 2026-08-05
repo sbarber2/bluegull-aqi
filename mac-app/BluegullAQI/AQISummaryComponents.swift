@@ -16,6 +16,7 @@ struct AQIHeadlineBadge: View {
             Circle()
                 .fill(category.color.swiftUIColor)
                 .frame(width: 14, height: 14)
+                .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 1))
             VStack(alignment: .leading, spacing: 2) {
                 Text("\(aqi)")
                     .font(.system(size: 34, weight: .semibold, design: .rounded))
@@ -73,6 +74,7 @@ struct MenuBarStatusLabel: View {
                 Circle()
                     .fill(category.color.swiftUIColor)
                     .frame(width: 8, height: 8)
+                    .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5))
                 Text("\(aqi)")
             }
         } else {

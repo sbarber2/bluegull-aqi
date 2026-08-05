@@ -81,6 +81,18 @@ public enum AQICategory: Sendable, Equatable, Codable {
     /// TAD Table 1/2 color, verbatim. GOTCHA (the most likely failure mode
     /// here): Good is (0,228,0), NOT (0,255,0); Hazardous/BeyondAQI is
     /// (126,0,35), not a generic dark red.
+    ///
+    /// `.moderate`'s pure yellow (255,255,0) is the TAD's own value and
+    /// stays exactly that -- but a solid yellow dot has almost no luminance
+    /// contrast against a plain white background (Steve, 2026-08-05: "the
+    /// little yellow dot... is barely visible"). Every small circular
+    /// category indicator (`AQIHeadlineBadge`, `MenuBarStatusLabel`,
+    /// `SmallWidgetLayout`/`MediumWidgetLayout`/`LargeWidgetLayout`) adds a
+    /// thin `Color.primary`-opacity stroke to compensate, applied uniformly
+    /// rather than special-cased to `.moderate` alone -- negligible on the
+    /// other five colors, and this is the same convention AirNow's own AQI
+    /// Legend panel uses (an outline around every swatch, not just
+    /// yellow's).
     public var color: AQIColor {
         switch self {
         case .good: return AQIColor(red: 0, green: 228, blue: 0)
