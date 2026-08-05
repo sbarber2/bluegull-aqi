@@ -2,6 +2,18 @@ import Foundation
 import Security
 
 /// Identifies a single Keychain item.
+/// The Keychain access group shared by the container app and the widget
+/// extension (bluegull-aqi-mtm.25), matching the `keychain-access-groups`
+/// entitlement both targets declare in `mac-app/project.yml`.
+///
+/// The team prefix is written out rather than resolved at runtime: it's the
+/// literal value `$(AppIdentifierPrefix)` expands to, and it's a public
+/// identifier, not a secret -- `project.yml` already carries the same value
+/// as `DEVELOPMENT_TEAM` for the same reason.
+public enum KeychainAccessGroup {
+    public static let shared = "G5DWPBWHQ5.solutions.bluegull.aqi"
+}
+
 public struct KeychainQuery: Sendable {
     public let service: String
     public let account: String
@@ -42,19 +54,27 @@ public protocol KeychainStore: Sendable {
 /// is used here, the standard choice for a syncable item an app needs
 /// outside of active user interaction.
 ///
-/// Reviewed for bluegull-aqi-10h.13:
+/// Reviewed for bluegull-aqi-10h.13, **revised** for bluegull-aqi-mtm.25:
 /// - Accessibility: `kSecAttrAccessibleAfterFirstUnlock`, not `.always` (a
 ///   deprecated, insecure choice that leaves the item readable even while
 ///   the device is locked). Correct for a syncable background item.
 /// - Sync: `kSecAttrSynchronizable = true`, confirmed.
-/// - Access group: deliberately NOT set. This key is only ever needed by
-///   the container app (which calls AirNow directly in Direct mode); the
-///   widget extension only reads pre-fetched AQI data from the App Group
-///   cache (`AppGroupCache`, bluegull-aqi-10h.7), never the raw key. With
-///   no `kSecAttrAccessGroup`, the item defaults to being scoped to this
-///   app alone -- the narrowest possible exposure, and correct since
-///   nothing else needs to read it. `ComplianceTests` guards against this
-///   being added later without deliberate reconsideration.
+/// - Access group: `KeychainAccessGroup.shared`, covering the container app
+///   and the widget extension. 10h.13 originally concluded no access group
+///   was needed, on the premise that "the widget extension only reads
+///   pre-fetched AQI data from the App Group cache, never the raw key."
+///   That premise ended with bluegull-aqi-mtm.24: the widget now performs
+///   its own fetches, so in Direct mode it needs the user's AirNow key like
+///   the container app does. Reconsidered deliberately (Steve, 2026-08-05)
+///   rather than allowed to slip in -- `ComplianceTests` enforced that.
+///
+///   The exposure this adds is real and bounded: one additional
+///   same-team, same-developer process can read one credential. The
+///   sharper risk is not storage but *transmission* -- `AirNowDirectClient`
+///   puts the key in a URL query parameter, which CLAUDE.md names as the
+///   likeliest leak vector in this project because it looks exactly like
+///   ordinary debug logging. That risk now exists in two processes;
+///   `ComplianceTests.testNoRequestURLLogging` guards it.
 public struct SystemKeychain: KeychainStore {
     public init() {}
 
@@ -116,6 +136,7 @@ public struct SystemKeychain: KeychainStore {
             kSecAttrService as String: query.service,
             kSecAttrAccount as String: query.account,
             kSecAttrSynchronizable as String: true,
+            kSecAttrAccessGroup as String: KeychainAccessGroup.shared,
         ]
     }
 }

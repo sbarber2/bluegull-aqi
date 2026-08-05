@@ -63,6 +63,11 @@ targets:
         # Shared cache with the widget extension (bluegull-aqi-8ef.5).
         com.apple.security.application-groups:
           - group.solutions.bluegull.aqi
+        # Shares the user's AirNow key with the widget extension, which
+        # needs it for its own Direct-mode fetches (bluegull-aqi-mtm.25).
+        # Must stay in sync with KeychainAccessGroup.shared.
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)solutions.bluegull.aqi
 
   BluegullAQIWidget:
     type: app-extension
@@ -111,6 +116,12 @@ targets:
         # container app.
         com.apple.security.application-groups:
           - group.solutions.bluegull.aqi
+        # Reads the user's AirNow key for Direct-mode fetches
+        # (bluegull-aqi-mtm.25). NOTE: AirNowDirectClient sends this key as
+        # a URL query parameter -- never log a request URL from this
+        # process (CLAUDE.md secrets rule; ComplianceTests guards it).
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)solutions.bluegull.aqi
 
   BluegullAQITests:
     type: bundle.unit-test

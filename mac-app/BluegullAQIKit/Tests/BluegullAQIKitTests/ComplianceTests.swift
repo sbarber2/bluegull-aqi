@@ -1,4 +1,5 @@
 import XCTest
+@testable import BluegullAQIKit
 
 /// Hard constraint from two independent sources (bluegull-aqi-10h.17): the
 /// AirNow Data Exchange Guidelines require data be "disseminated as
@@ -101,25 +102,64 @@ final class ComplianceTests: XCTestCase {
         }
     }
 
-    /// bluegull-aqi-10h.13: `SystemKeychain`'s AirNow-key item deliberately
-    /// has no `kSecAttrAccessGroup` -- only the container app needs this
-    /// key (the widget extension only reads pre-fetched data from
-    /// `AppGroupCache`, never the raw key), so no shared access group
-    /// should exist. Guards against it being added later without
-    /// deliberately reconsidering that review conclusion.
-    func testKeychainItemHasNoSharedAccessGroup() throws {
-        let sourcesDirectory = try Self.sourcesDirectory()
-        let swiftFiles = try Self.swiftFiles(under: sourcesDirectory)
+    /// bluegull-aqi-10h.13, revised by bluegull-aqi-mtm.25. This test used
+    /// to assert that `kSecAttrAccessGroup` appeared *nowhere*, because only
+    /// the container app needed the AirNow key. That stopped being true when
+    /// the widget extension started performing its own fetches
+    /// (bluegull-aqi-mtm.24), so the guard is inverted rather than deleted:
+    /// a shared access group is now expected, but only the *one* known
+    /// group. Catches a second, broader, or typo'd group being introduced.
+    func testKeychainAccessGroupIsOnlyTheOneExpectedSharedGroup() throws {
+        XCTAssertEqual(
+            KeychainAccessGroup.shared,
+            "G5DWPBWHQ5.solutions.bluegull.aqi",
+            "The shared Keychain access group changed. It must stay in sync with the " +
+            "keychain-access-groups entitlement in mac-app/project.yml -- if they diverge, " +
+            "Keychain reads fail at runtime in whichever target is wrong."
+        )
 
-        for fileURL in swiftFiles {
-            let code = try Self.codeOnly(contentsOf: fileURL).lowercased()
-            XCTAssertFalse(
-                code.contains("ksecattraccessgroup"),
-                "\(fileURL.lastPathComponent) references kSecAttrAccessGroup -- bluegull-aqi-10h.13 " +
-                "concluded the AirNow key needs no shared access group, since only the container app " +
-                "reads it. If a real need for one has emerged, update this test and that review " +
-                "deliberately rather than letting it slip in silently."
+        let sourcesDirectory = try Self.sourcesDirectory()
+        for fileURL in try Self.swiftFiles(under: sourcesDirectory) {
+            let code = try Self.codeOnly(contentsOf: fileURL)
+            guard code.lowercased().contains("ksecattraccessgroup") else { continue }
+            XCTAssertTrue(
+                code.contains("KeychainAccessGroup.shared"),
+                "\(fileURL.lastPathComponent) sets kSecAttrAccessGroup to something other than " +
+                "KeychainAccessGroup.shared. bluegull-aqi-mtm.25 permits exactly one shared group " +
+                "(container app + widget extension, both of which fetch in Direct mode). Widening " +
+                "that, or adding a second group, needs the same deliberate review this replaced."
             )
+        }
+    }
+
+    /// CLAUDE.md's secrets rule names this as the likeliest leak in the
+    /// project: AirNow takes its API key as a **URL query parameter**, so
+    /// logging a request URL writes a live credential to the system log,
+    /// and it looks exactly like ordinary debug logging. As of
+    /// bluegull-aqi-mtm.25 the widget extension holds that key too, so the
+    /// exposure exists in two processes rather than one.
+    ///
+    /// Deliberately conservative: it flags any logging call whose argument
+    /// mentions a url/request/endpoint on the networking path, rather than
+    /// trying to decide which ones are actually interpolating a key.
+    func testNoRequestURLLogging() throws {
+        let loggingCalls = ["print(", "nslog(", "os_log(", "logger.", "debugprint("]
+        let urlish = ["url", "request", "endpoint", "components"]
+
+        let sourcesDirectory = try Self.sourcesDirectory()
+        for fileURL in try Self.swiftFiles(under: sourcesDirectory) {
+            let code = try Self.codeOnly(contentsOf: fileURL)
+            for rawLine in code.split(separator: "\n") {
+                let line = rawLine.lowercased()
+                guard loggingCalls.contains(where: line.contains) else { continue }
+                guard urlish.contains(where: line.contains) else { continue }
+                XCTFail(
+                    "\(fileURL.lastPathComponent) appears to log a URL/request: \(rawLine.trimmingCharacters(in: .whitespaces))\n" +
+                    "AirNow passes its API key as a URL query parameter, so this can write a live " +
+                    "credential into the system log (CLAUDE.md, Secrets -- hard rule). Redact the " +
+                    "URL before logging, or log a non-URL identifier instead."
+                )
+            }
         }
     }
 
