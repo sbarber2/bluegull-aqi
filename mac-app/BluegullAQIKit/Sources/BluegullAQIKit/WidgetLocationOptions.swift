@@ -55,6 +55,36 @@ public enum WidgetLocationOptions {
     public static func all(from store: PinnedLocationsStore) -> [LocationOption] {
         [.currentLocation] + store.load().map(LocationOption.pinned)
     }
+
+    /// The user-facing name for a location a widget instance is showing
+    /// (bluegull-aqi-mtm.27) -- `nil` means "Current Location," matching
+    /// `WidgetDeepLink`'s own encoding (a widget configured for live GPS
+    /// deep-links with no query items at all, never its resolved
+    /// coordinate, so a non-nil `location` here always means a pin, never
+    /// GPS). Exists because `WidgetDetailView` only receives a bare
+    /// `Location?` off that deep link, not the richer `LocationOptionEntity`
+    /// the widget face itself was configured with (which carries its own
+    /// name, cached at configuration time) -- this re-derives a name from
+    /// the *current* pinned-locations list instead.
+    ///
+    /// `.rounded` on both sides: `location` came from
+    /// `SelectLocationIntent.location?.location`, the pin's own stored
+    /// coordinate, encoded through `String(Double)`/`Double.init(String:)`
+    /// round-tripping in the deep link URL -- rounding first absorbs any
+    /// float-formatting drift from that round trip, the same reasoning
+    /// `AppGroupCache`'s own cache keys already rely on
+    /// (bluegull-aqi-10h.11).
+    ///
+    /// Falls back to `"Pinned Location"` if `location` is non-nil but
+    /// matches no current pin -- e.g. the pin was renamed or deleted after
+    /// this widget was configured to it. Not `nil`/omitted: leaving the
+    /// space blank would look like a rendering bug rather than a real,
+    /// if unusual, state.
+    public static func displayName(for location: Location?, from store: PinnedLocationsStore) -> String {
+        guard let location else { return LocationOption.currentLocation.displayName }
+        let match = store.load().first { $0.location.rounded == location.rounded }
+        return match?.label ?? "Pinned Location"
+    }
 }
 
 /// Which location the menu bar app/popover itself displays

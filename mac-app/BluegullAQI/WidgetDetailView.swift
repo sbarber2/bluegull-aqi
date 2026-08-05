@@ -22,6 +22,17 @@ struct WidgetDetailView: View {
     // `WidgetTimelineComputer` gives the widget itself.
     private let computer: WidgetTimelineComputer?
 
+    // Same App Group as `computer`/`refreshController` -- re-derives which
+    // pinned location this is from the current list (bluegull-aqi-mtm.27),
+    // since the deep link that opened this view only carries coordinates,
+    // not the name the widget face itself was configured with. See
+    // `WidgetLocationOptions.displayName(for:from:)`'s own doc comment.
+    private let pinnedLocationsStore: PinnedLocationsStore
+
+    private var locationName: String {
+        WidgetLocationOptions.displayName(for: location, from: pinnedLocationsStore)
+    }
+
     // `@State`, not a computed property, so a fetch triggered below can
     // actually update what's on screen (bluegull-aqi-mtm.21) -- opening
     // this view used to not be a signal to fetch at all, which meant a
@@ -34,6 +45,7 @@ struct WidgetDetailView: View {
         self.location = location
         self.refreshController = refreshController
         computer = store.map(WidgetTimelineComputer.init(store:))
+        pinnedLocationsStore = PinnedLocationsStore(store: store)
     }
 
     var body: some View {
@@ -57,7 +69,21 @@ struct WidgetDetailView: View {
                    let headline = reading.headlinePollutant,
                    let aqi = headline.nowcastAQI,
                    let category = headline.category {
-                    AQIHeadlineBadge(aqi: aqi, category: category)
+                    // Steve, 2026-08-05: the detail view had no location
+                    // name anywhere -- unlike the menu bar popover (which
+                    // shows one via MenuBarLocationPicker), this view has
+                    // no other element that identifies which of possibly
+                    // several widgets' data it's showing. Trailing, next
+                    // to the badge rather than a new row: there was room,
+                    // and it reads as a label for the value beside it
+                    // rather than competing with it.
+                    HStack(alignment: .top) {
+                        AQIHeadlineBadge(aqi: aqi, category: category)
+                        Spacer()
+                        Text(locationName)
+                            .font(.body)
+                            .foregroundStyle(.secondary)
+                    }
                     if let notice = category.beyondScaleNotice {
                         Text(notice)
                             .font(.caption)
