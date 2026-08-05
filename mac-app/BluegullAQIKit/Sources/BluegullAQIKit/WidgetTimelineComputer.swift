@@ -17,10 +17,19 @@ public struct WidgetTimelineSnapshot: Sendable, Equatable {
     /// Data."
     public let lastSuccessfulFetchDate: Date?
 
-    public init(date: Date, reading: AQIReading?, lastSuccessfulFetchDate: Date? = nil) {
+    /// `reading`'s own freshness (bluegull-aqi-dc2.5) -- nil exactly when
+    /// `reading` is nil, `.fresh`/`.stale` otherwise (never `.expired`:
+    /// `AppGroupCache.get`'s cascade already stops returning a reading past
+    /// the hard threshold, at which point there's nothing left to be
+    /// `.expired` about). Lets a surface show a present-but-aged reading
+    /// differently from a current one, instead of both looking identical.
+    public let freshness: AQIFreshness?
+
+    public init(date: Date, reading: AQIReading?, lastSuccessfulFetchDate: Date? = nil, freshness: AQIFreshness? = nil) {
         self.date = date
         self.reading = reading
         self.lastSuccessfulFetchDate = lastSuccessfulFetchDate
+        self.freshness = freshness
     }
 }
 
@@ -69,7 +78,19 @@ public struct WidgetTimelineComputer: Sendable {
         let reading = location.map { cache.get(for: $0.rounded, now: now) }
             ?? cache.getCurrentLocation(now: now)
             ?? cache.mostRecentEntry(now: now)
-        return WidgetTimelineSnapshot(date: now, reading: reading, lastSuccessfulFetchDate: cache.lastSuccessfulFetchDate())
+        // Same cascade, same short-circuit-on-a-specific-location shape as
+        // `reading` above (bluegull-aqi-dc2.5) -- see that computation's own
+        // comment for why a configured pin never falls through to a
+        // different location's freshness either.
+        let freshness = location.map { cache.freshness(for: $0.rounded, now: now) }
+            ?? cache.currentLocationFreshness(now: now)
+            ?? cache.mostRecentEntryFreshness(now: now)
+        return WidgetTimelineSnapshot(
+            date: now,
+            reading: reading,
+            lastSuccessfulFetchDate: cache.lastSuccessfulFetchDate(),
+            freshness: freshness
+        )
     }
 
     public func nextReloadDate(after now: Date = Date()) -> Date {

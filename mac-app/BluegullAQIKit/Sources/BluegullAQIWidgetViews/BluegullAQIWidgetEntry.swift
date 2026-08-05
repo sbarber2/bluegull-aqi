@@ -31,18 +31,27 @@ public struct BluegullAQIWidgetEntry: TimelineEntry {
     // unqualified "No Data."
     public let lastSuccessfulFetchDate: Date?
 
+    /// `reading`'s own freshness (bluegull-aqi-dc2.5) -- nil exactly when
+    /// `reading` is nil. A `.stale` reading is still shown (that's the
+    /// point: past the soft TTL but within the hard one, rather than going
+    /// straight to the empty state), but the view marks it as aged rather
+    /// than looking identical to a current value.
+    public let freshness: AQIFreshness?
+
     public init(
         date: Date,
         reading: AQIReading?,
         configuredLocation: Location? = nil,
         locationName: String = LocationOptionEntity.currentLocation.name,
-        lastSuccessfulFetchDate: Date? = nil
+        lastSuccessfulFetchDate: Date? = nil,
+        freshness: AQIFreshness? = nil
     ) {
         self.date = date
         self.reading = reading
         self.configuredLocation = configuredLocation
         self.locationName = locationName
         self.lastSuccessfulFetchDate = lastSuccessfulFetchDate
+        self.freshness = freshness
     }
 
     public init(_ snapshot: WidgetTimelineSnapshot, configuredLocation: Location? = nil, locationName: String = LocationOptionEntity.currentLocation.name) {
@@ -51,5 +60,6 @@ public struct BluegullAQIWidgetEntry: TimelineEntry {
         self.configuredLocation = configuredLocation
         self.locationName = locationName
         lastSuccessfulFetchDate = snapshot.lastSuccessfulFetchDate
+        freshness = snapshot.freshness
     }
 }

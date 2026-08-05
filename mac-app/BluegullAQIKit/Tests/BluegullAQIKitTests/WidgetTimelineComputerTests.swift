@@ -37,7 +37,7 @@ final class WidgetTimelineComputerTests: XCTestCase {
     func testCurrentSnapshotIsNilOnceTheCachedEntryHasExpired() {
         let store = InMemorySharedCacheStore()
         let now = Date()
-        AppGroupCache(store: store).put(reading, for: location, ttl: 1, now: now)
+        AppGroupCache(store: store).put(reading, for: location, softTTL: 1, hardTTL: 1, now: now)
 
         let computer = WidgetTimelineComputer(store: store)
         XCTAssertNil(computer.currentSnapshot(now: now.addingTimeInterval(2)).reading)
@@ -61,7 +61,7 @@ final class WidgetTimelineComputerTests: XCTestCase {
         let store = InMemorySharedCacheStore()
         let cache = AppGroupCache(store: store)
         let now = Date()
-        cache.put(reading, for: location, ttl: 1, now: now)
+        cache.put(reading, for: location, softTTL: 1, hardTTL: 1, now: now)
         cache.recordSuccessfulFetch(now: now)
 
         let computer = WidgetTimelineComputer(store: store)
@@ -121,6 +121,38 @@ final class WidgetTimelineComputerTests: XCTestCase {
 
         let computer = WidgetTimelineComputer(store: store)
         XCTAssertEqual(computer.currentSnapshot(for: rawPin).reading, roundedReading)
+    }
+
+    // MARK: - Freshness (bluegull-aqi-dc2.5)
+
+    func testCurrentSnapshotFreshnessIsNilWhenNoReading() {
+        let computer = WidgetTimelineComputer(store: InMemorySharedCacheStore())
+        XCTAssertNil(computer.currentSnapshot().freshness)
+    }
+
+    func testCurrentSnapshotFreshnessIsFreshForARecentEntry() {
+        let store = InMemorySharedCacheStore()
+        AppGroupCache(store: store).put(reading, for: location)
+
+        let computer = WidgetTimelineComputer(store: store)
+        XCTAssertEqual(computer.currentSnapshot().freshness, .fresh)
+    }
+
+    /// The point of dc2.5, at the level a widget actually observes it: a
+    /// soft-expired entry still renders (non-nil reading) AND is flagged
+    /// stale, rather than the widget being unable to tell the two apart.
+    func testCurrentSnapshotStillReturnsAReadingWhilePastSoftExpiryAndFlagsItStale() {
+        let store = InMemorySharedCacheStore()
+        let now = Date()
+        // `.rounded` -- same write-side contract as everywhere else in this
+        // file (see testCurrentSnapshotForAPinFindsTheEntryCachedUnderItsRoundedCoordinates).
+        AppGroupCache(store: store).put(reading, for: location.rounded, softTTL: 10, hardTTL: 100, now: now)
+
+        let computer = WidgetTimelineComputer(store: store)
+        let snapshot = computer.currentSnapshot(for: location, now: now.addingTimeInterval(50))
+
+        XCTAssertEqual(snapshot.reading, reading)
+        XCTAssertEqual(snapshot.freshness, .stale)
     }
 
     func testCurrentSnapshotWithNoLocationFallsBackToMostRecentEntry() {

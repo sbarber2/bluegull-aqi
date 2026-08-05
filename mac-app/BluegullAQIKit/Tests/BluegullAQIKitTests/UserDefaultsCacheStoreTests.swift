@@ -78,7 +78,7 @@ final class UserDefaultsCacheStoreTests: XCTestCase {
 
         for index in 0...AppGroupCache.maxRetainedEntries {
             let location = Location(latitude: Double(index), longitude: Double(index))
-            cache.put(reading, for: location, ttl: AppGroupCache.defaultTTL, now: now.addingTimeInterval(Double(index)))
+            cache.put(reading, for: location, hardTTL: AppGroupCache.defaultHardTTL, now: now.addingTimeInterval(Double(index)))
         }
 
         let remainingKeys = store.allKeys().filter { $0.hasPrefix("aqi-cache-") }

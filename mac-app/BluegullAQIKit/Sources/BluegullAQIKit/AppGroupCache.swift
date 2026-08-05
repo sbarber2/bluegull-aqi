@@ -1,21 +1,51 @@
 import Foundation
 
-/// Cached AQI data for one location, with its own expiry -- written by the
-/// container app after a successful fetch, read by the widget's
-/// TimelineProvider (bluegull-aqi-10h.7).
+/// How usable a cached entry still is (bluegull-aqi-dc2.5).
+public enum AQIFreshness: Sendable, Equatable {
+    /// Within the soft TTL -- display it, don't refetch on its account.
+    case fresh
+    /// Past the soft TTL but within the hard one -- still worth displaying
+    /// (clearly aged), and worth refetching to replace.
+    case stale
+    /// Past the hard TTL -- too old to show at all.
+    case expired
+}
+
+/// Cached AQI data for one location, with two expiry thresholds -- written
+/// after a successful fetch by whichever process made it (bluegull-aqi-10h.7,
+/// and either process since bluegull-aqi-mtm.24), read by the widget's
+/// TimelineProvider and the menu bar alike.
+///
+/// Two thresholds rather than one (bluegull-aqi-dc2.5, stale-while-
+/// revalidate): with a single TTL, the instant an entry expired the surface
+/// had nothing to show and rendered "Data Unavailable" while a refetch ran
+/// -- measured at 2.826s for a real backend cache miss, during which a
+/// perfectly serviceable hour-old reading was sitting right there unused.
+/// Now an entry stays displayable well past the point where it stops being
+/// considered current.
 public struct AQICacheEntry: Sendable, Equatable, Codable {
     public let reading: AQIReading
     public let fetchedAt: Date
-    public let expiresAt: Date
+    public let softExpiresAt: Date
+    public let hardExpiresAt: Date
 
-    public init(reading: AQIReading, fetchedAt: Date, expiresAt: Date) {
+    public init(reading: AQIReading, fetchedAt: Date, softExpiresAt: Date, hardExpiresAt: Date) {
         self.reading = reading
         self.fetchedAt = fetchedAt
-        self.expiresAt = expiresAt
+        self.softExpiresAt = softExpiresAt
+        self.hardExpiresAt = hardExpiresAt
     }
 
+    public func freshness(at now: Date = Date()) -> AQIFreshness {
+        if now < softExpiresAt { return .fresh }
+        if now < hardExpiresAt { return .stale }
+        return .expired
+    }
+
+    /// Past the *hard* threshold -- i.e. no longer displayable at all.
+    /// Deliberately not "past soft": a soft-expired entry is still shown.
     public func isExpired(now: Date = Date()) -> Bool {
-        now >= expiresAt
+        freshness(at: now) == .expired
     }
 }
 
@@ -108,7 +138,15 @@ public struct UserDefaultsCacheStore: SharedCacheStore {
 /// how long -- the retention work above -- is the real, actionable
 /// mitigation available at this layer.
 public struct AppGroupCache: Sendable {
-    public static let defaultTTL: TimeInterval = 3600
+    /// Matches AirNow's own hourly update cadence -- refetching more often
+    /// than the source data changes buys nothing. Deliberately NOT the
+    /// design doc's suggested 10 minutes: this API is rate-limited, and 10
+    /// minutes would multiply request volume roughly 6x for no fresher data.
+    public static let defaultSoftTTL: TimeInterval = 3600
+    /// The fallback window past soft expiry -- an entry is still shown,
+    /// visibly aged, rather than immediately going to "Data Unavailable"
+    /// while a refetch is attempted (bluegull-aqi-dc2.5).
+    public static let defaultHardTTL: TimeInterval = 3 * 3600
 
     /// Deliberately generous relative to the realistic use case (current
     /// location plus a handful of pinned favorites, bluegull-aqi-e70.5) --
@@ -140,9 +178,12 @@ public struct AppGroupCache: Sendable {
         self.store = store
     }
 
-    /// nil on a miss -- absent, undecodable, or expired. An expired entry
-    /// is deleted here too, not just treated as a miss -- see the type's
-    /// doc comment on retention bounding.
+    /// nil on a miss -- absent, undecodable, or past the *hard* threshold.
+    /// A soft-expired-but-not-hard-expired entry still returns its reading
+    /// here (bluegull-aqi-dc2.5) -- callers that need to distinguish fresh
+    /// from stale want `freshness(for:)`, not this. A hard-expired entry is
+    /// deleted here too, not just treated as a miss -- see the type's doc
+    /// comment on retention bounding.
     public func get(for location: Location, now: Date = Date()) -> AQIReading? {
         let key = Self.key(for: location)
         guard let data = store.data(forKey: key) else { return nil }
@@ -157,8 +198,30 @@ public struct AppGroupCache: Sendable {
         return entry.reading
     }
 
-    public func put(_ reading: AQIReading, for location: Location, ttl: TimeInterval = defaultTTL, now: Date = Date()) {
-        let entry = AQICacheEntry(reading: reading, fetchedAt: now, expiresAt: now.addingTimeInterval(ttl))
+    /// nil if nothing is cached for this location (including a hard-expired,
+    /// swept entry) -- distinct from `.expired`, which means an entry
+    /// existed but is too old to show. See `get(for:)` for the reading
+    /// itself.
+    public func freshness(for location: Location, now: Date = Date()) -> AQIFreshness? {
+        guard let data = store.data(forKey: Self.key(for: location)),
+              let entry = try? JSONDecoder().decode(AQICacheEntry.self, from: data),
+              !entry.isExpired(now: now) else { return nil }
+        return entry.freshness(at: now)
+    }
+
+    public func put(
+        _ reading: AQIReading,
+        for location: Location,
+        softTTL: TimeInterval = defaultSoftTTL,
+        hardTTL: TimeInterval = defaultHardTTL,
+        now: Date = Date()
+    ) {
+        let entry = AQICacheEntry(
+            reading: reading,
+            fetchedAt: now,
+            softExpiresAt: now.addingTimeInterval(softTTL),
+            hardExpiresAt: now.addingTimeInterval(hardTTL)
+        )
         guard let data = try? JSONEncoder().encode(entry) else { return }
         store.set(data, forKey: Self.key(for: location))
         pruneIfNeeded(now: now)
@@ -221,23 +284,52 @@ public struct AppGroupCache: Sendable {
         return newest?.reading
     }
 
+    /// Same "most recent across every location" answer as `mostRecentEntry`,
+    /// as a freshness rather than a reading -- see that method's own doc
+    /// comment for when this fallback applies.
+    public func mostRecentEntryFreshness(now: Date = Date()) -> AQIFreshness? {
+        let myKeys = store.allKeys().filter { $0.hasPrefix(Self.keyPrefix) }
+        var newest: AQICacheEntry?
+
+        for key in myKeys {
+            guard let data = store.data(forKey: key),
+                  let entry = try? JSONDecoder().decode(AQICacheEntry.self, from: data),
+                  !entry.isExpired(now: now) else { continue }
+            if newest == nil || entry.fetchedAt > newest!.fetchedAt {
+                newest = entry
+            }
+        }
+
+        return newest?.freshness(at: now)
+    }
+
     /// Records a successful live-GPS fetch under its own stable key
     /// (bluegull-aqi-mtm.20), independent of the coordinate-keyed entry
     /// `AQIFetchCoordinator` already writes via `put(_:for:)` -- GPS
     /// coordinates drift call-to-call, so there's no fixed coordinate key a
     /// "Current Location" reader could look up directly otherwise. Same
     /// TTL/expiry semantics as `put(_:for:)`.
-    public func putCurrentLocation(_ reading: AQIReading, ttl: TimeInterval = defaultTTL, now: Date = Date()) {
-        let entry = AQICacheEntry(reading: reading, fetchedAt: now, expiresAt: now.addingTimeInterval(ttl))
+    public func putCurrentLocation(
+        _ reading: AQIReading,
+        softTTL: TimeInterval = defaultSoftTTL,
+        hardTTL: TimeInterval = defaultHardTTL,
+        now: Date = Date()
+    ) {
+        let entry = AQICacheEntry(
+            reading: reading,
+            fetchedAt: now,
+            softExpiresAt: now.addingTimeInterval(softTTL),
+            hardExpiresAt: now.addingTimeInterval(hardTTL)
+        )
         guard let data = try? JSONEncoder().encode(entry) else { return }
         store.set(data, forKey: Self.currentLocationKey)
     }
 
-    /// nil on a miss -- absent, undecodable, or expired (deleted here too,
-    /// same as `get(for:)`). This is the *specific* "what did live GPS
-    /// resolve to most recently" answer -- see `currentLocationKey`'s doc
-    /// comment for why a widget showing "Current Location" should prefer
-    /// this over `mostRecentEntry()`.
+    /// nil on a miss -- absent, undecodable, or past the hard threshold
+    /// (deleted here too, same as `get(for:)`). This is the *specific*
+    /// "what did live GPS resolve to most recently" answer -- see
+    /// `currentLocationKey`'s doc comment for why a widget showing "Current
+    /// Location" should prefer this over `mostRecentEntry()`.
     public func getCurrentLocation(now: Date = Date()) -> AQIReading? {
         guard let data = store.data(forKey: Self.currentLocationKey) else { return nil }
         guard let entry = try? JSONDecoder().decode(AQICacheEntry.self, from: data) else {
@@ -249,6 +341,15 @@ public struct AppGroupCache: Sendable {
             return nil
         }
         return entry.reading
+    }
+
+    /// Same fresh/stale/expired distinction as `freshness(for:)`, for the
+    /// "Current Location" slot.
+    public func currentLocationFreshness(now: Date = Date()) -> AQIFreshness? {
+        guard let data = store.data(forKey: Self.currentLocationKey),
+              let entry = try? JSONDecoder().decode(AQICacheEntry.self, from: data),
+              !entry.isExpired(now: now) else { return nil }
+        return entry.freshness(at: now)
     }
 
     private func pruneIfNeeded(now: Date) {
