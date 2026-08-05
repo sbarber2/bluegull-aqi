@@ -37,31 +37,47 @@ struct WidgetDetailView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            if let reading,
-               let headline = reading.headlinePollutant,
-               let aqi = headline.nowcastAQI,
-               let category = headline.category {
-                AQIHeadlineBadge(aqi: aqi, category: category)
-                if let notice = category.beyondScaleNotice {
-                    Text(notice)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+        // ScrollView, not a bare VStack -- this Window's frame is persisted
+        // across launches by AppKit's own autosave (keyed off the Window's
+        // `id`), independent of `.windowResizability(.contentSize)`'s
+        // "ideal size" below. A frame saved back when this view needed less
+        // height (fewer pollutants, or before the disclaimer reached its
+        // current length) gets restored as-is on a later launch, squeezing
+        // this content into less space than it now needs -- confirmed from
+        // a real saved frame this session ("NSWindow Frame widget-detail"
+        // = "... 320 273 ..."). A plain VStack has no way to signal that
+        // it's been clipped; `Text` just silently truncates with "…" to
+        // fit. Wrapping in a ScrollView means the full content, including
+        // the compliance-required disclaimer, is always at least
+        // reachable by scrolling, regardless of whatever height the
+        // restored frame turns out to be.
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                if let reading,
+                   let headline = reading.headlinePollutant,
+                   let aqi = headline.nowcastAQI,
+                   let category = headline.category {
+                    AQIHeadlineBadge(aqi: aqi, category: category)
+                    if let notice = category.beyondScaleNotice {
+                        Text(notice)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Divider()
+                    PollutantListView(pollutants: reading.pollutants)
+                    Divider()
+                    AttributionFooter(headline: headline)
+                    DisclaimerFooter()
+                } else {
+                    ContentUnavailableView(
+                        "No Air Quality Data",
+                        systemImage: "aqi.medium",
+                        description: Text("BlueGull AQI hasn't cached a reading for this widget yet.")
+                    )
                 }
-                Divider()
-                PollutantListView(pollutants: reading.pollutants)
-                Divider()
-                AttributionFooter(headline: headline)
-                DisclaimerFooter()
-            } else {
-                ContentUnavailableView(
-                    "No Air Quality Data",
-                    systemImage: "aqi.medium",
-                    description: Text("BlueGull AQI hasn't cached a reading for this widget yet.")
-                )
             }
+            .padding()
         }
-        .padding()
         .frame(width: 320)
         .accessibilityIdentifier("widgetDetailView")
         // `.task(id:)`, not `.task` -- this is a singleton Window
