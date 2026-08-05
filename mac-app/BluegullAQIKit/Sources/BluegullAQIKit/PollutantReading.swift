@@ -12,8 +12,19 @@ public struct PollutantReading: Sendable, Equatable, Codable {
     public let hourObserved: String
     public let localTimeZone: String
     public let reportingAreaName: String
-    public let siteID: String
-    public let siteName: String
+
+    /// Optional because AirNow returns `null` for both whenever a reporting
+    /// area aggregates across several monitors rather than naming one
+    /// (`lookupBehavior: "Highest Reading From Assigned Sites"`) -- confirmed
+    /// against a live response for Boston Metro, which returns
+    /// `"siteID": null, "siteName": null`, while Chicago on the same request
+    /// shape returns real values. Declaring these non-optional made the whole
+    /// response undecodable for such areas, so the location showed "Data
+    /// Unavailable" permanently in every mode and both processes
+    /// (bluegull-aqi-10h.21). Nothing displays these today; they're kept for
+    /// fidelity to AirNow's payload (bluegull-aqi-10h.17).
+    public let siteID: String?
+    public let siteName: String?
     public let parameterName: String
 
     /// AirNow's own NowCast AQI for this pollutant. Optional to allow for a
@@ -32,22 +43,25 @@ public struct PollutantReading: Sendable, Equatable, Codable {
     public let reportingAgency: String?
     public let lookupBehavior: String
     public let consideredMonitors: String
-    public let lookupBoundary: String
+
+    /// Optional for the same reason as `siteID`/`siteName` above -- AirNow
+    /// returns `null` here for aggregate reporting areas (Boston Metro).
+    public let lookupBoundary: String?
 
     public init(
         dateObserved: String,
         hourObserved: String,
         localTimeZone: String,
         reportingAreaName: String,
-        siteID: String,
-        siteName: String,
+        siteID: String?,
+        siteName: String?,
         parameterName: String,
         nowcastAQI: Int?,
         aqiCategoryName: String,
         reportingAgency: String?,
         lookupBehavior: String,
         consideredMonitors: String,
-        lookupBoundary: String
+        lookupBoundary: String?
     ) {
         self.dateObserved = dateObserved
         self.hourObserved = hourObserved

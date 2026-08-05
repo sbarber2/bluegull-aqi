@@ -116,6 +116,45 @@ final class PollutantReadingTests: XCTestCase {
         XCTAssertEqual(readings[1].parameterName, "OZONE")
     }
 
+    /// Regression for bluegull-aqi-10h.21. Verbatim shape of a real
+    /// 2026-08-05 response for Boston Metro (42.36,-71.06), an aggregate
+    /// reporting area: AirNow returns `null` for siteID/siteName/
+    /// lookupBoundary when `lookupBehavior` is "Highest Reading From
+    /// Assigned Sites" rather than naming one monitor. These were declared
+    /// non-optional, which made the *entire* payload undecodable -- the
+    /// location showed "Data Unavailable" permanently, in both data-source
+    /// modes and both processes.
+    func testDecodesAggregateReportingAreaWithNullSiteFields() throws {
+        let bostonJSON = """
+        {
+            "dateObserved": "2026-08-05",
+            "hourObserved": "7:00",
+            "localTimeZone": "EDT",
+            "reportingAreaName": "Boston Metro",
+            "siteID": null,
+            "siteName": null,
+            "parameterName": "PM2.5",
+            "nowcastAQI": 39,
+            "aqiCategoryName": "Good",
+            "reportingAgency": "Massachusetts Dept. of Environmental Protection",
+            "lookupBehavior": "Highest Reading From Assigned Sites",
+            "consideredMonitors": "All",
+            "lookupBoundary": null
+        }
+        """
+
+        let reading = try JSONDecoder().decode(PollutantReading.self, from: Data(bostonJSON.utf8))
+
+        XCTAssertNil(reading.siteID)
+        XCTAssertNil(reading.siteName)
+        XCTAssertNil(reading.lookupBoundary)
+        // The point of the fix: everything else still decodes and displays.
+        XCTAssertEqual(reading.nowcastAQI, 39)
+        XCTAssertEqual(reading.reportingAreaName, "Boston Metro")
+        XCTAssertEqual(reading.category, .good)
+        XCTAssertEqual(reading.attributionText, "Data courtesy of Massachusetts Dept. of Environmental Protection")
+    }
+
     func testCodableRoundTrip() throws {
         let original = try JSONDecoder().decode(PollutantReading.self, from: Data(fixtureJSON.utf8))
         let reEncoded = try JSONEncoder().encode(original)
