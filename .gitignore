@@ -84,6 +84,10 @@ service/dynamodb-local-metadata.json
 **/*.xcworkspace/xcuserdata/
 DerivedData/
 
+# `make app-package` scratch dir (xcarchive, exported .app, zip, dmg) --
+# rebuilt from scratch every run, never committed.
+mac-app/build/
+
 # macOS Finder metadata -- never useful in version control, appears
 # anywhere Finder/`open` touches a directory.
 .DS_Store

@@ -4,13 +4,25 @@
 # detail (poetry, DynamoDB Local, SAM); this delegates to it rather than
 # duplicating it.
 .PHONY: test test-swift test-ui test-service snapshots record-snapshots \
-        app-build app-run app-launch app-stop app-clean widget-reset \
+        app-build app-run app-launch app-stop app-clean widget-reset app-package \
         service-deploy service-delete service-enable service-disable
 
 MAC_APP_DIR := mac-app
 SERVICE_DIR := service
 SNAPSHOT_SCRATCH_DIR := /tmp/bluegull-widget-snapshots
 LSREGISTER := /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
+
+# app-package scratch dir -- gitignored, safe to rm -rf and rebuild from
+# scratch every run (see app-package below).
+PACKAGE_BUILD_DIR := $(MAC_APP_DIR)/build
+PACKAGE_ARCHIVE := $(PACKAGE_BUILD_DIR)/BluegullAQI.xcarchive
+PACKAGE_EXPORT_DIR := $(PACKAGE_BUILD_DIR)/export
+PACKAGE_APP := $(PACKAGE_EXPORT_DIR)/BluegullAQI.app
+# Name of the one-time `xcrun notarytool store-credentials` keychain
+# profile -- see doc/DEVINSTALL.md "Package for ad-hoc distribution" for
+# setup. Not a secret itself (just a label); the credentials it points to
+# live in the login keychain, never in this repo.
+NOTARY_PROFILE := bluegull-aqi-notary
 
 # Everything except test-ui -- see that target's own comment for why it's
 # not part of the default run.
@@ -186,3 +198,39 @@ app-clean: app-stop widget-reset
 	rm -rf ~/Library/Group\ Containers/group.solutions.bluegull.aqi
 	@echo "Done. Verify the AirNow key is actually gone via Keychain Access.app (see comment above)."
 	@echo "If you placed the widget on your desktop, remove it manually (right-click > Remove Widget)."
+
+# One-off ad-hoc distribution outside the Mac App Store (bluegull-aqi-do1)
+# -- e.g. sending a signed build to a friend to try out. Distinct from the
+# App Store submission path (bluegull-aqi-fw4 epic): this never touches App
+# Store Connect. Archives Release, exports with the Developer ID method
+# (mac-app/ExportOptions.plist), notarizes, staples the ticket, and wraps
+# the result in a DMG under $(PACKAGE_BUILD_DIR) (gitignored scratch dir,
+# wiped and rebuilt from scratch every run).
+#
+# One-time setup this depends on and can't script itself (both need
+# interactive Apple ID auth / secrets that must never enter this repo --
+# see CLAUDE.md's secrets rule):
+#   1. A "Developer ID Application" certificate for team G5DWPBWHQ5 in your
+#      login keychain -- Xcode -> Settings -> Accounts -> Manage
+#      Certificates -> "+" -> Developer ID Application, if you don't have
+#      one yet.
+#   2. `xcrun notarytool store-credentials $(NOTARY_PROFILE) --apple-id <your-apple-id> \
+#        --team-id G5DWPBWHQ5 --password <app-specific-password>` (generate
+#      the app-specific password at appleid.apple.com) -- stores the
+#      credential in your login keychain under the $(NOTARY_PROFILE) label,
+#      once, outside this repo.
+app-package:
+	cd $(MAC_APP_DIR) && xcodegen generate
+	rm -rf $(PACKAGE_BUILD_DIR)
+	mkdir -p $(PACKAGE_BUILD_DIR)
+	cd $(MAC_APP_DIR) && xcodebuild archive -scheme BluegullAQI -configuration Release \
+		-archivePath build/BluegullAQI.xcarchive -allowProvisioningUpdates
+	cd $(MAC_APP_DIR) && xcodebuild -exportArchive -archivePath build/BluegullAQI.xcarchive \
+		-exportPath build/export -exportOptionsPlist ExportOptions.plist -allowProvisioningUpdates
+	ditto -c -k --keepParent $(PACKAGE_APP) $(PACKAGE_BUILD_DIR)/BluegullAQI.zip
+	xcrun notarytool submit $(PACKAGE_BUILD_DIR)/BluegullAQI.zip \
+		--keychain-profile $(NOTARY_PROFILE) --wait
+	xcrun stapler staple $(PACKAGE_APP)
+	hdiutil create -volname "BlueGull AQI" -srcfolder $(PACKAGE_APP) -ov -format UDZO \
+		$(PACKAGE_BUILD_DIR)/BluegullAQI.dmg
+	@echo "Packaged, notarized DMG at $(PACKAGE_BUILD_DIR)/BluegullAQI.dmg"
