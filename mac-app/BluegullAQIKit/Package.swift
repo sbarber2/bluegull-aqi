@@ -49,6 +49,22 @@ let package = Package(
         ),
         .testTarget(
             name: "BluegullAQIWidgetViewsTests",
+            dependencies: ["BluegullAQIWidgetViews"]
+        ),
+        // Split from BluegullAQIWidgetViewsTests (bluegull-aqi-67l): this
+        // target does pixel-level golden-image comparison
+        // (GoldenImageAssertion), which is sensitive to font/SF Symbol
+        // rasterization differences between the machine that recorded
+        // __Snapshots__/ and whatever machine runs the test -- confirmed
+        // via CI failing this way on every run since the workflow was
+        // added, never a real visual regression. Kept out of `swift test`'s
+        // default target set (test-swift skips it; `make test-snapshots`
+        // runs it explicitly) so that noise doesn't block the functional
+        // suite, matching the existing test-ui precedent (continue-on-error
+        // in CI) for the same "different environment renders differently"
+        // reason.
+        .testTarget(
+            name: "BluegullAQIWidgetSnapshotTests",
             dependencies: ["BluegullAQIWidgetViews"],
             // The golden PNGs (bluegull-aqi-mtm.11) are test fixtures read
             // directly off disk by file path, not bundled resources.

@@ -3,7 +3,7 @@
 # Xcode GUI required. `service/Makefile` already covers the Python side in
 # detail (poetry, DynamoDB Local, SAM); this delegates to it rather than
 # duplicating it.
-.PHONY: test test-swift test-ui test-service snapshots record-snapshots \
+.PHONY: test test-swift test-snapshots test-ui test-service snapshots record-snapshots \
         app-build app-run app-launch app-stop app-clean widget-reset app-package \
         service-deploy service-delete service-enable service-disable
 
@@ -24,20 +24,38 @@ PACKAGE_APP := $(PACKAGE_EXPORT_DIR)/BluegullAQI.app
 # live in the login keychain, never in this repo.
 NOTARY_PROFILE := bluegull-aqi-notary
 
-# Everything except test-ui -- see that target's own comment for why it's
-# not part of the default run.
+# Everything except test-ui and test-snapshots -- see each target's own
+# comment for why it's not part of the default run.
 test: test-swift test-service
 
 # Full BluegullAQI scheme (container app + widget extension) plus the
-# BluegullAQIKit Swift package (small/medium/large widget layouts,
-# snapshot regression tests, and everything else in BluegullAQIKitTests /
-# BluegullAQIWidgetViewsTests) -- unsigned, so this needs no Apple
-# Developer account or real device.
+# BluegullAQIKit Swift package (BluegullAQIKitTests and
+# BluegullAQIWidgetViewsTests's "renders without crashing" checks) --
+# unsigned, so this needs no Apple Developer account or real device.
+# Deliberately skips the BluegullAQIWidgetSnapshotTests target -- see
+# test-snapshots below for why.
 test-swift:
 	cd $(MAC_APP_DIR) && xcodegen generate
 	cd $(MAC_APP_DIR) && xcodebuild build -scheme BluegullAQI -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
 	cd $(MAC_APP_DIR) && xcodebuild test -scheme BluegullAQI -destination 'platform=macOS' -only-testing:BluegullAQITests CODE_SIGNING_ALLOWED=NO
-	cd $(MAC_APP_DIR)/BluegullAQIKit && swift test
+	cd $(MAC_APP_DIR)/BluegullAQIKit && swift test --skip BluegullAQIWidgetSnapshotTests
+
+# Pixel-level golden-image comparison for the widget's per-family layouts
+# (bluegull-aqi-mtm.11), split into its own target and make target
+# (bluegull-aqi-67l) -- confirmed via CI failing this way on every run
+# since the workflow was added (2026-08-01): GoldenImageAssertion's
+# tolerance (0.5% mismatch) is tight enough that font/SF Symbol
+# rasterization differences between the machine that recorded
+# __Snapshots__/ and whatever machine runs the test alone produce
+# failures, never an actual visual regression. Same "different environment
+# renders differently" problem as test-ui below, just for pixels instead
+# of TCC permissions -- kept out of the default `test`/`test-swift` gate
+# for the same reason, run this deliberately (or record new goldens with
+# RECORD_SNAPSHOTS=1, see BluegullAQIWidgetSnapshotTests.swift) after a
+# real widget UI change, and compare by eye before committing.
+test-snapshots:
+	cd $(MAC_APP_DIR) && xcodegen generate
+	cd $(MAC_APP_DIR)/BluegullAQIKit && swift test --filter BluegullAQIWidgetSnapshotTests
 
 # Separate from `test-swift`/`test` on purpose -- bluegull-aqi-e70.9 found
 # XCUITest's runner needs a logged-in GUI session with Accessibility/
@@ -85,7 +103,7 @@ snapshots:
 # Re-records the golden PNGs the snapshot regression tests compare against
 # (bluegull-aqi-mtm.11). Only run this after confirming a rendering change
 # is actually intentional -- review the resulting diff under
-# mac-app/BluegullAQIKit/Tests/BluegullAQIWidgetViewsTests/__Snapshots__/
+# mac-app/BluegullAQIKit/Tests/BluegullAQIWidgetSnapshotTests/__Snapshots__/
 # before committing it. Recording itself always reports failures (that's
 # how it flags "these are new, go look at them," not a real problem) --
 # the `|| true` keeps that from failing the make invocation.

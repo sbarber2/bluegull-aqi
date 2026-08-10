@@ -1204,25 +1204,35 @@ is the practical answer, not a CLI.
 GitHub Actions workflows, split by directory like the repo layout: one for
 `service/` (lint, pytest against DynamoDB Local, `sam validate`/`sam build` — no
 deploy), one for `mac-app/` (`macos-latest`, delegating to `make test-swift` /
-`make test-ui`), plus a repo-wide secret scan on every push/PR. Neither the
-service nor mac-app workflow requires an AWS account, an AWS deployment, or
-Docker. The (currently disabled, `deploy.yml-OFF`) service deploy workflow is
-separate and manual-trigger-only — see its own header comment.
+`make test-ui` / `make test-snapshots`), plus a repo-wide secret scan on every
+push/PR. Neither the service nor mac-app workflow requires an AWS account, an
+AWS deployment, or Docker. The (currently disabled, `deploy.yml-OFF`) service
+deploy workflow is separate and manual-trigger-only — see its own header
+comment.
 
-`mac-app-ci.yml` (bluegull-aqi-10h.9) splits into two jobs rather than one,
-matching `test-swift`/`test-ui`'s own split (see "Testing strategy" →
-"Menu bar app & widget extension"): `test-swift` (BluegullAQIKit unit +
-widget snapshot tests, plus the app-scheme's `BluegullAQITests`) gates
-normally; `test-ui` (the XCUITest suite) runs `continue-on-error: true`,
-since GitHub-hosted macOS runners have no supported way to pre-grant the
-Accessibility/Automation TCC permission `xcodebuild test`'s runner process
-needs for a real GUI-driving suite (no MDM/PPPC profile deployment
-available on an ephemeral VM) — the same constraint that keeps `test-ui`
-out of the default local `make test` target. It still runs, and its
-pass/fail is visible in the Actions UI, just not blocking.
+`mac-app-ci.yml` (bluegull-aqi-10h.9) splits into three jobs rather than one,
+matching `test-swift`/`test-ui`/`test-snapshots`'s own split (see "Testing
+strategy" → "Menu bar app & widget extension"): `test-swift` (BluegullAQIKit
+unit tests + BluegullAQIWidgetViewsTests's crash-only render checks, plus the
+app-scheme's `BluegullAQITests`) gates normally. Two jobs run
+`continue-on-error: true` because both are inherently sensitive to which
+specific machine runs them, not to a real regression: `test-ui` (the XCUITest
+suite), since GitHub-hosted macOS runners have no supported way to pre-grant
+the Accessibility/Automation TCC permission `xcodebuild test`'s runner
+process needs for a real GUI-driving suite (no MDM/PPPC profile deployment
+available on an ephemeral VM); and `test-snapshots` (the pixel-level widget
+golden-image suite, `BluegullAQIWidgetSnapshotTests` — split into its own
+target in bluegull-aqi-67l, 2026-08-10), since the GitHub-hosted runner's
+font/SF Symbol rasterization doesn't byte-match whatever Mac last recorded
+`__Snapshots__/`, and every run failed on the shared `test-swift` job for
+that reason from the day this workflow was added until the split — never an
+actual visual regression. Same constraint that keeps `test-ui`/`test-snapshots`
+out of the default local `make test` target either way. Both still run, and
+their pass/fail is visible in the Actions UI, just not blocking.
 
 All of it wraps into `make` targets following Plant-Tracer's idiom — e.g.
-`make test-swift`, `make snapshots`, `make test` for everything.
+`make test-swift`, `make test-snapshots`, `make snapshots`, `make test` for
+everything.
 
 ## Task tracking
 
