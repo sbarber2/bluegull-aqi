@@ -88,6 +88,10 @@ DerivedData/
 # rebuilt from scratch every run, never committed.
 mac-app/build/
 
+# Repo-root scratch dir for manual Xcode Organizer exports (archive/DMG),
+# same reasoning as mac-app/build/ above -- never committed.
+/dist/
+
 # macOS Finder metadata -- never useful in version control, appears
 # anywhere Finder/`open` touches a directory.
 .DS_Store
