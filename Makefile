@@ -3,7 +3,7 @@
 # Xcode GUI required. `service/Makefile` already covers the Python side in
 # detail (poetry, DynamoDB Local, SAM); this delegates to it rather than
 # duplicating it.
-.PHONY: test test-swift test-snapshots test-ui test-service snapshots record-snapshots \
+.PHONY: mac-dev-setup test test-swift test-snapshots test-ui test-service snapshots record-snapshots \
         app-build app-run app-launch app-stop app-clean widget-reset app-package \
         service-deploy service-delete service-enable service-disable
 
@@ -23,6 +23,61 @@ PACKAGE_APP := $(PACKAGE_EXPORT_DIR)/BluegullAQI.app
 # setup. Not a secret itself (just a label); the credentials it points to
 # live in the login keychain, never in this repo.
 NOTARY_PROFILE := bluegull-aqi-notary
+
+# One-time setup for a genuinely fresh macOS install (bluegull-aqi-x0u) --
+# gets you from "brand new Mac" to able to run test-swift/app-run/
+# test-service. Idempotent: brew/pipx/poetry all no-op on an
+# already-satisfied dependency, so re-running after fixing whatever step
+# failed is safe.
+#
+# Manual, GUI-only steps this CANNOT do for you -- do these FIRST, then run
+# `make mac-dev-setup`:
+#   1. Install Xcode from the Mac App Store (the full app, not just the
+#      Command Line Tools -- this project needs the real macOS SDK/Swift
+#      toolchain). Open it once and let it finish installing components.
+#   2. Sign into Xcode with the Apple ID for this project's Developer
+#      account: Xcode -> Settings -> Accounts -> "+". Needed for
+#      Automatic signing against team G5DWPBWHQ5 (make app-build/app-run)
+#      -- see doc/DEVINSTALL.md if signing fails afterward.
+#   3. If you want 1Password-backed secret resolution for the local AirNow
+#      key (recommended, see service/README.md): install the 1Password
+#      app, then Settings -> Developer -> "Integrate with 1Password CLI".
+#
+# And after this target finishes, more manual/interactive steps -- none of
+# these are scriptable, each needs a live browser/SSO or device-linked
+# login, so they're just echoed as a reminder below rather than run here:
+#   - `aws sso login --profile AdministratorAccess-843088391598` -- only
+#     needed for `make service-deploy`/`service-delete`/etc, not for local
+#     dev or `make test`. Account/profile background: doc/DESIGN.md "AWS
+#     account".
+#   - `gh auth login` (GitHub CLI).
+#   - Your own free AirNow key from airnowapi.org, for Direct mode --
+#     Service mode (the app's default, see doc/DEVINSTALL.md) needs none.
+mac-dev-setup:
+	@test -d /Applications/Xcode.app || { \
+		echo "Xcode.app not found in /Applications -- install it from the Mac App Store first (see this target's header comment above), then re-run 'make mac-dev-setup'."; \
+		exit 1; \
+	}
+	sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
+	sudo xcodebuild -license accept
+	command -v brew >/dev/null || /bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+	brew install xcodegen aws-sam-cli awscli gh beads betterleaks openjdk pipx python@3.14
+	-brew install 1password-cli
+	pipx install poetry
+	pipx ensurepath
+	cd $(MAC_APP_DIR) && xcodegen generate
+	cd $(SERVICE_DIR) && poetry env use "$$(brew --prefix python@3.14)/bin/python3.14" && poetry install
+	$(MAKE) -C $(SERVICE_DIR) dynamodb-local-setup
+	git config core.hooksPath .beads/hooks
+	test -f $(SERVICE_DIR)/.env || cp $(SERVICE_DIR)/.env.example $(SERVICE_DIR)/.env
+	@echo ""
+	@echo "mac-dev-setup done. Remaining manual steps (see this target's header comment):"
+	@echo "  - Sign into Xcode with the project's Apple ID (Xcode -> Settings -> Accounts)"
+	@echo "  - aws sso login --profile AdministratorAccess-843088391598  (only needed for service-deploy etc.)"
+	@echo "  - gh auth login"
+	@echo "  - Fill in a real AIRNOW_API_KEY in service/.env if you want Direct mode or 'make run-local' (service/.env.example has the 1Password-reference pattern)"
+	@echo "  - 'bd ready' should show issues; if it looks empty, run 'bd doctor' (Dolt data syncs separately from this git clone)"
+	@echo "Then try: make test-swift / make app-run / make test-service"
 
 # Everything except test-ui and test-snapshots -- see each target's own
 # comment for why it's not part of the default run.
