@@ -39,12 +39,13 @@ NOTARY_PROFILE := bluegull-aqi-notary
 #      account: Xcode -> Settings -> Accounts -> "+". Needed for
 #      Automatic signing against team G5DWPBWHQ5 (make app-build/app-run)
 #      -- see doc/DEVINSTALL.md if signing fails afterward.
-#   3. Optional: if you'd rather not put a real AirNow key in a plaintext
-#      `.env` (see service/README.md), install a password/secrets manager
-#      with CLI-based secret resolution and reference it from `.env`
-#      instead -- service/.env.example shows 1Password's `op run
-#      --env-file=.env -- <command>` as one example of the pattern, not a
-#      requirement; any manager with an equivalent CLI works the same way.
+#   3. Install a password/secrets manager with CLI-based secret resolution
+#      -- you'll want it for the local AirNow key below (see
+#      service/README.md). It's still a real credential; treat it as one
+#      rather than a literal in `.env`, gitignored or not. `service/
+#      .env.example` shows 1Password's `op run --env-file=.env --
+#      <command>` as a worked example of the pattern, not a requirement --
+#      any manager with an equivalent CLI works the same way.
 #
 # And after this target finishes, more manual/interactive steps -- none of
 # these are scriptable, each needs a live browser/SSO or device-linked
@@ -89,7 +90,7 @@ mac-dev-setup:
 	@echo "  - Sign into Xcode with the project's Apple ID (Xcode -> Settings -> Accounts)"
 	@echo "  - aws sso login --profile AdministratorAccess-843088391598  (only needed for service-deploy etc.)"
 	@echo "  - gh auth login"
-	@echo "  - Fill in a real AIRNOW_API_KEY in service/.env if you want Direct mode or 'make run-local' -- plaintext is fine, or reference a secrets manager (service/.env.example shows the 1Password example)"
+	@echo "  - Set a real AIRNOW_API_KEY in service/.env if you want Direct mode or 'make run-local' -- store it in a secrets manager and reference it, don't paste the literal key in even though .env is gitignored (service/.env.example shows the 1Password example)"
 	@echo "  - 'bd ready' should show issues; if it looks empty, run 'bd doctor' (Dolt data syncs separately from this git clone)"
 	@echo "Then try: make test-swift / make app-run / make test-service"
 
