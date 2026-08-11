@@ -57,6 +57,27 @@ def fetch_current_observations(latitude: float, longitude: float, api_key: str) 
     except urllib.error.URLError as exc:
         logger.warning("AirNow request to %s failed: %s", API_BASE_URL, exc.reason)
         raise AirNowError(f"AirNow request failed: {exc.reason}") from exc
+    # A *read*-phase timeout raises bare TimeoutError, which is NOT a
+    # subclass of URLError and so is not caught above (bluegull-aqi-q9r.40).
+    # Confirmed against a real stalling HTTP server, not assumed:
+    # `isinstance(exc, urllib.error.URLError)` is False. Only a
+    # *connection*-phase timeout gets wrapped into URLError by urllib, which
+    # is why this looked covered and wasn't.
+    #
+    # Letting it escape un-wrapped was the actual bug: nothing upstream
+    # catches TimeoutError, so it bypassed aqi_lookup._refresh's
+    # serve-stale-on-AirNow-failure fallback (which keys on AirNowError) and
+    # lambda_handler's 502 mapping, surfacing as a bare API Gateway 500 with
+    # good stale data sitting unused in DynamoDB. A timeout is the most
+    # likely way AirNow becomes unreachable, so it has to land in exactly
+    # the same bucket as any other AirNow failure.
+    #
+    # `exc` is deliberately not interpolated into the message -- unlike
+    # URLError.reason it can carry the socket address, and the URL itself
+    # carries API_KEY (bluegull-aqi-q9r.27, CLAUDE.md secrets rule).
+    except TimeoutError as exc:
+        logger.warning("AirNow request to %s timed out", API_BASE_URL)
+        raise AirNowError(f"AirNow request timed out after {REQUEST_TIMEOUT_SECONDS}s") from exc
 
     try:
         data = json.loads(body)
