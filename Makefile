@@ -39,9 +39,12 @@ NOTARY_PROFILE := bluegull-aqi-notary
 #      account: Xcode -> Settings -> Accounts -> "+". Needed for
 #      Automatic signing against team G5DWPBWHQ5 (make app-build/app-run)
 #      -- see doc/DEVINSTALL.md if signing fails afterward.
-#   3. If you want 1Password-backed secret resolution for the local AirNow
-#      key (recommended, see service/README.md): install the 1Password
-#      app, then Settings -> Developer -> "Integrate with 1Password CLI".
+#   3. Optional: if you'd rather not put a real AirNow key in a plaintext
+#      `.env` (see service/README.md), install a password/secrets manager
+#      with CLI-based secret resolution and reference it from `.env`
+#      instead -- service/.env.example shows 1Password's `op run
+#      --env-file=.env -- <command>` as one example of the pattern, not a
+#      requirement; any manager with an equivalent CLI works the same way.
 #
 # And after this target finishes, more manual/interactive steps -- none of
 # these are scriptable, each needs a live browser/SSO or device-linked
@@ -60,14 +63,25 @@ mac-dev-setup:
 	}
 	sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer
 	sudo xcodebuild -license accept
-	command -v brew >/dev/null || /bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-	brew install xcodegen aws-sam-cli awscli gh beads betterleaks openjdk pipx python@3.14
-	-brew install 1password-cli
-	pipx install poetry
-	pipx ensurepath
-	cd $(MAC_APP_DIR) && xcodegen generate
-	cd $(SERVICE_DIR) && poetry env use "$$(brew --prefix python@3.14)/bin/python3.14" && poetry install
-	$(MAKE) -C $(SERVICE_DIR) dynamodb-local-setup
+	@if command -v brew >/dev/null 2>&1; then \
+		echo "Homebrew already installed -- skipping install."; \
+	else \
+		echo "Homebrew not found -- installing..."; \
+		/bin/bash -c "$$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"; \
+	fi
+	@# One shell chain from here on, not separate Make recipe lines --
+	@# `brew shellenv`/pipx's install dir need to land on PATH for every
+	@# step after them (xcodegen, poetry, dynamodb_local.py's `poetry
+	@# run`), and a fresh install's PATH update only reaches a *new* login
+	@# shell, never this non-interactive one or a subsequent recipe line
+	@# (each is its own subshell in plain Make).
+	eval "$$([ -x /opt/homebrew/bin/brew ] && /opt/homebrew/bin/brew shellenv || /usr/local/bin/brew shellenv)" && \
+	brew install xcodegen aws-sam-cli awscli gh beads betterleaks openjdk pipx python@3.14 && \
+	pipx install poetry && \
+	export PATH="$$HOME/.local/bin:$$PATH" && \
+	(cd $(MAC_APP_DIR) && xcodegen generate) && \
+	(cd $(SERVICE_DIR) && poetry env use "$$(brew --prefix python@3.14)/bin/python3.14" && poetry install) && \
+	(cd $(SERVICE_DIR) && poetry run python3 bin/dynamodb_local.py setup)
 	git config core.hooksPath .beads/hooks
 	test -f $(SERVICE_DIR)/.env || cp $(SERVICE_DIR)/.env.example $(SERVICE_DIR)/.env
 	@echo ""
@@ -75,7 +89,7 @@ mac-dev-setup:
 	@echo "  - Sign into Xcode with the project's Apple ID (Xcode -> Settings -> Accounts)"
 	@echo "  - aws sso login --profile AdministratorAccess-843088391598  (only needed for service-deploy etc.)"
 	@echo "  - gh auth login"
-	@echo "  - Fill in a real AIRNOW_API_KEY in service/.env if you want Direct mode or 'make run-local' (service/.env.example has the 1Password-reference pattern)"
+	@echo "  - Fill in a real AIRNOW_API_KEY in service/.env if you want Direct mode or 'make run-local' -- plaintext is fine, or reference a secrets manager (service/.env.example shows the 1Password example)"
 	@echo "  - 'bd ready' should show issues; if it looks empty, run 'bd doctor' (Dolt data syncs separately from this git clone)"
 	@echo "Then try: make test-swift / make app-run / make test-service"
 
