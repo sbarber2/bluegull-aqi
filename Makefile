@@ -253,6 +253,17 @@ app-stop:
 # "ignoring" state. Safe/reversible: LaunchServices re-indexes automatically,
 # but chronod restarting briefly resets every widget on the Mac, not just
 # this app's, while it re-registers.
+#
+# Also restarts NotificationCenter.app (bluegull-aqi-6qy, confirmed
+# 2026-08-11): that's the process that actually draws the "Add Widgets"
+# gallery picker, and it caches the icon it first resolved for an app --
+# separate from both chronod above and from LaunchServices' own
+# registration. Reproduced directly: a build with a real, correctly-
+# compiled AppIcon (Assets.car/AppIcon.icns confirmed present, correctly
+# codesigned) still showed a blank placeholder in the gallery sidebar until
+# NotificationCenter was restarted, even after the chronod/LaunchServices
+# reset above. Safe/reversible -- it's a normal user-session agent, killing
+# it just relaunches it, same as Dock or Finder.
 widget-reset:
 	@paths=$$($(LSREGISTER) -dump 2>/dev/null \
 		| grep -E '^[[:space:]]*path:.*DerivedData/BluegullAQI-.*/BluegullAQI(Widget\.appex|\.app)( \(0x[0-9a-fA-F]+\))?$$' \
@@ -267,6 +278,7 @@ widget-reset:
 		done; \
 	fi
 	-killall chronod
+	-killall NotificationCenter
 	@echo "Widget registration reset. Relaunch the app (app-launch/app-run), then re-check the widget gallery."
 
 # Reverses app-build/app-run (or any prior Xcode Cmd+R run) -- see
