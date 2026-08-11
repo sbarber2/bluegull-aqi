@@ -11,15 +11,22 @@ import BluegullAQIKit
 /// widget's `TimelineProvider` also reads, then reschedules itself on
 /// `RefreshScheduler`'s jittered interval.
 ///
-/// Concerned only with the **menu bar's own** displayed location, as of
-/// bluegull-aqi-mtm.24. Placed widgets now fetch their own configured
-/// locations directly in the widget extension process, so this no longer
-/// enumerates or refreshes them. The previous arrangement (bluegull-aqi-igu,
-/// then bluegull-aqi-o4b's `WidgetRequestedLocationsStore` relay plus a 20s
-/// settle loop) existed only because the widget couldn't fetch; once it
-/// could, that whole path became redundant work -- measured 2026-08-05 as
-/// roughly 2x the necessary outbound request volume, with both processes
-/// fetching the same locations.
+/// Concerned only with the **menu bar's own** displayed location for pinned
+/// locations, as of bluegull-aqi-mtm.24. Placed widgets pinned to a specific
+/// location fetch their own directly in the widget extension process, so
+/// this no longer enumerates or refreshes them. The previous arrangement
+/// (bluegull-aqi-igu, then bluegull-aqi-o4b's `WidgetRequestedLocationsStore`
+/// relay plus a 20s settle loop) existed only because the widget couldn't
+/// fetch; once it could, that whole path became redundant work -- measured
+/// 2026-08-05 as roughly 2x the necessary outbound request volume, with both
+/// processes fetching the same locations.
+///
+/// One exception: "Current Location" widgets still can't fetch for
+/// themselves (no location entitlement in the extension), so `refreshNow()`
+/// also keeps that specific cache slot warm every cycle regardless of the
+/// menu bar's own selection (bluegull-aqi-e10) -- without that, a widget on
+/// Current Location would depend entirely on the menu bar happening to also
+/// be set to Current Location, and show Data Unavailable forever otherwise.
 ///
 /// Deliberately a thin app-level wrapper, not unit tested itself -- the
 /// same reasoning as `LocationPermissionRequester`'s own doc comment. The
@@ -104,8 +111,12 @@ final class AQIRefreshController {
     /// first attempt right after location permission is granted, and after
     /// the user changes which location the menu bar shows
     /// (bluegull-aqi-e70.21), so neither waits up to an hour for the next
-    /// scheduled attempt. Concerns only the menu bar's own location: placed
-    /// widgets fetch their own (bluegull-aqi-mtm.24).
+    /// scheduled attempt. Placed widgets pinned to a specific location fetch
+    /// their own (bluegull-aqi-mtm.24) -- but a widget configured to
+    /// "Current Location" still can't (no location entitlement in the
+    /// extension), so this loop also keeps that cache slot fresh on every
+    /// cycle below, independent of whatever the menu bar itself is showing
+    /// (bluegull-aqi-e10).
     func refreshNow() async {
         let mode = currentMode()
 
@@ -121,11 +132,10 @@ final class AQIRefreshController {
         let menuBarSelection = currentLocationSelection()
         menuBarLocationMirror.save(persistenceID: menuBarSelection.persistenceID)
 
-        // `pinned` is nil for the "current location" case; this resolves
-        // live GPS at most once per call.
+        // Resolves live GPS at most once per call, regardless of how many
+        // of the two blocks below need it.
         var resolvedCurrentLocation: Location?
-        func resolve(_ pinned: Location?) async -> Location? {
-            if let pinned { return pinned }
+        func resolveCurrentLocation() async -> Location? {
             if let resolvedCurrentLocation { return resolvedCurrentLocation }
             let resolved = try? await locationResolver.currentLocation()
             resolvedCurrentLocation = resolved
@@ -133,7 +143,12 @@ final class AQIRefreshController {
         }
 
         do {
-            guard let location = await resolve(menuBarSelection.pinnedLocation) else {
+            let location: Location
+            if let pinned = menuBarSelection.pinnedLocation {
+                location = pinned
+            } else if let current = await resolveCurrentLocation() {
+                location = current
+            } else {
                 throw LocationResolverError.locationUnavailable("current location unavailable")
             }
             let reading = try await coordinator.fetch(location: location, mode: mode)
@@ -163,6 +178,28 @@ final class AQIRefreshController {
             // don't clear a still-valid reading just because this attempt
             // couldn't resolve a location.
             lastError = nil
+        }
+
+        // bluegull-aqi-e10: a desktop widget can be configured to "Current
+        // Location" independent of what the menu bar itself shows. When the
+        // menu bar is pinned to a named location, the block above never
+        // touches the current-location cache slot at all -- nothing else
+        // does either, since the widget extension can't resolve GPS itself
+        // (no location entitlement) and the old mechanism that used to poll
+        // every placed widget's own configuration was removed in
+        // bluegull-aqi-mtm.24 once pinned widgets could self-fetch. Without
+        // this, a widget on Current Location would show Data Unavailable
+        // forever, not just until the next refresh -- a deterministic
+        // outcome of the menu bar's own unrelated selection, not
+        // intermittent flakiness. Independent of the block above: runs
+        // regardless of whether the menu bar's own fetch succeeded, and is
+        // a no-op (already resolved) when the menu bar itself is on Current
+        // Location, since that case is already covered above.
+        if menuBarSelection.pinnedLocation != nil,
+           let current = await resolveCurrentLocation(),
+           let reading = try? await coordinator.fetch(location: current, mode: mode) {
+            cache.putCurrentLocation(reading)
+            WidgetCenter.shared.reloadTimelines(ofKind: BluegullWidgetKind.aqi)
         }
     }
 
