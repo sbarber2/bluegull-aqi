@@ -34,11 +34,21 @@ targets:
         ENABLE_HARDENED_RUNTIME: true
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
+        # BluegullAQI/Assets.xcassets/AppIcon.appiconset (bluegull-aqi-b3r)
+        # -- the 10-image .iconset Xcode/the OS needs, generated from
+        # mac-app/branding/AppIcon-1024.png. Regenerate both if the source
+        # master changes (see that file's own provenance note).
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
       path: BluegullAQI/Info.plist
       properties:
         # Menu bar-only app: no Dock icon, no main window (bluegull-aqi-e70.1).
         LSUIElement: true
+        # Silences "No App Category is set" at archive time and gives the
+        # app a real category if it's ever browsed outside the Store
+        # (Finder Get Info, notarization metadata). Air quality is closest
+        # to Apple's fixed category list under Weather.
+        LSApplicationCategoryType: public.app-category.weather
         # Friendly display name -- kept separate from PRODUCT_NAME (which stays
         # "BluegullAQI", no space) so the test target's auto-derived TEST_HOST
         # path still matches the actual built binary.

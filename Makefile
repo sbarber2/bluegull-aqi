@@ -18,11 +18,30 @@ PACKAGE_BUILD_DIR := $(MAC_APP_DIR)/build
 PACKAGE_ARCHIVE := $(PACKAGE_BUILD_DIR)/BluegullAQI.xcarchive
 PACKAGE_EXPORT_DIR := $(PACKAGE_BUILD_DIR)/export
 PACKAGE_APP := $(PACKAGE_EXPORT_DIR)/BluegullAQI.app
+# create-dmg copies everything in its source folder into the DMG verbatim
+# -- $(PACKAGE_EXPORT_DIR) isn't safe to point it at directly, since
+# `xcodebuild -exportArchive` also drops DistributionSummary.plist,
+# ExportOptions.plist, and Packaging.log in there alongside the .app
+# (confirmed by actually inspecting the export dir, not assumed). This is
+# a clean staging copy of just the .app, built fresh every run.
+PACKAGE_DMG_SOURCE_DIR := $(PACKAGE_BUILD_DIR)/dmg-source
 # Name of the one-time `xcrun notarytool store-credentials` keychain
 # profile -- see doc/DEVINSTALL.md "Package for ad-hoc distribution" for
 # setup. Not a secret itself (just a label); the credentials it points to
 # live in the login keychain, never in this repo.
 NOTARY_PROFILE := bluegull-aqi-notary
+# DMG Finder-window layout (bluegull-aqi-b3r) -- window size in points,
+# icon centers in the same coordinate space. Keep DMG_ICON_X/DMG_APPLINK_X
+# averaging to half of DMG_WINDOW_W so the pair stays centered in the
+# window; mac-app/branding/dmg-background.png's arrow was hand-drawn to
+# match these exact numbers, so change both together.
+DMG_WINDOW_W := 660
+DMG_WINDOW_H := 400
+DMG_ICON_SIZE := 128
+DMG_ICON_X := 180
+DMG_ICON_Y := 170
+DMG_APPLINK_X := 480
+DMG_APPLINK_Y := 170
 
 # One-time setup for a genuinely fresh macOS install (bluegull-aqi-x0u) --
 # gets you from "brand new Mac" to able to run test-swift/app-run/
@@ -77,7 +96,7 @@ mac-dev-setup:
 	@# shell, never this non-interactive one or a subsequent recipe line
 	@# (each is its own subshell in plain Make).
 	eval "$$([ -x /opt/homebrew/bin/brew ] && /opt/homebrew/bin/brew shellenv || /usr/local/bin/brew shellenv)" && \
-	brew install xcodegen aws-sam-cli awscli gh beads betterleaks openjdk pipx python@3.14 && \
+	brew install xcodegen create-dmg aws-sam-cli awscli gh beads betterleaks openjdk pipx python@3.14 && \
 	pipx install poetry && \
 	export PATH="$$HOME/.local/bin:$$PATH" && \
 	(cd $(MAC_APP_DIR) && xcodegen generate) && \
@@ -287,13 +306,23 @@ app-clean: app-stop widget-reset
 	@echo "Done. Verify the AirNow key is actually gone via Keychain Access.app (see comment above)."
 	@echo "If you placed the widget on your desktop, remove it manually (right-click > Remove Widget)."
 
-# One-off ad-hoc distribution outside the Mac App Store (bluegull-aqi-do1)
-# -- e.g. sending a signed build to a friend to try out. Distinct from the
-# App Store submission path (bluegull-aqi-fw4 epic): this never touches App
-# Store Connect. Archives Release, exports with the Developer ID method
-# (mac-app/ExportOptions.plist), notarizes, staples the ticket, and wraps
-# the result in a DMG under $(PACKAGE_BUILD_DIR) (gitignored scratch dir,
-# wiped and rebuilt from scratch every run).
+# One-off ad-hoc distribution outside the Mac App Store (bluegull-aqi-do1,
+# bluegull-aqi-b3r) -- e.g. sending a signed build to a friend to try out.
+# Distinct from the App Store submission path (bluegull-aqi-fw4 epic): this
+# never touches App Store Connect. Archives Release, exports with the
+# Developer ID method (mac-app/ExportOptions.plist), notarizes, staples the
+# ticket, then builds a nice DMG (custom volume icon, branded background,
+# Applications drop-link -- see mac-app/branding/README.md) under
+# $(PACKAGE_BUILD_DIR) (gitignored scratch dir, wiped and rebuilt from
+# scratch every run).
+#
+# Needs `create-dmg` (`brew install create-dmg`, or `make mac-dev-setup`)
+# and a real logged-in GUI session: unlike every other step here,
+# create-dmg drives Finder with AppleScript to arrange the window/icons --
+# same class of constraint as test-ui needing a real Accessibility-enabled
+# session, so this target won't work unattended/headless (not an issue in
+# practice, since notarization below already needs interactive credential
+# setup and this has never run in CI).
 #
 # One-time setup this depends on and can't script itself (both need
 # interactive Apple ID auth / secrets that must never enter this repo --
@@ -319,6 +348,31 @@ app-package:
 	xcrun notarytool submit $(PACKAGE_BUILD_DIR)/BluegullAQI.zip \
 		--keychain-profile $(NOTARY_PROFILE) --wait
 	xcrun stapler staple $(PACKAGE_APP)
-	hdiutil create -volname "BlueGull AQI" -srcfolder $(PACKAGE_APP) -ov -format UDZO \
-		$(PACKAGE_BUILD_DIR)/BluegullAQI.dmg
+	@# .icns for create-dmg's --volicon, built at package time from the
+	@# same checked-in PNGs Xcode uses for the app icon itself (bluegull-
+	@# aqi-b3r) -- iconutil requires its input directory to literally be
+	@# named *.iconset and contain only the icon PNGs, no Contents.json,
+	@# hence the copy into a scratch dir rather than pointing at
+	@# Assets.xcassets/AppIcon.appiconset directly.
+	rm -rf $(PACKAGE_BUILD_DIR)/AppIcon.iconset
+	mkdir -p $(PACKAGE_BUILD_DIR)/AppIcon.iconset
+	cp $(MAC_APP_DIR)/BluegullAQI/Assets.xcassets/AppIcon.appiconset/icon_*.png \
+		$(PACKAGE_BUILD_DIR)/AppIcon.iconset/
+	iconutil -c icns $(PACKAGE_BUILD_DIR)/AppIcon.iconset -o $(PACKAGE_BUILD_DIR)/BluegullAQI.icns
+	rm -rf $(PACKAGE_DMG_SOURCE_DIR)
+	mkdir -p $(PACKAGE_DMG_SOURCE_DIR)
+	cp -R $(PACKAGE_APP) $(PACKAGE_DMG_SOURCE_DIR)/
+	create-dmg \
+		--volname "BlueGull AQI" \
+		--volicon $(PACKAGE_BUILD_DIR)/BluegullAQI.icns \
+		--background $(MAC_APP_DIR)/branding/dmg-background.png \
+		--window-size $(DMG_WINDOW_W) $(DMG_WINDOW_H) \
+		--icon-size $(DMG_ICON_SIZE) \
+		--icon "BluegullAQI.app" $(DMG_ICON_X) $(DMG_ICON_Y) \
+		--hide-extension "BluegullAQI.app" \
+		--app-drop-link $(DMG_APPLINK_X) $(DMG_APPLINK_Y) \
+		--no-internet-enable \
+		--overwrite \
+		$(PACKAGE_BUILD_DIR)/BluegullAQI.dmg \
+		$(PACKAGE_DMG_SOURCE_DIR)
 	@echo "Packaged, notarized DMG at $(PACKAGE_BUILD_DIR)/BluegullAQI.dmg"

@@ -145,26 +145,36 @@ make app-package
 
 This archives a Release build, exports it with the Developer ID method
 (`mac-app/ExportOptions.plist`), submits it to Apple's notary service and
-waits, staples the notarization ticket, and wraps the result in a DMG at
-`mac-app/build/BluegullAQI.dmg`. Send that DMG — because it's notarized,
-the recipient just drags it to Applications; Gatekeeper shows the normal
-one-time "downloaded from the internet" confirmation, not an
+waits, staples the notarization ticket, then builds a proper DMG (custom
+volume icon, branded background, `Applications` drop-link — see
+`mac-app/branding/README.md`) at `mac-app/build/BluegullAQI.dmg` using
+[`create-dmg`](https://github.com/create-dmg/create-dmg). Send that DMG —
+because it's notarized, the recipient just opens it and drags the app to
+the `Applications` shortcut sitting right next to it; Gatekeeper shows the
+normal one-time "downloaded from the internet" confirmation, not an
 "unidentified developer" block.
 
-One-time setup, both of which involve secrets/interactive Apple ID auth
-and so are deliberately *not* scripted (see CLAUDE.md's secrets rule):
+One-time setup:
 
-1. A **Developer ID Application** certificate for team `G5DWPBWHQ5` in your
-   login keychain. Xcode → Settings → Accounts → Manage Certificates → "+"
-   → Developer ID Application, if you don't already have one.
-2. Store notarization credentials once:
-   ```bash
-   xcrun notarytool store-credentials bluegull-aqi-notary \
-     --apple-id <your-apple-id> --team-id G5DWPBWHQ5 --password <app-specific-password>
-   ```
-   Generate the app-specific password at appleid.apple.com. This stores the
-   credential in your login keychain under the `bluegull-aqi-notary` label
-   (matching `NOTARY_PROFILE` in the root `Makefile`) — never in this repo.
+1. `brew install create-dmg` (or `make mac-dev-setup`, which includes it).
+   Building the DMG drives Finder with AppleScript to arrange the window,
+   so this step needs a real logged-in GUI session — same constraint as
+   `make test-ui`, not scriptable/headless.
+2. Two things involving secrets/interactive Apple ID auth, deliberately
+   *not* scripted (see CLAUDE.md's secrets rule):
+   - A **Developer ID Application** certificate for team `G5DWPBWHQ5` in
+     your login keychain. Xcode → Settings → Accounts → Manage
+     Certificates → "+" → Developer ID Application, if you don't already
+     have one.
+   - Store notarization credentials once:
+     ```bash
+     xcrun notarytool store-credentials bluegull-aqi-notary \
+       --apple-id <your-apple-id> --team-id G5DWPBWHQ5 --password <app-specific-password>
+     ```
+     Generate the app-specific password at appleid.apple.com. This stores
+     the credential in your login keychain under the `bluegull-aqi-notary`
+     label (matching `NOTARY_PROFILE` in the root `Makefile`) — never in
+     this repo.
 
 This is separate from the Mac App Store submission path
 (`bluegull-aqi-fw4` epic) — `make app-package` never touches App Store
