@@ -148,6 +148,47 @@ def test_get_aqi_falls_back_to_stale_when_refresh_fails(monkeypatch):
     assert result == {"observations": STALE_SAMPLE, "cached": True}
 
 
+def test_get_aqi_falls_back_to_stale_on_airnow_read_timeout(monkeypatch):
+    """bluegull-aqi-q9r.40, end to end. Patches `urlopen` rather than
+    `fetch_current_observations` on purpose: the TimeoutError -> AirNowError
+    wrap lives *inside* the real client, so stubbing the client out would skip
+    the very code under test and pass no matter what. This is the exact
+    production failure -- a slow AirNow read -- and it must serve stale data
+    rather than propagating and becoming a 500."""
+    monkeypatch.setenv("AIRNOW_API_KEY", "test-key")
+    lat, lon = 41.8781, -87.6298  # Chicago
+    store = cache.Cache()
+    key = cache.location_key(lat, lon)
+    store.delete(key)
+    store.put(key, STALE_SAMPLE, ttl_seconds=-1)  # already expired, but on hand
+
+    with patch(
+        "bluegull_aqi_service.airnow_client.urllib.request.urlopen",
+        side_effect=TimeoutError("timed out"),
+    ):
+        result = aqi_lookup.get_aqi(lat, lon)
+
+    assert result == {"observations": STALE_SAMPLE, "cached": True}
+
+
+def test_get_aqi_propagates_airnow_error_on_read_timeout_with_no_stale_data(monkeypatch):
+    """Same timeout, nothing cached: must surface as AirNowError so
+    lambda_handler maps it to a 502, not escape as an unhandled TimeoutError
+    (which is what produced API Gateway's bare 500 in bluegull-aqi-q9r.40)."""
+    monkeypatch.setenv("AIRNOW_API_KEY", "test-key")
+    lat, lon = 32.7767, -96.7970  # Dallas
+    store = cache.Cache()
+    key = cache.location_key(lat, lon)
+    store.delete(key)  # true cold start -- nothing to fall back on
+
+    with patch(
+        "bluegull_aqi_service.airnow_client.urllib.request.urlopen",
+        side_effect=TimeoutError("timed out"),
+    ):
+        with pytest.raises(AirNowError):
+            aqi_lookup.get_aqi(lat, lon)
+
+
 def test_get_aqi_propagates_error_on_refresh_failure_with_no_stale_data(monkeypatch):
     """No stale value to fall back to -- must not swallow the error."""
     monkeypatch.setenv("AIRNOW_API_KEY", "test-key")

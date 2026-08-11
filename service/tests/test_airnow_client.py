@@ -54,6 +54,43 @@ def test_fetch_current_observations_http_error():
             fetch_current_observations(37.7749, -122.4194, "bad-key")
 
 
+def test_fetch_current_observations_url_error():
+    """Connection-phase failures arrive as URLError and must become AirNowError."""
+    with patch(
+        "bluegull_aqi_service.airnow_client.urllib.request.urlopen",
+        side_effect=urllib.error.URLError("connection refused"),
+    ):
+        with pytest.raises(AirNowError, match="AirNow request failed"):
+            fetch_current_observations(37.7749, -122.4194, "fake-key")
+
+
+def test_fetch_current_observations_read_timeout():
+    """bluegull-aqi-q9r.40: a read-phase timeout raises bare TimeoutError, which
+    is NOT a URLError subclass, so it used to escape un-wrapped -- bypassing the
+    serve-stale fallback and surfacing as an API Gateway 500."""
+    assert not issubclass(TimeoutError, urllib.error.URLError)  # the whole reason this bug existed
+    with patch(
+        "bluegull_aqi_service.airnow_client.urllib.request.urlopen",
+        side_effect=TimeoutError("timed out"),
+    ):
+        with pytest.raises(AirNowError, match="timed out"):
+            fetch_current_observations(37.7749, -122.4194, "fake-key")
+
+
+def test_read_timeout_message_does_not_leak_request_details():
+    """The AirNow URL carries API_KEY, so nothing derived from the failed
+    request may reach the exception message (CLAUDE.md secrets rule)."""
+    with patch(
+        "bluegull_aqi_service.airnow_client.urllib.request.urlopen",
+        side_effect=TimeoutError("timed out contacting 203.0.113.7:443"),
+    ):
+        with pytest.raises(AirNowError) as excinfo:
+            fetch_current_observations(37.7749, -122.4194, "super-secret-key")
+    message = str(excinfo.value)
+    assert "super-secret-key" not in message
+    assert "203.0.113.7" not in message
+
+
 def test_fetch_current_observations_unexpected_type():
     with patch("bluegull_aqi_service.airnow_client.urllib.request.urlopen") as mock_urlopen:
         mock_urlopen.return_value = mock_urlopen_response(json.dumps({"unexpected": "dict"}).encode())
