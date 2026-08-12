@@ -112,7 +112,10 @@ struct BluegullAQIApp: App {
             // (startOnInit), so this .task is just a safety net if that
             // somehow didn't fire; the .onChange retry genuinely does need
             // to live somewhere always-rendered, so it's here regardless.
-            MenuBarStatusLabel(reading: refreshController?.latestReading)
+            MenuBarStatusLabel(
+                reading: refreshController?.latestReading,
+                freshness: refreshController?.latestReadingFreshness
+            )
                 .task { refreshController?.start() }
                 // Fetch immediately once permission is actually granted,
                 // rather than waiting for the scheduled loop's first

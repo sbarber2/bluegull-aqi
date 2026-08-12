@@ -95,20 +95,40 @@ public struct BluegullAQIWidgetView: View {
         staleCaption == nil ? "No Data" : "Data Unavailable"
     }
 
-    // Formatted relative to `entry.date` (the Timeline's own "now" at
-    // render time), not the live wall clock -- WidgetKit's `Text(_:style:)`
-    // live-relative formatting is meant for real-time UI and isn't
-    // deterministic for this package's golden-image snapshot tests
-    // (bluegull-aqi-mtm.11), which render well after `entry.date` and need
-    // byte-stable output. `AQIPopoverView`'s menu bar equivalent uses the
-    // live style instead -- that view has no such snapshot-determinism
-    // constraint.
+    // Absolute, never relative (bluegull-aqi-dc2.7) -- Steve dislikes "X
+    // hours ago" as vague, and wants to know exactly when data is from once
+    // it's more than an hour old. This is the empty-state case specifically
+    // (no `reading` at all -- entry.reading is nil here, per the `Group` in
+    // `body`), so there is no surviving AQIReading to pull an AirNow
+    // *observation* time from the way dc2.7 otherwise prefers -- the entry
+    // was already swept past its hard TTL (bluegull-aqi-10h.12). The most
+    // honest available timestamp is `lastSuccessfulFetchDate`, which is what
+    // this always used; only the FORMAT changes here, from relative to
+    // absolute, not the underlying instant.
+    //
+    // Fixed `en_US` locale, but deliberately NOT a fixed time zone (unlike
+    // `PollutantReading.observedAtDisplay`, which renders in the
+    // observation's own reporting-area zone): a fetch has no reporting area
+    // to anchor to, so this renders in `TimeZone.current` -- what a real
+    // widget host, and Steve manually testing this build, actually see.
+    //
+    // KNOWN COST, not overlooked: this makes `test*StaleData`'s golden PNGs
+    // (BluegullAQIWidgetSnapshotTests) depend on the recording machine's
+    // TimeZone.current/DST state, which the relative formatting this
+    // replaces never did. Real-usage correctness wins over snapshot
+    // convenience here -- rendering this in UTC to keep the goldens
+    // machine-independent would show Steve a time that doesn't match his own
+    // clock while he's manually testing it, which is a worse trade. Expect
+    // `RECORD_SNAPSHOTS=1 swift test --filter BluegullAQIWidgetSnapshotTests`
+    // to need re-running (reviewed as always, per that command's own doc
+    // comment) after this change, and again if it's ever re-recorded on a
+    // machine in a different zone.
     private var staleCaption: String? {
         guard let lastSuccessfulFetchDate = entry.lastSuccessfulFetchDate else { return nil }
-        let formatter = RelativeDateTimeFormatter()
+        let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US")
-        let relative = formatter.localizedString(for: lastSuccessfulFetchDate, relativeTo: entry.date)
-        return "Last updated \(relative)"
+        formatter.dateFormat = "EEE MMM d, h:mm a"
+        return "Last updated \(formatter.string(from: lastSuccessfulFetchDate))"
     }
 }
 

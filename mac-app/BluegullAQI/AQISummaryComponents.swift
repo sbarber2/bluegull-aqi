@@ -64,11 +64,30 @@ struct DisclaimerFooter: View {
 /// the tiny always-visible menu bar sliver. Falls back to a generic
 /// template icon when there's no reading yet (never fetched, or the most
 /// recent fetch failed with nothing previously cached to fall back to).
+///
+/// Also falls back -- to the same icon plus an em dash -- once `freshness`
+/// says the reading is no longer fresh (bluegull-aqi-e70.31). Steve was
+/// explicit: "I never want to show stale data on the menu bar... no one
+/// will notice it's stale." A single glanceable number with a category
+/// color has no visual room to qualify itself as aged, unlike the popover
+/// (which shows an explicit timestamp) or the widget (which will show one
+/// per bluegull-aqi-dc2.6/dc2.7) -- so this surface's bar is stricter: past
+/// fresh means "don't show the number at all," not "show it dimmed."
+///
+/// The dash was chosen over the bare icon alone after Steve reviewed
+/// rendered mockups of both: the icon alone reads as decorative and
+/// communicates nothing, while an icon it's already using for "no reading
+/// yet" doesn't distinguish "never fetched" from "went stale" -- the dash
+/// is the conventional "no value in this slot" mark and reads as neither
+/// mid-fetch (which an ellipsis would suggest, and nothing is fetching) nor
+/// alarming (which a "?" would).
 struct MenuBarStatusLabel: View {
     let reading: AQIReading?
+    let freshness: AQIFreshness?
 
     var body: some View {
-        if let reading, let headline = reading.headlinePollutant,
+        if let reading, freshness == .fresh,
+           let headline = reading.headlinePollutant,
            let aqi = headline.nowcastAQI, let category = headline.category {
             HStack(spacing: 4) {
                 Circle()
@@ -76,6 +95,16 @@ struct MenuBarStatusLabel: View {
                     .frame(width: 8, height: 8)
                     .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5))
                 Text("\(aqi)")
+            }
+        } else if reading != nil {
+            // A reading exists but isn't `.fresh` (`.stale`, or freshness
+            // itself somehow unavailable for it) -- distinct from the
+            // never-fetched case below only in spirit; both render
+            // identically on purpose, since a stale number is exactly as
+            // unusable to glance at as no number.
+            HStack(spacing: 4) {
+                Image(systemName: "aqi.medium")
+                Text("—")
             }
         } else {
             Image(systemName: "aqi.medium")

@@ -155,6 +155,48 @@ final class PollutantReadingTests: XCTestCase {
         XCTAssertEqual(reading.attributionText, "Data courtesy of Massachusetts Dept. of Environmental Protection")
     }
 
+    // MARK: - observedAt / observedAtDisplay (bluegull-aqi-dc2.7)
+
+    func testObservedAtParsesZeroPaddedHour() throws {
+        let reading = try JSONDecoder().decode(PollutantReading.self, from: Data(fixtureJSON.utf8))
+        // fixtureJSON: dateObserved "2026-07-29", hourObserved "14:00", PDT.
+        var components = DateComponents()
+        components.year = 2026; components.month = 7; components.day = 29
+        components.hour = 14; components.minute = 0
+        components.timeZone = TimeZone(abbreviation: "PDT")
+        let expected = Calendar(identifier: .gregorian).date(from: components)
+        XCTAssertEqual(reading.observedAt, expected)
+    }
+
+    func testObservedAtParsesNonZeroPaddedHour() throws {
+        // Regression fixture: a real 2026-08-05 AirNow response for Boston
+        // Metro had hourObserved "7:00", not "07:00" -- DateFormatter's "HH"
+        // silently fails to parse a single-digit hour, which would have
+        // made this nil for roughly a third of the day's real observations.
+        let json = fixtureJSON
+            .replacingOccurrences(of: "\"dateObserved\": \"2026-07-29\"", with: "\"dateObserved\": \"2026-08-05\"")
+            .replacingOccurrences(of: "\"hourObserved\": \"14:00\"", with: "\"hourObserved\": \"7:00\"")
+            .replacingOccurrences(of: "\"localTimeZone\": \"PDT\"", with: "\"localTimeZone\": \"EDT\"")
+        let reading = try JSONDecoder().decode(PollutantReading.self, from: Data(json.utf8))
+        XCTAssertNotNil(reading.observedAt)
+    }
+
+    func testObservedAtDisplayIsAbsoluteNeverRelative() throws {
+        let reading = try JSONDecoder().decode(PollutantReading.self, from: Data(fixtureJSON.utf8))
+        let display = try XCTUnwrap(reading.observedAtDisplay)
+        // Exact format, not just non-nil: this is the string Steve reads,
+        // and the whole point of bluegull-aqi-dc2.7 is that it says a real
+        // date/time, not "X hours ago" or similar.
+        XCTAssertEqual(display, "Wed Jul 29, 2:00 PM PDT")
+    }
+
+    func testObservedAtNilForUnparsableFields() throws {
+        let json = fixtureJSON.replacingOccurrences(of: "\"hourObserved\": \"14:00\"", with: "\"hourObserved\": \"not-a-time\"")
+        let reading = try JSONDecoder().decode(PollutantReading.self, from: Data(json.utf8))
+        XCTAssertNil(reading.observedAt)
+        XCTAssertNil(reading.observedAtDisplay)
+    }
+
     func testCodableRoundTrip() throws {
         let original = try JSONDecoder().decode(PollutantReading.self, from: Data(fixtureJSON.utf8))
         let reEncoded = try JSONEncoder().encode(original)

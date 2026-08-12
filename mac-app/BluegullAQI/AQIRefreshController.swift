@@ -47,6 +47,35 @@ final class AQIRefreshController {
     // with no explanation of how old it is.
     private(set) var lastFetchedAt: Date?
 
+    /// Live freshness of `latestReading` specifically (bluegull-aqi-e70.31)
+    /// -- Steve was explicit the menu bar, as a single glanceable number
+    /// with no room to qualify it, must never show data old enough to be
+    /// misleading; past the soft TTL it must stop showing a number at all,
+    /// not just look identical to a fresh one.
+    ///
+    /// Deliberately NOT derived from `lastFetchedAt` above, even though that
+    /// looks like the obvious signal: `lastFetchedAt`
+    /// (`AppGroupCache.lastSuccessfulFetchDate`) is a GLOBAL "some fetch,
+    /// somewhere, by either process, succeeded" timestamp -- shared with the
+    /// popover's own "last updated" caption (bluegull-aqi-dc2.1), where that
+    /// global scope is exactly what's wanted. Gating THIS reading's
+    /// staleness on it would be wrong: a placed widget in another process
+    /// fetching a completely different pinned location bumps that same
+    /// timestamp, which would make a genuinely stale `latestReading` look
+    /// fresh -- silently reintroducing the bug this bead exists to fix.
+    ///
+    /// Computed on every access against `latestReading.location`'s own cache
+    /// entry and the wall clock, rather than cached at fetch time, so it
+    /// can't drift out of sync between refresh cycles the way a stored flag
+    /// could. `AppGroupCache.freshness(for:)` never returns `.expired` (see
+    /// that type's own doc comment) -- `get`'s cascade already stops
+    /// returning a reading past the hard threshold, so there's nothing left
+    /// to be `.expired` about by the time anything reaches here.
+    var latestReadingFreshness: AQIFreshness? {
+        guard let latestReading else { return nil }
+        return cache.freshness(for: latestReading.location.rounded, now: Date())
+    }
+
     private let locationResolver: LocationResolver
     private let pinnedLocationsStore: PinnedLocationsStore
     private let coordinator: AQIFetchCoordinator
