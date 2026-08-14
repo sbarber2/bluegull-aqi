@@ -70,6 +70,17 @@ final class BluegullAQIWidgetSnapshotTests: XCTestCase {
         assertSnapshot(staleEntry, family: .systemSmall, size: Self.smallSize, name: "small-stale-data")
     }
 
+    // bluegull-aqi-dc2.6: a different condition from `testSmallStaleData`
+    // above -- that fixture has no surviving `reading` at all. This one does:
+    // `AQIFreshness.stale` (bluegull-aqi-dc2.5), a reading still shown but
+    // aged past the soft TTL, marked here rather than looking identical to a
+    // fresh one.
+    @MainActor
+    func testSmallAgedReading() {
+        let entry = agedEntry(withPollutants: [pollutant("PM2.5", aqi: 78, category: "Moderate")])
+        assertSnapshot(entry, family: .systemSmall, size: Self.smallSize, name: "small-aged-reading")
+    }
+
     @MainActor
     func testMediumTypical() {
         let entry = entry(withPollutants: [
@@ -96,6 +107,16 @@ final class BluegullAQIWidgetSnapshotTests: XCTestCase {
     @MainActor
     func testMediumStaleData() {
         assertSnapshot(staleEntry, family: .systemMedium, size: Self.mediumSize, name: "medium-stale-data")
+    }
+
+    // See `testSmallAgedReading`'s comment -- same distinction, medium layout.
+    @MainActor
+    func testMediumAgedReading() {
+        let entry = agedEntry(withPollutants: [
+            pollutant("PM2.5", aqi: 78, category: "Moderate"),
+            pollutant("OZONE", aqi: 42, category: "Good"),
+        ])
+        assertSnapshot(entry, family: .systemMedium, size: Self.mediumSize, name: "medium-aged-reading")
     }
 
     @MainActor
@@ -126,6 +147,17 @@ final class BluegullAQIWidgetSnapshotTests: XCTestCase {
     @MainActor
     func testLargeStaleData() {
         assertSnapshot(staleEntry, family: .systemLarge, size: Self.largeSize, name: "large-stale-data")
+    }
+
+    // See `testSmallAgedReading`'s comment -- same distinction, large layout.
+    @MainActor
+    func testLargeAgedReading() {
+        let entry = agedEntry(withPollutants: [
+            pollutant("PM2.5", aqi: 78, category: "Moderate"),
+            pollutant("OZONE", aqi: 42, category: "Good"),
+            pollutant("PM10", aqi: 15, category: "Good"),
+        ])
+        assertSnapshot(entry, family: .systemLarge, size: Self.largeSize, name: "large-aged-reading")
     }
 
     @MainActor
@@ -180,6 +212,19 @@ final class BluegullAQIWidgetSnapshotTests: XCTestCase {
         let location = Location(latitude: 37.7749, longitude: -122.4194)
         let reading = AQIReading(location: location, pollutants: pollutants)
         return BluegullAQIWidgetEntry(date: fixedDate, reading: reading, configuredLocation: location)
+    }
+
+    // bluegull-aqi-dc2.6: `reading` present but `freshness == .stale` -- the
+    // condition this bead adds an indicator for, distinct from `staleEntry`
+    // above (no surviving reading). `pollutant()`'s fixed dateObserved/
+    // hourObserved/localTimeZone make the resulting `observedAtDisplay`
+    // caption deterministic regardless of the recording machine's own clock
+    // or time zone (unlike `staleCaption`'s `TimeZone.current` -- see
+    // `BluegullAQIWidgetView`'s doc comment on that property).
+    private func agedEntry(withPollutants pollutants: [PollutantReading]) -> BluegullAQIWidgetEntry {
+        let location = Location(latitude: 37.7749, longitude: -122.4194)
+        let reading = AQIReading(location: location, pollutants: pollutants)
+        return BluegullAQIWidgetEntry(date: fixedDate, reading: reading, configuredLocation: location, freshness: .stale)
     }
 
     private func pollutant(_ parameterName: String, aqi: Int, category: String) -> PollutantReading {

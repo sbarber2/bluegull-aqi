@@ -38,11 +38,11 @@ public struct BluegullAQIWidgetView: View {
                let category = headline.category {
                 switch family {
                 case .systemSmall:
-                    SmallWidgetLayout(aqi: aqi, category: category, locationName: entry.locationName)
+                    SmallWidgetLayout(aqi: aqi, category: category, locationName: entry.locationName, isStale: isStale)
                 case .systemMedium:
-                    MediumWidgetLayout(aqi: aqi, category: category, reading: reading, headline: headline, locationName: entry.locationName)
+                    MediumWidgetLayout(aqi: aqi, category: category, reading: reading, headline: headline, locationName: entry.locationName, isStale: isStale, agedCaption: agedReadingCaption)
                 default:
-                    LargeWidgetLayout(aqi: aqi, category: category, reading: reading, locationName: entry.locationName)
+                    LargeWidgetLayout(aqi: aqi, category: category, reading: reading, locationName: entry.locationName, isStale: isStale, agedCaption: agedReadingCaption)
                 }
             } else {
                 // bluegull-aqi-dc2.1: distinguishes "never fetched" (no
@@ -130,6 +130,27 @@ public struct BluegullAQIWidgetView: View {
         formatter.dateFormat = "EEE MMM d, h:mm a"
         return "Last updated \(formatter.string(from: lastSuccessfulFetchDate))"
     }
+
+    // bluegull-aqi-dc2.6: a *different* condition from `staleCaption` above --
+    // that one describes the empty state (no reading survived past its hard
+    // TTL). This describes `AQIFreshness.stale` (bluegull-aqi-dc2.5): a
+    // reading is still present and still shown, just aged past the soft TTL.
+    // The layouts key their indicator off `isStale` alone (not this caption)
+    // so a reading still renders as visibly aged even if `agedReadingCaption`
+    // comes back nil.
+    private var isStale: Bool { entry.freshness == .stale }
+
+    // Absolute, per bluegull-aqi-dc2.7's format constraint on this bead --
+    // reuses `PollutantReading.observedAtDisplay` (the actual AirNow
+    // observation instant, in the observation's own reporting-area zone)
+    // rather than inventing a second relative-vs-absolute formatter here.
+    // nil whenever `isStale` is false, or when the headline pollutant's
+    // observation fields didn't parse (see `observedAt`'s own doc comment) --
+    // in that fallback case the layouts still show the plain `isStale` icon.
+    private var agedReadingCaption: String? {
+        guard isStale else { return nil }
+        return entry.reading?.headlinePollutant?.observedAtDisplay
+    }
 }
 
 /// bluegull-aqi-mtm.4: compact -- AQI number, official EPA category color,
@@ -145,6 +166,7 @@ struct SmallWidgetLayout: View {
     let aqi: Int
     let category: AQICategory
     let locationName: String
+    let isStale: Bool
 
     var body: some View {
         VStack(spacing: 6) {
@@ -169,6 +191,17 @@ struct SmallWidgetLayout: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        // bluegull-aqi-dc2.6: no room in `.systemSmall` for the absolute
+        // aged-reading caption Medium/Large show -- a corner badge is the
+        // whole indicator here, same "still shown, marked as aged" intent.
+        .overlay(alignment: .topTrailing) {
+            if isStale {
+                Image(systemName: "clock.badge.exclamationmark")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(4)
+            }
+        }
     }
 }
 
@@ -185,6 +218,8 @@ struct MediumWidgetLayout: View {
     let reading: AQIReading
     let headline: PollutantReading
     let locationName: String
+    let isStale: Bool
+    let agedCaption: String?
 
     private var otherPollutants: [PollutantReading] {
         Array(
@@ -237,8 +272,29 @@ struct MediumWidgetLayout: View {
 
                 Spacer(minLength: 0)
             }
+
+            // bluegull-aqi-dc2.6: distinct wording/property from
+            // `BluegullAQIWidgetView.staleCaption` -- see that property's
+            // own doc comment for why they're deliberately not the same
+            // condition.
+            if isStale {
+                agedReadingRow
+            }
         }
         .padding()
+    }
+
+    private var agedReadingRow: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "clock.badge.exclamationmark")
+                .font(.caption2)
+            if let agedCaption {
+                Text(agedCaption)
+                    .font(.caption2)
+                    .lineLimit(1)
+            }
+        }
+        .foregroundStyle(.secondary)
     }
 
     private func pollutantRow(_ pollutant: PollutantReading) -> some View {
@@ -272,6 +328,8 @@ struct LargeWidgetLayout: View {
     let category: AQICategory
     let reading: AQIReading
     let locationName: String
+    let isStale: Bool
+    let agedCaption: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -305,8 +363,29 @@ struct LargeWidgetLayout: View {
             }
 
             Spacer(minLength: 0)
+
+            // bluegull-aqi-dc2.6: distinct wording/property from
+            // `BluegullAQIWidgetView.staleCaption` -- see that property's
+            // own doc comment for why they're deliberately not the same
+            // condition.
+            if isStale {
+                agedReadingRow
+            }
         }
         .padding()
+    }
+
+    private var agedReadingRow: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "clock.badge.exclamationmark")
+                .font(.caption2)
+            if let agedCaption {
+                Text(agedCaption)
+                    .font(.caption2)
+                    .lineLimit(1)
+            }
+        }
+        .foregroundStyle(.secondary)
     }
 
     private func pollutantRow(_ pollutant: PollutantReading) -> some View {

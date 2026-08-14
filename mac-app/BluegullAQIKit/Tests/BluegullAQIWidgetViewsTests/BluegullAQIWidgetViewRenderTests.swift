@@ -36,7 +36,17 @@ final class BluegullAQIWidgetViewRenderTests: XCTestCase {
         }
     }
 
-    private func sampleEntry() -> BluegullAQIWidgetEntry {
+    // bluegull-aqi-dc2.6: freshness == .stale still renders (in all three
+    // layouts) rather than crashing when the aged indicator is added.
+    @MainActor
+    func testAgedReadingStateRendersWithoutCrashingForEveryFamily() {
+        let entry = sampleEntry(freshness: .stale)
+        for family: WidgetFamily in [.systemSmall, .systemMedium, .systemLarge] {
+            XCTAssertNotNil(renderedImage(for: entry, family: family))
+        }
+    }
+
+    private func sampleEntry(freshness: AQIFreshness? = nil) -> BluegullAQIWidgetEntry {
         let location = Location(latitude: 37.77, longitude: -122.42)
         let reading = AQIReading(
             location: location,
@@ -58,7 +68,7 @@ final class BluegullAQIWidgetViewRenderTests: XCTestCase {
                 ),
             ]
         )
-        return BluegullAQIWidgetEntry(date: Date(), reading: reading, configuredLocation: location)
+        return BluegullAQIWidgetEntry(date: Date(), reading: reading, configuredLocation: location, freshness: freshness)
     }
 
     @MainActor

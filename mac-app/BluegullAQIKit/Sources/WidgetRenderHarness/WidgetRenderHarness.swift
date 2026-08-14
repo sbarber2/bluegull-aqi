@@ -40,6 +40,9 @@ struct WidgetRenderHarness {
 
         let entryWithData = BluegullAQIWidgetEntry(date: Date(), reading: sampleReading, configuredLocation: sampleLocation)
         let entryNoData = BluegullAQIWidgetEntry(date: Date(), reading: nil)
+        // bluegull-aqi-dc2.6: reading present but AQIFreshness.stale --
+        // distinct from entryNoData above (no surviving reading at all).
+        let entryAged = BluegullAQIWidgetEntry(date: Date(), reading: sampleReading, configuredLocation: sampleLocation, freshness: .stale)
 
         let fixtures: [(name: String, entry: BluegullAQIWidgetEntry, family: WidgetFamily)] = [
             ("small", entryWithData, .systemSmall),
@@ -48,6 +51,9 @@ struct WidgetRenderHarness {
             ("small-no-data", entryNoData, .systemSmall),
             ("medium-no-data", entryNoData, .systemMedium),
             ("large-no-data", entryNoData, .systemLarge),
+            ("small-aged-reading", entryAged, .systemSmall),
+            ("medium-aged-reading", entryAged, .systemMedium),
+            ("large-aged-reading", entryAged, .systemLarge),
         ]
 
         var failureCount = 0
