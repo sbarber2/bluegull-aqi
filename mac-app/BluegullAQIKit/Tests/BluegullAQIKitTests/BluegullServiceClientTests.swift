@@ -46,7 +46,7 @@ final class BluegullServiceClientTests: XCTestCase {
         MockURLProtocol.requestHandler = { [sampleResponseJSON] request in
             self.mockResponse(statusCode: 200, body: sampleResponseJSON, url: request.url!)
         }
-        let client = BluegullServiceClient(urlSession: MockURLProtocol.makeSession())
+        let client = BluegullServiceClient(urlSession: MockURLProtocol.makeSession(), overrideDefaults: nil)
 
         let reading = try await client.fetchCurrentObservations(location: location)
 
@@ -63,7 +63,7 @@ final class BluegullServiceClientTests: XCTestCase {
             capturedRequest = request
             return self.mockResponse(statusCode: 200, body: sampleResponseJSON, url: request.url!)
         }
-        let client = BluegullServiceClient(urlSession: MockURLProtocol.makeSession())
+        let client = BluegullServiceClient(urlSession: MockURLProtocol.makeSession(), overrideDefaults: nil)
         _ = try await client.fetchCurrentObservations(location: location)
 
         let url = try XCTUnwrap(capturedRequest?.url)
@@ -84,7 +84,7 @@ final class BluegullServiceClientTests: XCTestCase {
     }
 
     func testErrorBodyThrowsWebServiceErrorWithMessage() async throws {
-        let client = BluegullServiceClient(urlSession: MockURLProtocol.makeSession())
+        let client = BluegullServiceClient(urlSession: MockURLProtocol.makeSession(), overrideDefaults: nil)
         MockURLProtocol.requestHandler = { request in
             self.mockResponse(statusCode: 502, body: #"{"error": "upstream unavailable"}"#, url: request.url!)
         }
@@ -103,7 +103,7 @@ final class BluegullServiceClientTests: XCTestCase {
         // the client shouldn't crash even if that contract were ever
         // violated (e.g. an API Gateway-generated 5xx bypassing the
         // handler entirely).
-        let client = BluegullServiceClient(urlSession: MockURLProtocol.makeSession())
+        let client = BluegullServiceClient(urlSession: MockURLProtocol.makeSession(), overrideDefaults: nil)
         MockURLProtocol.requestHandler = { request in
             self.mockResponse(statusCode: 503, body: "Service Unavailable", url: request.url!)
         }
@@ -118,7 +118,7 @@ final class BluegullServiceClientTests: XCTestCase {
     }
 
     func testUnexpectedResponseShapeThrowsDecodingFailed() async throws {
-        let client = BluegullServiceClient(urlSession: MockURLProtocol.makeSession())
+        let client = BluegullServiceClient(urlSession: MockURLProtocol.makeSession(), overrideDefaults: nil)
         MockURLProtocol.requestHandler = { request in
             self.mockResponse(statusCode: 200, body: "{\"unexpected\": \"shape\"}", url: request.url!)
         }
@@ -129,5 +129,42 @@ final class BluegullServiceClientTests: XCTestCase {
         } catch AirNowError.decodingFailed {
             // expected
         }
+    }
+
+    // bluegull-aqi-e70.28: the hidden dev override, when set, redirects
+    // requests instead of the hardcoded dev stack.
+    func testDevOverrideRedirectsRequestToOverriddenHost() async throws {
+        let overrideDefaults = try XCTUnwrap(UserDefaults(suiteName: "e70.28-override-test-\(UUID())"))
+        overrideDefaults.set("https://localhost:9999/aqi", forKey: DevServiceURLOverrideStore.userDefaultsKey)
+
+        var capturedRequest: URLRequest?
+        MockURLProtocol.requestHandler = { [sampleResponseJSON] request in
+            capturedRequest = request
+            return self.mockResponse(statusCode: 200, body: sampleResponseJSON, url: request.url!)
+        }
+        let client = BluegullServiceClient(urlSession: MockURLProtocol.makeSession(), overrideDefaults: overrideDefaults)
+        _ = try await client.fetchCurrentObservations(location: location)
+
+        let url = try XCTUnwrap(capturedRequest?.url)
+        XCTAssertEqual(url.host, "localhost")
+        XCTAssertEqual(url.port, 9999)
+        XCTAssertEqual(url.path, "/aqi")
+    }
+
+    // No override key ever written -- same as production's real App Group
+    // suite before Steve has ever touched the hidden field.
+    func testNoDevOverrideStoredFallsBackToDefaultHost() async throws {
+        let overrideDefaults = try XCTUnwrap(UserDefaults(suiteName: "e70.28-no-override-test-\(UUID())"))
+
+        var capturedRequest: URLRequest?
+        MockURLProtocol.requestHandler = { [sampleResponseJSON] request in
+            capturedRequest = request
+            return self.mockResponse(statusCode: 200, body: sampleResponseJSON, url: request.url!)
+        }
+        let client = BluegullServiceClient(urlSession: MockURLProtocol.makeSession(), overrideDefaults: overrideDefaults)
+        _ = try await client.fetchCurrentObservations(location: location)
+
+        let url = try XCTUnwrap(capturedRequest?.url)
+        XCTAssertEqual(url.host, "dev.aqi.bluegull.solutions")
     }
 }

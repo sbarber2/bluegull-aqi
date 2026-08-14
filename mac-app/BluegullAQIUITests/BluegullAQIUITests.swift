@@ -64,6 +64,10 @@ final class BluegullAQIUITests: XCTestCase {
     func testAirNowAPIKeyEntryFlow() throws {
         openSettings()
 
+        // bluegull-aqi-e70.30: the field is disabled outside Direct mode,
+        // and the default mode is Service -- switch modes first.
+        app.segmentedControls["dataSourceModePicker"].buttons["Direct (use my own AirNow key)"].click()
+
         let field = app.secureTextFields["airNowAPIKeyField"]
         XCTAssertTrue(field.waitForExistence(timeout: 5))
         field.click()
@@ -76,6 +80,20 @@ final class BluegullAQIUITests: XCTestCase {
         let clearButton = app.buttons["clearAPIKeyButton"]
         XCTAssertTrue(clearButton.isEnabled)
         clearButton.click()
+    }
+
+    // bluegull-aqi-e70.30: the key is irrelevant in Service mode (the
+    // default), so the field should start disabled and become editable
+    // only after switching to Direct.
+    func testAPIKeyFieldDisabledOutsideDirectMode() throws {
+        openSettings()
+
+        let field = app.secureTextFields["airNowAPIKeyField"]
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
+        XCTAssertFalse(field.isEnabled)
+
+        app.segmentedControls["dataSourceModePicker"].buttons["Direct (use my own AirNow key)"].click()
+        XCTAssertTrue(field.isEnabled)
     }
 
     func testAddAndRemovePinnedLocation() throws {
@@ -109,6 +127,33 @@ final class BluegullAQIUITests: XCTestCase {
         XCTAssertTrue(toggle.waitForExistence(timeout: 5))
         toggle.click()
         toggle.click()
+    }
+
+    // bluegull-aqi-e70.29: confirms the toggle is reachable and clickable --
+    // same scope/rationale as testMenuBarColorStyleToggleIsReachableAndTogglable
+    // just above.
+    func testMenuBarAQILabelToggleIsReachableAndTogglable() throws {
+        openSettings()
+
+        let toggle = app.checkBoxes["menuBarAQILabelToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        toggle.click()
+        toggle.click()
+    }
+
+    // bluegull-aqi-e70.28: the dev-only backend URL override field is
+    // hidden until the "Settings" title is Option-clicked -- confirms both
+    // that it's absent by default and that the gesture reveals it.
+    func testDevServiceURLOverrideFieldIsHiddenUntilRevealedByOptionClick() throws {
+        openSettings()
+
+        let field = app.textFields["devServiceURLOverrideField"]
+        XCTAssertFalse(field.exists)
+
+        XCUIElement.perform(withKeyModifiers: .option) {
+            app.staticTexts["Settings"].click()
+        }
+        XCTAssertTrue(field.waitForExistence(timeout: 5))
     }
 
     private func openPopover() {

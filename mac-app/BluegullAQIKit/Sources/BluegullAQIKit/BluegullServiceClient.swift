@@ -14,21 +14,37 @@ import Foundation
 /// error bodies are `{"error": "..."}`, not AirNow's own
 /// `{"WebServiceError": [...]}` shape.
 ///
-/// `baseURL` is hardcoded to the dev stack (bluegull-aqi-q9r.10) --
+/// `defaultBaseURL` is hardcoded to the dev stack (bluegull-aqi-q9r.10) --
 /// deliberately, since that's the only environment actually deployed
 /// right now. Must switch to the prod custom domain before an App Store
 /// release; tracked as bluegull-aqi-fw4.6 so it isn't silently forgotten.
+///
+/// `overrideDefaults` (bluegull-aqi-e70.28) lets a hidden dev-only Settings
+/// field redirect requests elsewhere -- see `DevServiceURLOverrideStore`'s
+/// own doc comment for why that's safe to leave wired in even in a shipping
+/// build. Resolved fresh on every request via `resolvedBaseURL`, not
+/// captured once at init, so flipping the override in Settings takes effect
+/// on this client's next call even though `AQIFetchCoordinator` (and in
+/// turn `AQIRefreshController`) construct one `BluegullServiceClient` and
+/// reuse it for the app's whole run rather than rebuilding it per fetch.
 public struct BluegullServiceClient: Sendable {
-    private static let baseURL = URL(string: "https://dev.aqi.bluegull.solutions/aqi")!
+    private static let defaultBaseURL = URL(string: "https://dev.aqi.bluegull.solutions/aqi")!
     private static let requestTimeout: TimeInterval = 10
 
     private let urlSession: URLSession
+    // UserDefaults isn't formally Sendable in the SDK, but Apple documents
+    // it as safe to use from multiple threads -- same treatment as
+    // `UserDefaultsCacheStore`'s own `defaults` property.
+    private nonisolated(unsafe) let overrideDefaults: UserDefaults?
 
     /// `urlSession` is injectable for testing, same reasoning as
     /// `AirNowDirectClient`'s own doc comment -- no live traffic against
-    /// either AirNow or our own backend in the test suite.
-    public init(urlSession: URLSession = .shared) {
+    /// either AirNow or our own backend in the test suite. `overrideDefaults`
+    /// is injectable for the same reason: tests point it at an isolated
+    /// suite instead of the real App Group one.
+    public init(urlSession: URLSession = .shared, overrideDefaults: UserDefaults? = DevServiceURLOverrideStore.sharedDefaults) {
         self.urlSession = urlSession
+        self.overrideDefaults = overrideDefaults
     }
 
     /// Fetches current NowCast observations for a location via the
@@ -44,7 +60,7 @@ public struct BluegullServiceClient: Sendable {
     /// regardless of what the server does with it.
     public func fetchCurrentObservations(location: Location) async throws -> AQIReading {
         let location = location.rounded
-        let request = try Self.makeRequest(location: location)
+        let request = try makeRequest(location: location)
 
         let data: Data
         let response: URLResponse
@@ -72,7 +88,8 @@ public struct BluegullServiceClient: Sendable {
         return AQIReading(location: location, pollutants: decoded.observations)
     }
 
-    private static func makeRequest(location: Location) throws -> URLRequest {
+    private func makeRequest(location: Location) throws -> URLRequest {
+        let baseURL = DevServiceURLOverrideStore.resolvedBaseURL(fallback: Self.defaultBaseURL, in: overrideDefaults)
         guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
             throw AirNowError.unexpectedResponse
         }
@@ -83,7 +100,7 @@ public struct BluegullServiceClient: Sendable {
         guard let url = components.url else {
             throw AirNowError.unexpectedResponse
         }
-        var request = URLRequest(url: url, timeoutInterval: requestTimeout)
+        var request = URLRequest(url: url, timeoutInterval: Self.requestTimeout)
         request.httpMethod = "GET"
         return request
     }

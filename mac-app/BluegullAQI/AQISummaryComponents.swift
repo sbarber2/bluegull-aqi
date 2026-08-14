@@ -66,6 +66,13 @@ struct DisclaimerFooter: View {
 enum MenuBarAppearanceStore {
     static let colorPillEnabledKey = "menuBarCategoryColorPillEnabled"
     static let defaultColorPillEnabled = true
+
+    // bluegull-aqi-e70.29: off by default -- Steve's own concern raising
+    // this was that a permanent label would eat into scarce menu bar real
+    // estate alongside his other menu bar items, unlike the color pill
+    // above, which he wanted on by default.
+    static let aqiLabelEnabledKey = "menuBarAQILabelEnabled"
+    static let defaultAQILabelEnabled = false
 }
 
 /// Settings toggle for `MenuBarStatusLabel`'s colored-pill vs. plain-dot
@@ -79,6 +86,19 @@ struct MenuBarColorStyleToggle: View {
     var body: some View {
         Toggle("Show AQI category color in menu bar", isOn: $isColorPillEnabled)
             .accessibilityIdentifier("menuBarColorStyleToggle")
+    }
+}
+
+/// Settings toggle for `MenuBarStatusLabel`'s optional "AQI" label next to
+/// the bare number (bluegull-aqi-e70.29). Same one-struct-per-control
+/// precedent as `MenuBarColorStyleToggle` just above.
+struct MenuBarAQILabelToggle: View {
+    @AppStorage(MenuBarAppearanceStore.aqiLabelEnabledKey)
+    private var isAQILabelEnabled = MenuBarAppearanceStore.defaultAQILabelEnabled
+
+    var body: some View {
+        Toggle("Show \"AQI\" label in menu bar", isOn: $isAQILabelEnabled)
+            .accessibilityIdentifier("menuBarAQILabelToggle")
     }
 }
 
@@ -123,6 +143,10 @@ struct MenuBarStatusLabel: View {
     @AppStorage(MenuBarAppearanceStore.colorPillEnabledKey)
     private var isColorPillEnabled = MenuBarAppearanceStore.defaultColorPillEnabled
 
+    // bluegull-aqi-e70.29
+    @AppStorage(MenuBarAppearanceStore.aqiLabelEnabledKey)
+    private var isAQILabelEnabled = MenuBarAppearanceStore.defaultAQILabelEnabled
+
     var body: some View {
         if let reading, freshness == .fresh,
            let headline = reading.headlinePollutant,
@@ -150,7 +174,7 @@ struct MenuBarStatusLabel: View {
                         .fill(category.color.swiftUIColor)
                         .frame(width: 8, height: 8)
                         .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5))
-                    Text("\(aqi)")
+                    Text(labelText(aqi: aqi))
                 }
             }
         } else if reading != nil {
@@ -176,9 +200,15 @@ struct MenuBarStatusLabel: View {
     // padding/font produce, same as `WidgetRenderHarness` and
     // `GoldenImageAssertion` both already rely on `ImageRenderer` sizing to
     // its content rather than an explicit `.frame`.
+    // bluegull-aqi-e70.29: "AQI 45", not "45 AQI" -- Steve's call, label
+    // before value.
+    private func labelText(aqi: Int) -> String {
+        isAQILabelEnabled ? "AQI \(aqi)" : "\(aqi)"
+    }
+
     @MainActor
     private func pillImage(aqi: Int, category: AQICategory) -> NSImage? {
-        let content = Text("\(aqi)")
+        let content = Text(labelText(aqi: aqi))
             .font(.system(size: 13))
             .foregroundStyle(category.color.contrastingTextColor)
             .padding(.horizontal, 5)

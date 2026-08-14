@@ -14,6 +14,13 @@ struct AirNowAPIKeyEntryView: View {
     @State private var apiKey = ""
     @State private var hasSavedKey = false
     @State private var errorMessage: String?
+    @FocusState private var isFieldFocused: Bool
+
+    // bluegull-aqi-e70.30: the key is only meaningful in Direct mode --
+    // same store/key pattern as `DataSourceModeToggle`, so this can't
+    // disagree with it about what mode is actually selected.
+    @AppStorage(DataSourceModeStore.userDefaultsKey, store: DataSourceModeStore.sharedDefaults)
+    private var mode: DataSourceMode = DataSourceModeStore.defaultMode
 
     private let store: AirNowAPIKeyStore
 
@@ -27,6 +34,8 @@ struct AirNowAPIKeyEntryView: View {
                 .font(.headline)
             SecureField("Enter your AirNow API key", text: $apiKey)
                 .textFieldStyle(.roundedBorder)
+                .disabled(mode != .direct)
+                .focused($isFieldFocused)
                 .accessibilityIdentifier("airNowAPIKeyField")
             if let errorMessage {
                 Text(errorMessage)
@@ -42,6 +51,11 @@ struct AirNowAPIKeyEntryView: View {
                     .accessibilityIdentifier("clearAPIKeyButton")
             }
         }
+        // bluegull-aqi-e70.30: without this, AppKit hands this field
+        // first-responder status by default (it's the first focusable
+        // control in the settings window) -- pin the default focus state
+        // to unfocused instead of leaving it to that heuristic.
+        .defaultFocus($isFieldFocused, false)
         .onAppear { load() }
     }
 

@@ -30,11 +30,17 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismissWindow) private var dismissWindow
 
+    // bluegull-aqi-e70.28: Option-clicking the title reveals the hidden
+    // dev-only backend URL override below -- not a supported/shipping
+    // feature, so it's deliberately not behind an ordinary visible control.
+    @State private var isDevOverrideRevealed = false
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
                 Text("Settings")
                     .font(.title2.bold())
+                    .gesture(TapGesture().modifiers(.option).onEnded { isDevOverrideRevealed.toggle() })
                 Spacer()
                 Button("Done") { dismissWindow(id: "settings") }
                     .accessibilityIdentifier("settingsDoneButton")
@@ -47,6 +53,12 @@ struct SettingsView: View {
             PinnedLocationsView()
             Divider()
             MenuBarColorStyleToggle()
+            MenuBarAQILabelToggle()
+
+            if isDevOverrideRevealed {
+                Divider()
+                DevServiceURLOverrideView()
+            }
         }
         .padding()
         .frame(minWidth: 420, idealWidth: 460)

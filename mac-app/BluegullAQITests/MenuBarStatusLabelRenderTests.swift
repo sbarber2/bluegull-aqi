@@ -24,6 +24,20 @@ final class MenuBarStatusLabelRenderTests: XCTestCase {
         XCTAssertNotNil(image)
     }
 
+    // bluegull-aqi-e70.29: both styling paths (pill and plain dot) route
+    // the AQI label through separately -- confirms each renders with it on.
+    @MainActor
+    func testRendersWithoutCrashingWithAQILabelEnabledAndColorPill() {
+        let image = render(MenuBarStatusLabel(reading: sampleReading, freshness: .fresh), colorPillEnabled: true, aqiLabelEnabled: true)
+        XCTAssertNotNil(image)
+    }
+
+    @MainActor
+    func testRendersWithoutCrashingWithAQILabelEnabledAndPlainDot() {
+        let image = render(MenuBarStatusLabel(reading: sampleReading, freshness: .fresh), colorPillEnabled: false, aqiLabelEnabled: true)
+        XCTAssertNotNil(image)
+    }
+
     @MainActor
     func testRendersWithoutCrashingWhenStale() {
         // bluegull-aqi-e70.31: a stale reading falls back to the icon+dash,
@@ -67,17 +81,25 @@ final class MenuBarStatusLabelRenderTests: XCTestCase {
     // App Group/widget consumer -- see `MenuBarAppearanceStore`'s doc
     // comment), so there's no separate suite to isolate into instead.
     @MainActor
-    private func render(_ view: some View, colorPillEnabled: Bool) -> NSImage? {
-        let originalValue = UserDefaults.standard.object(forKey: MenuBarAppearanceStore.colorPillEnabledKey)
+    private func render(_ view: some View, colorPillEnabled: Bool, aqiLabelEnabled: Bool = false) -> NSImage? {
+        let defaults = UserDefaults.standard
+        let originalColorPillValue = defaults.object(forKey: MenuBarAppearanceStore.colorPillEnabledKey)
+        let originalAQILabelValue = defaults.object(forKey: MenuBarAppearanceStore.aqiLabelEnabledKey)
         defer {
-            if let originalValue {
-                UserDefaults.standard.set(originalValue, forKey: MenuBarAppearanceStore.colorPillEnabledKey)
-            } else {
-                UserDefaults.standard.removeObject(forKey: MenuBarAppearanceStore.colorPillEnabledKey)
-            }
+            restore(originalColorPillValue, forKey: MenuBarAppearanceStore.colorPillEnabledKey)
+            restore(originalAQILabelValue, forKey: MenuBarAppearanceStore.aqiLabelEnabledKey)
         }
-        UserDefaults.standard.set(colorPillEnabled, forKey: MenuBarAppearanceStore.colorPillEnabledKey)
+        defaults.set(colorPillEnabled, forKey: MenuBarAppearanceStore.colorPillEnabledKey)
+        defaults.set(aqiLabelEnabled, forKey: MenuBarAppearanceStore.aqiLabelEnabledKey)
         let renderer = ImageRenderer(content: view)
         return renderer.nsImage
+    }
+
+    private func restore(_ originalValue: Any?, forKey key: String) {
+        if let originalValue {
+            UserDefaults.standard.set(originalValue, forKey: key)
+        } else {
+            UserDefaults.standard.removeObject(forKey: key)
+        }
     }
 }
