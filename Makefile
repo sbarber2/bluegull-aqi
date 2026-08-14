@@ -30,6 +30,19 @@ PACKAGE_DMG_SOURCE_DIR := $(PACKAGE_BUILD_DIR)/dmg-source
 # setup. Not a secret itself (just a label); the credentials it points to
 # live in the login keychain, never in this repo.
 NOTARY_PROFILE := bluegull-aqi-notary
+# bluegull-aqi-fw4.9: CURRENT_PROJECT_VERSION (the build number that must
+# actually disambiguate one build from another -- MARKETING_VERSION in
+# project.yml is hand-bumped and stays the same across many builds) comes
+# from the git commit count, not a hand-maintained counter -- monotonic for
+# free as long as commits keep happening, no state file to forget to bump.
+# GIT_SHA is the short commit hash, stamped into Info.plist's GitCommitSHA
+# key (see project.yml) so a distributed .app/.dmg traces back to an exact
+# commit. `-dirty` flags a build made from an uncommitted working tree --
+# deliberately loud, since a "clean" git commit-based build number is a lie
+# if the tree wasn't actually clean when it was built.
+GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)$(shell git diff --quiet HEAD -- 2>/dev/null || echo -dirty)
+GIT_BUILD_NUMBER := $(shell git rev-list --count HEAD 2>/dev/null || echo 0)
+XCODEBUILD_VERSION_OVERRIDES := GIT_COMMIT_SHA=$(GIT_SHA) CURRENT_PROJECT_VERSION=$(GIT_BUILD_NUMBER)
 # DMG Finder-window layout (bluegull-aqi-b3r) -- window size in points,
 # icon centers in the same coordinate space. Keep DMG_ICON_X/DMG_APPLINK_X
 # averaging to half of DMG_WINDOW_W so the pair stays centered in the
@@ -208,7 +221,7 @@ record-snapshots:
 # or pass DEVELOPMENT_TEAM=XXXXXXXXXX here.
 app-build:
 	cd $(MAC_APP_DIR) && xcodegen generate
-	cd $(MAC_APP_DIR) && xcodebuild build -scheme BluegullAQI -configuration Debug -destination 'platform=macOS' -allowProvisioningUpdates
+	cd $(MAC_APP_DIR) && xcodebuild build -scheme BluegullAQI -configuration Debug -destination 'platform=macOS' -allowProvisioningUpdates $(XCODEBUILD_VERSION_OVERRIDES)
 
 # Builds, then launches the result -- the command-line equivalent of
 # Xcode's own Cmd+R. `app-build` is .PHONY, so `xcodegen generate` and
@@ -349,11 +362,12 @@ app-clean: app-stop widget-reset
 #      credential in your login keychain under the $(NOTARY_PROFILE) label,
 #      once, outside this repo.
 app-package:
+	@echo "Packaging build $(GIT_BUILD_NUMBER) ($(GIT_SHA))"
 	cd $(MAC_APP_DIR) && xcodegen generate
 	rm -rf $(PACKAGE_BUILD_DIR)
 	mkdir -p $(PACKAGE_BUILD_DIR)
 	cd $(MAC_APP_DIR) && xcodebuild archive -scheme BluegullAQI -configuration Release \
-		-archivePath build/BluegullAQI.xcarchive -allowProvisioningUpdates
+		-archivePath build/BluegullAQI.xcarchive -allowProvisioningUpdates $(XCODEBUILD_VERSION_OVERRIDES)
 	cd $(MAC_APP_DIR) && xcodebuild -exportArchive -archivePath build/BluegullAQI.xcarchive \
 		-exportPath build/export -exportOptionsPlist ExportOptions.plist -allowProvisioningUpdates
 	ditto -c -k --keepParent $(PACKAGE_APP) $(PACKAGE_BUILD_DIR)/BluegullAQI.zip

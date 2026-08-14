@@ -59,6 +59,15 @@ struct SettingsView: View {
                 Divider()
                 DevServiceURLOverrideView()
             }
+
+            Divider()
+            // bluegull-aqi-fw4.9: which exact build this is -- three
+            // ad-hoc DMGs went out to a tester all labeled "1.0" before
+            // this existed, indistinguishable from each other.
+            Text(AppVersionInfo.current)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .accessibilityIdentifier("appVersionLabel")
         }
         .padding()
         .frame(minWidth: 420, idealWidth: 460)
