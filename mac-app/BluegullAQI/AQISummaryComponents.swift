@@ -109,12 +109,16 @@ struct MenuBarStatusLabel: View {
     let freshness: AQIFreshness?
 
     // bluegull-aqi-e70.26: Steve's feedback was that the existing 8pt dot
-    // undersells the category color -- macOS doesn't force this to
-    // monochrome (SwiftUI content painted straight into a `MenuBarExtra`
-    // label isn't template-masked the way an `NSStatusItem.image` marked
-    // `isTemplate` is; the dot below already proves that empirically, it's
-    // shipped in full color today). Defaults on since this is Steve's own
-    // request; the toggle exists for anyone who prefers a quieter,
+    // undersells the category color. NOTE: the claim that the dot was
+    // already rendering in color on a real menu bar turned out to be
+    // unverified, not confirmed -- Steve himself wasn't certain he'd ever
+    // actually looked closely enough to check, and the first version of
+    // this feature (a live colored `Text`) shipped with zero color at all
+    // on his real menu bar despite rendering fine under `ImageRenderer`.
+    // What IS confirmed, as of the pre-rasterized-bitmap fix below
+    // (2026-08-14): a pre-rendered `Image` DOES render in full color on
+    // Steve's real menu bar. Defaults on since this is Steve's own request;
+    // the toggle exists for anyone who prefers a quieter,
     // HIG-conventional monochrome-ish menu bar.
     @AppStorage(MenuBarAppearanceStore.colorPillEnabledKey)
     private var isColorPillEnabled = MenuBarAppearanceStore.defaultColorPillEnabled
@@ -123,16 +127,23 @@ struct MenuBarStatusLabel: View {
         if let reading, freshness == .fresh,
            let headline = reading.headlinePollutant,
            let aqi = headline.nowcastAQI, let category = headline.category {
-            if isColorPillEnabled {
-                // Same colored-background + contrasting-text pattern as
-                // `AQICategory.color.contrastingTextColor`'s own doc comment
-                // (bluegull-aqi-mtm.19) -- verified against AirNow's own AQI
-                // Legend panel for all 6 TAD colors, not invented here.
-                Text("\(aqi)")
-                    .foregroundStyle(category.color.contrastingTextColor)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 1)
-                    .background(category.color.swiftUIColor, in: RoundedRectangle(cornerRadius: 4))
+            if isColorPillEnabled, let pillImage = pillImage(aqi: aqi, category: category) {
+                // Rendered as a pre-rasterized bitmap, not live `Text` --
+                // confirmed against the real running app (not assumed):
+                // `MenuBarExtra` forces `Text` color/background modifiers
+                // to the system's default menu-bar style regardless of
+                // container nesting, a documented SwiftUI limitation (both
+                // a bare colored `Text` and an `HStack`-wrapped one rendered
+                // with no color at all on Steve's actual menu bar, despite
+                // rendering correctly under `ImageRenderer`, which doesn't
+                // reproduce that restriction). Switching to a pre-rendered
+                // `Image` was confirmed by Steve to fix it (2026-08-14) --
+                // pre-rasterizing the colored-background + contrasting-text
+                // pattern from `AQICategory.color.contrastingTextColor`'s
+                // own doc comment (bluegull-aqi-mtm.19) into a bitmap
+                // sidesteps the `Text`-specific restriction instead of
+                // fighting it.
+                Image(nsImage: pillImage)
             } else {
                 HStack(spacing: 4) {
                     Circle()
@@ -155,5 +166,26 @@ struct MenuBarStatusLabel: View {
         } else {
             Image(systemName: "aqi.medium")
         }
+    }
+
+    // `size: 13` matches `NSFont.menuBarFont(ofSize: 0)`'s default point
+    // size (13pt) -- not derived programmatically, since this content never
+    // touches an `NSFont` API, just chosen to look right alongside the
+    // system's own menu bar text. `renderer.scale = 2` for a Retina-sharp
+    // bitmap; the label pixel size is whatever the rendered content's own
+    // padding/font produce, same as `WidgetRenderHarness` and
+    // `GoldenImageAssertion` both already rely on `ImageRenderer` sizing to
+    // its content rather than an explicit `.frame`.
+    @MainActor
+    private func pillImage(aqi: Int, category: AQICategory) -> NSImage? {
+        let content = Text("\(aqi)")
+            .font(.system(size: 13))
+            .foregroundStyle(category.color.contrastingTextColor)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(category.color.swiftUIColor, in: RoundedRectangle(cornerRadius: 4))
+        let renderer = ImageRenderer(content: content)
+        renderer.scale = 2
+        return renderer.nsImage
     }
 }
