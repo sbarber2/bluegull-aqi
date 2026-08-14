@@ -45,6 +45,8 @@ struct SettingsView: View {
             AirNowAPIKeyEntryView()
             Divider()
             PinnedLocationsView()
+            Divider()
+            MenuBarColorStyleToggle()
         }
         .padding()
         .frame(minWidth: 420, idealWidth: 460)

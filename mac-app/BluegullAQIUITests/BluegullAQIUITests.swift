@@ -99,6 +99,18 @@ final class BluegullAQIUITests: XCTestCase {
         // the point of triggering a real geocode is reachable.
     }
 
+    // bluegull-aqi-e70.26: confirms the toggle is reachable and clickable --
+    // not the resulting menu bar appearance itself, which `app.statusItems`
+    // can't inspect for color the way it can query control existence.
+    func testMenuBarColorStyleToggleIsReachableAndTogglable() throws {
+        openSettings()
+
+        let toggle = app.checkBoxes["menuBarColorStyleToggle"]
+        XCTAssertTrue(toggle.waitForExistence(timeout: 5))
+        toggle.click()
+        toggle.click()
+    }
+
     private func openPopover() {
         let statusItem = app.statusItems.firstMatch
         XCTAssertTrue(statusItem.waitForExistence(timeout: 5), "Menu bar status item never appeared")

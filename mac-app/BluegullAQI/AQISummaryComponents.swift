@@ -59,6 +59,29 @@ struct DisclaimerFooter: View {
     }
 }
 
+/// `UserDefaults.standard` (container-app-only, like
+/// `MenuBarLocationSelectionStore`'s own doc comment on why it isn't in the
+/// App Group -- the widget extension has no menu bar item to render, so it
+/// has no use for this preference).
+enum MenuBarAppearanceStore {
+    static let colorPillEnabledKey = "menuBarCategoryColorPillEnabled"
+    static let defaultColorPillEnabled = true
+}
+
+/// Settings toggle for `MenuBarStatusLabel`'s colored-pill vs. plain-dot
+/// styling (bluegull-aqi-e70.26). A separate `Toggle`, not folded directly
+/// into `SettingsView`, matching `DataSourceModeToggle`'s own precedent of
+/// one file per settings control.
+struct MenuBarColorStyleToggle: View {
+    @AppStorage(MenuBarAppearanceStore.colorPillEnabledKey)
+    private var isColorPillEnabled = MenuBarAppearanceStore.defaultColorPillEnabled
+
+    var body: some View {
+        Toggle("Show AQI category color in menu bar", isOn: $isColorPillEnabled)
+            .accessibilityIdentifier("menuBarColorStyleToggle")
+    }
+}
+
 /// The menu bar status item's own content (bluegull-aqi-e70.6) -- distinct
 /// from `AQIHeadlineBadge`, which is sized for the popover/detail view, not
 /// the tiny always-visible menu bar sliver. Falls back to a generic
@@ -85,16 +108,39 @@ struct MenuBarStatusLabel: View {
     let reading: AQIReading?
     let freshness: AQIFreshness?
 
+    // bluegull-aqi-e70.26: Steve's feedback was that the existing 8pt dot
+    // undersells the category color -- macOS doesn't force this to
+    // monochrome (SwiftUI content painted straight into a `MenuBarExtra`
+    // label isn't template-masked the way an `NSStatusItem.image` marked
+    // `isTemplate` is; the dot below already proves that empirically, it's
+    // shipped in full color today). Defaults on since this is Steve's own
+    // request; the toggle exists for anyone who prefers a quieter,
+    // HIG-conventional monochrome-ish menu bar.
+    @AppStorage(MenuBarAppearanceStore.colorPillEnabledKey)
+    private var isColorPillEnabled = MenuBarAppearanceStore.defaultColorPillEnabled
+
     var body: some View {
         if let reading, freshness == .fresh,
            let headline = reading.headlinePollutant,
            let aqi = headline.nowcastAQI, let category = headline.category {
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(category.color.swiftUIColor)
-                    .frame(width: 8, height: 8)
-                    .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5))
+            if isColorPillEnabled {
+                // Same colored-background + contrasting-text pattern as
+                // `AQICategory.color.contrastingTextColor`'s own doc comment
+                // (bluegull-aqi-mtm.19) -- verified against AirNow's own AQI
+                // Legend panel for all 6 TAD colors, not invented here.
                 Text("\(aqi)")
+                    .foregroundStyle(category.color.contrastingTextColor)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 1)
+                    .background(category.color.swiftUIColor, in: RoundedRectangle(cornerRadius: 4))
+            } else {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(category.color.swiftUIColor)
+                        .frame(width: 8, height: 8)
+                        .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.5))
+                    Text("\(aqi)")
+                }
             }
         } else if reading != nil {
             // A reading exists but isn't `.fresh` (`.stale`, or freshness
