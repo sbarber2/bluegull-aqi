@@ -37,3 +37,21 @@ struct FakeAddressGeocoder: AddressGeocoder {
         }
     }
 }
+
+struct FakeReverseGeocoder: ReverseGeocoder {
+    enum Result {
+        case success(String)
+        case failure(LocationResolverError)
+    }
+
+    let result: Result
+
+    func placeName(for location: Location) async throws -> String {
+        switch result {
+        case .success(let name):
+            return name
+        case .failure(let error):
+            throw error
+        }
+    }
+}

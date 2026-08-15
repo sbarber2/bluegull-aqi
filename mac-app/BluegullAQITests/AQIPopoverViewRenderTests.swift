@@ -20,7 +20,12 @@ final class AQIPopoverViewRenderTests: XCTestCase {
     @MainActor
     func testRendersWithoutCrashingWithData() {
         let reading = sampleReading(reportingAgency: "Bay Area Air District")
-        let image = render(AQIPopoverView(reading: reading, lastError: nil, lastFetchedAt: nil, onLocationChange: {}))
+        let image = render(
+            AQIPopoverView(
+                reading: reading, lastError: nil, lastFetchedAt: nil, onLocationChange: {},
+                locationResolver: .fake(reverseGeocoding: .success("San Francisco, CA"))
+            )
+        )
         XCTAssertNotNil(image)
     }
 
@@ -30,7 +35,10 @@ final class AQIPopoverViewRenderTests: XCTestCase {
         // not just the nil-lastFetchedAt case above.
         let reading = sampleReading(reportingAgency: "Bay Area Air District")
         let image = render(
-            AQIPopoverView(reading: reading, lastError: nil, lastFetchedAt: Date(), onLocationChange: {})
+            AQIPopoverView(
+                reading: reading, lastError: nil, lastFetchedAt: Date(), onLocationChange: {},
+                locationResolver: .fake(reverseGeocoding: .success("San Francisco, CA"))
+            )
         )
         XCTAssertNotNil(image)
     }
@@ -40,7 +48,27 @@ final class AQIPopoverViewRenderTests: XCTestCase {
         // The tier-1 agency credit is absent, but tier 2 (AttributionCopy.staticCredit)
         // must never be omitted (bluegull-aqi-10h.15) -- exercises that fallback path.
         let reading = sampleReading(reportingAgency: nil)
-        let image = render(AQIPopoverView(reading: reading, lastError: nil, lastFetchedAt: nil, onLocationChange: {}))
+        let image = render(
+            AQIPopoverView(
+                reading: reading, lastError: nil, lastFetchedAt: nil, onLocationChange: {},
+                locationResolver: .fake(reverseGeocoding: .success("San Francisco, CA"))
+            )
+        )
+        XCTAssertNotNil(image)
+    }
+
+    // bluegull-aqi-e70.27: the resolved-place-name caption falls back to
+    // raw coordinates when reverse geocoding itself fails -- not blank,
+    // not a crash.
+    @MainActor
+    func testRendersWithoutCrashingWhenReverseGeocodingFails() {
+        let reading = sampleReading(reportingAgency: "Bay Area Air District")
+        let image = render(
+            AQIPopoverView(
+                reading: reading, lastError: nil, lastFetchedAt: nil, onLocationChange: {},
+                locationResolver: .fake(reverseGeocoding: .failure(.noResults))
+            )
+        )
         XCTAssertNotNil(image)
     }
 
@@ -53,7 +81,10 @@ final class AQIPopoverViewRenderTests: XCTestCase {
         let reading = sampleReading(reportingAgency: "Bay Area Air District")
         let error = AQIFetchError.airNowError(.webServiceError(statusCode: 502, message: "upstream unavailable"))
         let image = render(
-            AQIPopoverView(reading: reading, lastError: error, lastFetchedAt: Date(), onLocationChange: {})
+            AQIPopoverView(
+                reading: reading, lastError: error, lastFetchedAt: Date(), onLocationChange: {},
+                locationResolver: .fake(reverseGeocoding: .success("San Francisco, CA"))
+            )
         )
         XCTAssertNotNil(image)
     }

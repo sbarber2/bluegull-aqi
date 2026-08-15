@@ -21,13 +21,16 @@ public enum LocationResolverError: Error, Equatable, Sendable {
 public struct LocationResolver: Sendable {
     private let locationProvider: LocationProvider
     private let geocoder: AddressGeocoder
+    private let reverseGeocoder: ReverseGeocoder
 
     public init(
         locationProvider: LocationProvider = SystemLocationProvider(),
-        geocoder: AddressGeocoder = SystemAddressGeocoder()
+        geocoder: AddressGeocoder = SystemAddressGeocoder(),
+        reverseGeocoder: ReverseGeocoder = SystemReverseGeocoder()
     ) {
         self.locationProvider = locationProvider
         self.geocoder = geocoder
+        self.reverseGeocoder = reverseGeocoder
     }
 
     /// The user's current GPS location. Throws `.permissionDenied` if
@@ -42,6 +45,16 @@ public struct LocationResolver: Sendable {
     public func resolve(address: String) async throws -> Location {
         try await geocoder.geocode(address)
     }
+
+    /// Resolves a coordinate back to a human-readable place name --
+    /// bluegull-aqi-e70.27, so "Current Location" can show what it actually
+    /// resolved to, not just that synthetic label. Throws `.noResults` if
+    /// nothing matches. Unlike `currentLocation()`, this never touches
+    /// `CLLocationManager`/location authorization at all -- `CLGeocoder`
+    /// reverse lookups need only network access, same as `resolve(address:)`.
+    public func placeName(for location: Location) async throws -> String {
+        try await reverseGeocoder.placeName(for: location)
+    }
 }
 
 // MARK: - Protocols (for test injection)
@@ -52,6 +65,10 @@ public protocol LocationProvider: Sendable {
 
 public protocol AddressGeocoder: Sendable {
     func geocode(_ query: String) async throws -> Location
+}
+
+public protocol ReverseGeocoder: Sendable {
+    func placeName(for location: Location) async throws -> String
 }
 
 // MARK: - Real implementations
@@ -140,5 +157,42 @@ public final class SystemAddressGeocoder: AddressGeocoder, @unchecked Sendable {
                 continuation.resume(returning: Location(latitude: coordinate.latitude, longitude: coordinate.longitude))
             }
         }
+    }
+}
+
+/// Wraps `CLGeocoder`'s reverse lookup (bluegull-aqi-e70.27) -- same
+/// not-verified-live caveat as `SystemAddressGeocoder` just above.
+public final class SystemReverseGeocoder: ReverseGeocoder, @unchecked Sendable {
+    private let geocoder = CLGeocoder()
+
+    public init() {}
+
+    public func placeName(for location: Location) async throws -> String {
+        try await withCheckedThrowingContinuation { continuation in
+            let clLocation = CLLocation(latitude: location.latitude, longitude: location.longitude)
+            geocoder.reverseGeocodeLocation(clLocation) { placemarks, error in
+                if let error {
+                    continuation.resume(throwing: LocationResolverError.geocodingFailed(error.localizedDescription))
+                    return
+                }
+                guard let placemark = placemarks?.first else {
+                    continuation.resume(throwing: LocationResolverError.noResults)
+                    return
+                }
+                continuation.resume(returning: Self.formattedName(from: placemark))
+            }
+        }
+    }
+
+    /// "City, ST" when both are available and distinct; falls back through
+    /// county/state/raw name for the sparser placemarks a rural coordinate
+    /// can produce, rather than surfacing a blank or a crash.
+    private static func formattedName(from placemark: CLPlacemark) -> String {
+        let city = placemark.locality ?? placemark.subAdministrativeArea
+        let region = placemark.administrativeArea
+        if let city, let region, city != region {
+            return "\(city), \(region)"
+        }
+        return city ?? region ?? placemark.name ?? "Unknown location"
     }
 }

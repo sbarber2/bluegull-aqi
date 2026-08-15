@@ -9,6 +9,17 @@ import BluegullAQIKit
 /// `AQIReading`. Attribution (bluegull-aqi-e70.10) and the preliminary-data
 /// disclaimer (bluegull-aqi-dc2.4) are both rendered.
 struct AQIPopoverView: View {
+    // bluegull-aqi-e70.27: same key `MenuBarLocationPicker` itself reads,
+    // independently -- matching precedent elsewhere in this codebase (e.g.
+    // `MenuBarStatusLabel`/`MenuBarColorStyleToggle` both independently
+    // read `MenuBarAppearanceStore.colorPillEnabledKey`). Needed here only
+    // to decide whether to show the resolved-place-name caption below --
+    // a pinned location already has its own human-chosen name in the
+    // picker, so this only applies to the synthetic "current location"
+    // option.
+    @AppStorage(MenuBarLocationSelectionStore.userDefaultsKey)
+    private var selectedLocationID: String = MenuBarLocationSelectionStore.defaultSelectionID
+
     let reading: AQIReading?
 
     // Shown as a compact warning alongside `reading` when both are present
@@ -39,6 +50,12 @@ struct AQIPopoverView: View {
     // next scheduled refresh, up to an hour away.
     let onLocationChange: () -> Void
 
+    // bluegull-aqi-e70.27: injectable so render tests can substitute a
+    // fake-backed resolver instead of `ResolvedPlaceNameCaption`'s own
+    // default hitting real CLGeocoder -- same reasoning as every other
+    // "never touches real CoreLocation in tests" type in this codebase.
+    var locationResolver: LocationResolver = LocationResolver()
+
     // Opens Settings as its own real window (see BluegullAQIApp's
     // Window(id: "settings")), NOT a .sheet() -- a .sheet() presented from
     // inside a MenuBarExtra's .window-style popover is unreliable in
@@ -65,6 +82,9 @@ struct AQIPopoverView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("settingsButton")
+            }
+            if let reading, selectedLocationID == MenuBarLocationSelectionStore.defaultSelectionID {
+                ResolvedPlaceNameCaption(location: reading.location, resolver: locationResolver)
             }
 
             if let reading,

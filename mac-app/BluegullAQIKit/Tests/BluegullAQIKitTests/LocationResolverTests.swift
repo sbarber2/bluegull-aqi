@@ -7,7 +7,8 @@ final class LocationResolverTests: XCTestCase {
     func testCurrentLocationReturnsProviderResult() async throws {
         let resolver = LocationResolver(
             locationProvider: FakeLocationProvider(result: .success(sampleLocation)),
-            geocoder: FakeAddressGeocoder(result: .failure(.noResults))
+            geocoder: FakeAddressGeocoder(result: .failure(.noResults)),
+            reverseGeocoder: FakeReverseGeocoder(result: .failure(.noResults))
         )
         let location = try await resolver.currentLocation()
         XCTAssertEqual(location, sampleLocation)
@@ -16,7 +17,8 @@ final class LocationResolverTests: XCTestCase {
     func testCurrentLocationPropagatesPermissionDenied() async throws {
         let resolver = LocationResolver(
             locationProvider: FakeLocationProvider(result: .failure(.permissionDenied)),
-            geocoder: FakeAddressGeocoder(result: .failure(.noResults))
+            geocoder: FakeAddressGeocoder(result: .failure(.noResults)),
+            reverseGeocoder: FakeReverseGeocoder(result: .failure(.noResults))
         )
         do {
             _ = try await resolver.currentLocation()
@@ -29,7 +31,8 @@ final class LocationResolverTests: XCTestCase {
     func testCurrentLocationPropagatesLocationUnavailable() async throws {
         let resolver = LocationResolver(
             locationProvider: FakeLocationProvider(result: .failure(.locationUnavailable("GPS signal lost"))),
-            geocoder: FakeAddressGeocoder(result: .failure(.noResults))
+            geocoder: FakeAddressGeocoder(result: .failure(.noResults)),
+            reverseGeocoder: FakeReverseGeocoder(result: .failure(.noResults))
         )
         do {
             _ = try await resolver.currentLocation()
@@ -42,7 +45,8 @@ final class LocationResolverTests: XCTestCase {
     func testResolveAddressReturnsGeocoderResult() async throws {
         let resolver = LocationResolver(
             locationProvider: FakeLocationProvider(result: .failure(.permissionDenied)),
-            geocoder: FakeAddressGeocoder(result: .success(sampleLocation))
+            geocoder: FakeAddressGeocoder(result: .success(sampleLocation)),
+            reverseGeocoder: FakeReverseGeocoder(result: .failure(.noResults))
         )
         let location = try await resolver.resolve(address: "San Francisco, CA")
         XCTAssertEqual(location, sampleLocation)
@@ -51,7 +55,8 @@ final class LocationResolverTests: XCTestCase {
     func testResolveAddressPropagatesNoResults() async throws {
         let resolver = LocationResolver(
             locationProvider: FakeLocationProvider(result: .failure(.permissionDenied)),
-            geocoder: FakeAddressGeocoder(result: .failure(.noResults))
+            geocoder: FakeAddressGeocoder(result: .failure(.noResults)),
+            reverseGeocoder: FakeReverseGeocoder(result: .failure(.noResults))
         )
         do {
             _ = try await resolver.resolve(address: "not a real place at all")
@@ -64,10 +69,51 @@ final class LocationResolverTests: XCTestCase {
     func testResolveAddressPropagatesGeocodingFailed() async throws {
         let resolver = LocationResolver(
             locationProvider: FakeLocationProvider(result: .failure(.permissionDenied)),
-            geocoder: FakeAddressGeocoder(result: .failure(.geocodingFailed("network error")))
+            geocoder: FakeAddressGeocoder(result: .failure(.geocodingFailed("network error"))),
+            reverseGeocoder: FakeReverseGeocoder(result: .failure(.noResults))
         )
         do {
             _ = try await resolver.resolve(address: "San Francisco, CA")
+            XCTFail("Expected LocationResolverError.geocodingFailed")
+        } catch LocationResolverError.geocodingFailed(let message) {
+            XCTAssertEqual(message, "network error")
+        }
+    }
+
+    // MARK: - placeName (bluegull-aqi-e70.27)
+
+    func testPlaceNameReturnsReverseGeocoderResult() async throws {
+        let resolver = LocationResolver(
+            locationProvider: FakeLocationProvider(result: .failure(.permissionDenied)),
+            geocoder: FakeAddressGeocoder(result: .failure(.noResults)),
+            reverseGeocoder: FakeReverseGeocoder(result: .success("San Francisco, CA"))
+        )
+        let name = try await resolver.placeName(for: sampleLocation)
+        XCTAssertEqual(name, "San Francisco, CA")
+    }
+
+    func testPlaceNamePropagatesNoResults() async throws {
+        let resolver = LocationResolver(
+            locationProvider: FakeLocationProvider(result: .failure(.permissionDenied)),
+            geocoder: FakeAddressGeocoder(result: .failure(.noResults)),
+            reverseGeocoder: FakeReverseGeocoder(result: .failure(.noResults))
+        )
+        do {
+            _ = try await resolver.placeName(for: sampleLocation)
+            XCTFail("Expected LocationResolverError.noResults")
+        } catch LocationResolverError.noResults {
+            // expected
+        }
+    }
+
+    func testPlaceNamePropagatesGeocodingFailed() async throws {
+        let resolver = LocationResolver(
+            locationProvider: FakeLocationProvider(result: .failure(.permissionDenied)),
+            geocoder: FakeAddressGeocoder(result: .failure(.noResults)),
+            reverseGeocoder: FakeReverseGeocoder(result: .failure(.geocodingFailed("network error")))
+        )
+        do {
+            _ = try await resolver.placeName(for: sampleLocation)
             XCTFail("Expected LocationResolverError.geocodingFailed")
         } catch LocationResolverError.geocodingFailed(let message) {
             XCTAssertEqual(message, "network error")

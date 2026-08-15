@@ -28,6 +28,40 @@ struct AQIHeadlineBadge: View {
     }
 }
 
+/// Reverse-geocoded place name for "Current Location" (bluegull-aqi-e70.27)
+/// -- Steve wanted a way to verify GPS actually resolved to where he
+/// expects, since the bare "Current Location" label gives no indication
+/// what coordinate it actually used. Callers show this only for the
+/// synthetic current-location option; a pinned location already has its
+/// own human-chosen name and doesn't need a second one.
+///
+/// Resolves itself on appear/location-change via `.task(id:)`, same
+/// self-contained-async-load pattern as `AirNowAPIKeyEntryView`/
+/// `PinnedLocationsView` elsewhere in this file's sibling views -- no
+/// state threaded in from a caller. Falls back to raw coordinates while
+/// resolving or if reverse geocoding fails outright (no network, no
+/// result) -- always shows *something* verifiable rather than silently
+/// showing nothing, which would look like the feature doesn't exist.
+struct ResolvedPlaceNameCaption: View {
+    let location: Location
+    var resolver: LocationResolver = LocationResolver()
+
+    @State private var placeName: String?
+
+    var body: some View {
+        Text("Near \(placeName ?? coordinateText)")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .task(id: location) {
+                placeName = try? await resolver.placeName(for: location)
+            }
+    }
+
+    private var coordinateText: String {
+        String(format: "%.2f, %.2f", location.latitude, location.longitude)
+    }
+}
+
 /// Two-tier attribution (bluegull-aqi-e70.10, bluegull-aqi-10h.15): credit
 /// the specific reporting agency for this reading first, when AirNow
 /// supplied one, then the static AirNow/EPA credit -- always shown, never

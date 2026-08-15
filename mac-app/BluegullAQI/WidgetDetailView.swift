@@ -41,11 +41,21 @@ struct WidgetDetailView: View {
     // right at it.
     @State private var reading: AQIReading?
 
-    init(location: Location?, refreshController: AQIRefreshController? = nil, store: SharedCacheStore? = UserDefaultsCacheStore()) {
+    // bluegull-aqi-e70.27: same injection reasoning as `AQIPopoverView`'s
+    // own `locationResolver` property.
+    private let locationResolver: LocationResolver
+
+    init(
+        location: Location?,
+        refreshController: AQIRefreshController? = nil,
+        store: SharedCacheStore? = UserDefaultsCacheStore(),
+        locationResolver: LocationResolver = LocationResolver()
+    ) {
         self.location = location
         self.refreshController = refreshController
         computer = store.map(WidgetTimelineComputer.init(store:))
         pinnedLocationsStore = PinnedLocationsStore(store: store)
+        self.locationResolver = locationResolver
     }
 
     var body: some View {
@@ -80,9 +90,20 @@ struct WidgetDetailView: View {
                     HStack(alignment: .top) {
                         AQIHeadlineBadge(aqi: aqi, category: category)
                         Spacer()
-                        Text(locationName)
-                            .font(.body)
-                            .foregroundStyle(.secondary)
+                        VStack(alignment: .trailing, spacing: 2) {
+                            Text(locationName)
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                            // bluegull-aqi-e70.27: `location == nil` is
+                            // exactly the "Current Location" case (see
+                            // `locationName`'s own doc comment above) -- a
+                            // pinned location already has its own name,
+                            // this is only for verifying GPS resolved
+                            // where expected.
+                            if location == nil {
+                                ResolvedPlaceNameCaption(location: reading.location, resolver: locationResolver)
+                            }
+                        }
                     }
                     if let notice = category.beyondScaleNotice {
                         Text(notice)
