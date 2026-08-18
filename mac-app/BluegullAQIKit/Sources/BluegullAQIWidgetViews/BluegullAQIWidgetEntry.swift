@@ -38,13 +38,26 @@ public struct BluegullAQIWidgetEntry: TimelineEntry {
     /// than looking identical to a current value.
     public let freshness: AQIFreshness?
 
+    /// Reverse-geocoded place name for a Current Location widget
+    /// (bluegull-aqi-e70.27's widget-face follow-up) -- always nil for a
+    /// pinned location (its `locationName` is already the user's own
+    /// chosen label, nothing to resolve). Deliberately a SEPARATE field
+    /// from `locationName`, not a swap-in replacement for it: Steve wanted
+    /// "Current Location" to stay visible AND the resolved place shown
+    /// alongside it, not one replacing the other -- there's room for both
+    /// on all three widget sizes. nil until `BluegullAQIWidgetTimelineProvider`'s
+    /// async reverse-geocode lookup completes (or if it fails/has no
+    /// network); the view just omits the extra line in that case.
+    public let resolvedPlaceName: String?
+
     public init(
         date: Date,
         reading: AQIReading?,
         configuredLocation: Location? = nil,
         locationName: String = LocationOptionEntity.currentLocation.name,
         lastSuccessfulFetchDate: Date? = nil,
-        freshness: AQIFreshness? = nil
+        freshness: AQIFreshness? = nil,
+        resolvedPlaceName: String? = nil
     ) {
         self.date = date
         self.reading = reading
@@ -52,6 +65,7 @@ public struct BluegullAQIWidgetEntry: TimelineEntry {
         self.locationName = locationName
         self.lastSuccessfulFetchDate = lastSuccessfulFetchDate
         self.freshness = freshness
+        self.resolvedPlaceName = resolvedPlaceName
     }
 
     public init(_ snapshot: WidgetTimelineSnapshot, configuredLocation: Location? = nil, locationName: String = LocationOptionEntity.currentLocation.name) {
@@ -61,5 +75,23 @@ public struct BluegullAQIWidgetEntry: TimelineEntry {
         self.locationName = locationName
         lastSuccessfulFetchDate = snapshot.lastSuccessfulFetchDate
         freshness = snapshot.freshness
+        resolvedPlaceName = nil
+    }
+
+    /// Same entry, `resolvedPlaceName` filled in -- `BluegullAQIWidgetTimelineProvider`
+    /// (the app-extension's own thin `AppIntentTimelineProvider` glue, not
+    /// unit-testable itself -- see that type's own doc comment) builds an
+    /// entry synchronously first, then reverse-geocodes and attaches the
+    /// resolved place name via this method once that async lookup completes.
+    public func withResolvedPlaceName(_ resolvedPlaceName: String) -> BluegullAQIWidgetEntry {
+        BluegullAQIWidgetEntry(
+            date: date,
+            reading: reading,
+            configuredLocation: configuredLocation,
+            locationName: locationName,
+            lastSuccessfulFetchDate: lastSuccessfulFetchDate,
+            freshness: freshness,
+            resolvedPlaceName: resolvedPlaceName
+        )
     }
 }

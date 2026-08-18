@@ -22,14 +22,21 @@ struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
     // nil for the same App-Group-unavailable reason as `computer` above --
     // there'd be nowhere to write a result, so there's no point fetching one.
     private let coordinator: AQIFetchCoordinator?
+    // bluegull-aqi-e70.27: reverse-geocodes a Current Location widget's
+    // resolved coordinate into the same `locationName` caption slot the
+    // widget face already renders. Same "network only, no location
+    // entitlement needed" reasoning as the fetch above -- CLGeocoder's
+    // reverse lookup doesn't touch CLLocationManager/authorization at all.
+    private let locationResolver: LocationResolver
 
-    init(store: SharedCacheStore? = UserDefaultsCacheStore()) {
+    init(store: SharedCacheStore? = UserDefaultsCacheStore(), locationResolver: LocationResolver = LocationResolver()) {
         // The App Group suite couldn't be opened -- rather than crash
         // (widget extension crashes are disruptive system-wide, unlike a
         // container-app failure), degrade to "no data to show," the same
         // state as a genuine cache miss.
         computer = store.map(WidgetTimelineComputer.init(store:))
         coordinator = store.map { AQIFetchCoordinator(cache: AppGroupCache(store: $0)) }
+        self.locationResolver = locationResolver
     }
 
     func placeholder(in context: Context) -> BluegullAQIWidgetEntry {
@@ -70,6 +77,26 @@ struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
             _ = try? await coordinator.fetch(location: pinned, mode: DataSourceModeStore.currentMode())
             now = Date()
             resolved = entry(for: configuration, now: now)
+        }
+
+        // bluegull-aqi-e70.27: only for Current Location (a pinned
+        // location's `locationName` is already the user's own chosen
+        // label, nothing to resolve) -- attaches the reverse-geocoded
+        // place name alongside the existing "Current Location" caption,
+        // not in place of it. `configuration.location == nil` (the outer
+        // optional) is NOT the right check here: a widget explicitly
+        // configured to Current Location has a real, non-nil
+        // `LocationOptionEntity` whose *own* `.location` property is nil
+        // (see `entry(for:)`'s `configuredLocation` derivation just above,
+        // which already unwraps both levels correctly) -- checking the
+        // outer optional alone missed every already-configured Current
+        // Location widget and only ever matched a brand new,
+        // not-yet-configured instance. Silent failure by design, same
+        // reasoning as the fetch above: `resolved` just has no resolved
+        // place name if reverse geocoding has no network/no result.
+        if configuration.location?.location == nil, let reading = resolved.reading,
+           let placeName = try? await locationResolver.placeName(for: reading.location) {
+            resolved = resolved.withResolvedPlaceName(placeName)
         }
 
         let nextReload = computer?.nextReloadDate(after: now) ?? now.addingTimeInterval(RefreshScheduler.defaultInterval)

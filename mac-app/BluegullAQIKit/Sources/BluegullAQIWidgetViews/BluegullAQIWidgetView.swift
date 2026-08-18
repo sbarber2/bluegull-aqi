@@ -38,11 +38,11 @@ public struct BluegullAQIWidgetView: View {
                let category = headline.category {
                 switch family {
                 case .systemSmall:
-                    SmallWidgetLayout(aqi: aqi, category: category, locationName: entry.locationName, isStale: isStale)
+                    SmallWidgetLayout(aqi: aqi, category: category, locationName: entry.locationName, resolvedPlaceName: entry.resolvedPlaceName, isStale: isStale)
                 case .systemMedium:
-                    MediumWidgetLayout(aqi: aqi, category: category, reading: reading, headline: headline, locationName: entry.locationName, isStale: isStale, agedCaption: agedReadingCaption)
+                    MediumWidgetLayout(aqi: aqi, category: category, reading: reading, headline: headline, locationName: entry.locationName, resolvedPlaceName: entry.resolvedPlaceName, isStale: isStale, agedCaption: agedReadingCaption)
                 default:
-                    LargeWidgetLayout(aqi: aqi, category: category, reading: reading, locationName: entry.locationName, isStale: isStale, agedCaption: agedReadingCaption)
+                    LargeWidgetLayout(aqi: aqi, category: category, reading: reading, locationName: entry.locationName, resolvedPlaceName: entry.resolvedPlaceName, isStale: isStale, agedCaption: agedReadingCaption)
                 }
             } else {
                 // bluegull-aqi-dc2.1: distinguishes "never fetched" (no
@@ -166,6 +166,12 @@ struct SmallWidgetLayout: View {
     let aqi: Int
     let category: AQICategory
     let locationName: String
+    // bluegull-aqi-e70.27: shown ALONGSIDE locationName, not instead of it
+    // -- Steve wanted "Current Location" to stay visible with the resolved
+    // place name next to it, on all three widget sizes. nil for a pinned
+    // location (its locationName is already the chosen name) or before the
+    // reverse-geocode lookup resolves.
+    let resolvedPlaceName: String?
     let isStale: Bool
 
     var body: some View {
@@ -178,6 +184,13 @@ struct SmallWidgetLayout: View {
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
+            if let resolvedPlaceName {
+                Text(resolvedPlaceName)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
             Circle()
                 .fill(category.color.swiftUIColor)
                 .frame(width: 12, height: 12)
@@ -218,6 +231,8 @@ struct MediumWidgetLayout: View {
     let reading: AQIReading
     let headline: PollutantReading
     let locationName: String
+    // See SmallWidgetLayout's own doc comment on `resolvedPlaceName`.
+    let resolvedPlaceName: String?
     let isStale: Bool
     let agedCaption: String?
 
@@ -238,6 +253,12 @@ struct MediumWidgetLayout: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+            if let resolvedPlaceName {
+                Text(resolvedPlaceName)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
@@ -328,6 +349,8 @@ struct LargeWidgetLayout: View {
     let category: AQICategory
     let reading: AQIReading
     let locationName: String
+    // See SmallWidgetLayout's own doc comment on `resolvedPlaceName`.
+    let resolvedPlaceName: String?
     let isStale: Bool
     let agedCaption: String?
 
@@ -339,6 +362,12 @@ struct LargeWidgetLayout: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
+            if let resolvedPlaceName {
+                Text(resolvedPlaceName)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             HStack(alignment: .firstTextBaseline, spacing: 10) {
                 Circle()
