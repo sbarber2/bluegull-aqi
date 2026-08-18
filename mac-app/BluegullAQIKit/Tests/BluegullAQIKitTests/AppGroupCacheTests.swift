@@ -198,6 +198,47 @@ final class AppGroupCacheTests: XCTestCase {
         XCTAssertNotNil(cache.lastSuccessfulFetchDate())
     }
 
+    // MARK: - lastFailedFetchDate / isMostRecentFetchAttemptFailing (bluegull-aqi-e70.39)
+
+    func testLastFailedFetchDateIsNilWhenNeverRecorded() {
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        XCTAssertNil(cache.lastFailedFetchDate())
+    }
+
+    func testRecordFailedFetchThenReadRoundTrips() {
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        let now = Date()
+        cache.recordFailedFetch(now: now)
+        XCTAssertEqual(cache.lastFailedFetchDate(), now)
+    }
+
+    func testIsMostRecentFetchAttemptFailingIsFalseWhenNothingEverRecorded() {
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        XCTAssertFalse(cache.isMostRecentFetchAttemptFailing())
+    }
+
+    func testIsMostRecentFetchAttemptFailingIsTrueAfterAFailureWithNoPriorSuccess() {
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        cache.recordFailedFetch()
+        XCTAssertTrue(cache.isMostRecentFetchAttemptFailing())
+    }
+
+    func testIsMostRecentFetchAttemptFailingIsFalseWhenTheLatestAttemptSucceeded() {
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        let now = Date()
+        cache.recordFailedFetch(now: now)
+        cache.recordSuccessfulFetch(now: now.addingTimeInterval(1))
+        XCTAssertFalse(cache.isMostRecentFetchAttemptFailing())
+    }
+
+    func testIsMostRecentFetchAttemptFailingIsTrueWhenAFailureCameAfterAnEarlierSuccess() {
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        let now = Date()
+        cache.recordSuccessfulFetch(now: now)
+        cache.recordFailedFetch(now: now.addingTimeInterval(1))
+        XCTAssertTrue(cache.isMostRecentFetchAttemptFailing())
+    }
+
     // MARK: - Soft/hard TTL, stale-while-revalidate (bluegull-aqi-dc2.5)
 
     func testFreshnessIsFreshImmediatelyAfterPut() {

@@ -125,6 +125,49 @@ final class AQIFetchCoordinatorTests: XCTestCase {
         }
     }
 
+    // bluegull-aqi-e70.39: every failed fetch attempt -- through this one
+    // choke point, regardless of caller or mode -- records itself into the
+    // shared cache, which is what lets a widget (never fetching for
+    // itself when configured to Current Location) know the active source
+    // just started failing.
+    func testServiceModeFailureRecordsItselfIntoTheSharedCache() async {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 502, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (response, Data(#"{"error": "upstream unavailable"}"#.utf8))
+        }
+
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        let coordinator = AQIFetchCoordinator(
+            serviceClient: BluegullServiceClient(urlSession: MockURLProtocol.makeSession()),
+            apiKeyStore: AirNowAPIKeyStore(keychain: InMemoryKeychain()),
+            cache: cache
+        )
+
+        XCTAssertFalse(cache.isMostRecentFetchAttemptFailing())
+        _ = try? await coordinator.fetch(location: location, mode: .service)
+        XCTAssertTrue(cache.isMostRecentFetchAttemptFailing())
+    }
+
+    func testDirectModeFailureRecordsItselfIntoTheSharedCache() async {
+        let keychain = InMemoryKeychain()
+        let keyStore = AirNowAPIKeyStore(keychain: keychain)
+        try? keyStore.save(fakeKey)
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (response, Data())
+        }
+
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        let coordinator = AQIFetchCoordinator(
+            directClient: AirNowDirectClient(urlSession: MockURLProtocol.makeSession()),
+            apiKeyStore: keyStore,
+            cache: cache
+        )
+
+        _ = try? await coordinator.fetch(location: location, mode: .direct)
+        XCTAssertTrue(cache.isMostRecentFetchAttemptFailing())
+    }
+
     // bluegull-aqi-e70.38: a non-429 Service-mode failure gets its own
     // case, not the shared .airNowError -- AirNowError.userMessage's
     // "AirNow"-specific wording doesn't apply to our own backend.

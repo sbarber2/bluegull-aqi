@@ -82,9 +82,21 @@ public struct WidgetTimelineComputer: Sendable {
         // `reading` above (bluegull-aqi-dc2.5) -- see that computation's own
         // comment for why a configured pin never falls through to a
         // different location's freshness either.
-        let freshness = location.map { cache.freshness(for: $0.rounded, now: now) }
+        var freshness = location.map { cache.freshness(for: $0.rounded, now: now) }
             ?? cache.currentLocationFreshness(now: now)
             ?? cache.mostRecentEntryFreshness(now: now)
+        // bluegull-aqi-e70.39: a reading still within its own TTL is
+        // exactly as untrustworthy as a stale one if the most recent fetch
+        // attempt -- by either process -- actually failed. Reuses the
+        // existing .stale treatment (the aged badge/caption every widget
+        // layout already renders) rather than inventing a new visual --
+        // the cross-process counterpart to the menu bar's own e70.37 fix,
+        // needed here specifically because a Current Location widget never
+        // fetches for itself and has no other way to learn the active
+        // source just started failing.
+        if freshness == .fresh, cache.isMostRecentFetchAttemptFailing(now: now) {
+            freshness = .stale
+        }
         return WidgetTimelineSnapshot(
             date: now,
             reading: reading,

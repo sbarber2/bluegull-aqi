@@ -139,6 +139,13 @@ public struct AQIFetchCoordinator: Sendable {
             cache.recordSuccessfulFetch()
             return reading
         } catch let error as AirNowError {
+            // bluegull-aqi-e70.39: recorded here, not at each of fetch(:)'s
+            // several callers (the menu bar's own refresh, its "keep
+            // Current Location warm" second fetch, the widget extension's
+            // own cache-miss fetch) -- one choke point every fetch attempt
+            // from either process already passes through, so nothing new
+            // added later can forget to wire this in.
+            cache.recordFailedFetch()
             throw AQIFetchError.airNowError(error)
         }
     }
@@ -152,6 +159,9 @@ public struct AQIFetchCoordinator: Sendable {
             cache.recordSuccessfulFetch()
             return reading
         } catch let error as AirNowError {
+            // bluegull-aqi-e70.39: see fetchDirect's own comment on why
+            // this lives here, not at each caller.
+            cache.recordFailedFetch()
             // bluegull-aqi-dc2.2: a 429 here is the shared backend's own
             // budget/throttling, not AirNow's -- worth a distinct,
             // actionable message (see AQIFetchError.serviceModeRateLimited)

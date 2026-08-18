@@ -162,4 +162,40 @@ final class WidgetTimelineComputerTests: XCTestCase {
         let computer = WidgetTimelineComputer(store: store)
         XCTAssertEqual(computer.currentSnapshot(for: nil).reading, reading)
     }
+
+    // MARK: - Failed-fetch downgrade (bluegull-aqi-e70.39)
+
+    /// The actual bug Steve hit: a Current Location widget never fetches
+    /// for itself, so a reading still within its own TTL had no way to
+    /// reflect that the active data source had just started failing.
+    func testCurrentSnapshotDowngradesAFreshReadingWhenTheMostRecentFetchAttemptFailed() {
+        let store = InMemorySharedCacheStore()
+        let cache = AppGroupCache(store: store)
+        let now = Date()
+        cache.put(reading, for: location.rounded, now: now)
+        cache.recordSuccessfulFetch(now: now)
+        cache.recordFailedFetch(now: now.addingTimeInterval(1))
+
+        let computer = WidgetTimelineComputer(store: store)
+        let snapshot = computer.currentSnapshot(for: location, now: now.addingTimeInterval(2))
+
+        // Reading still shown -- same "don't discard good data" reasoning
+        // as dc2.1 -- just no longer reported as unconditionally fresh.
+        XCTAssertEqual(snapshot.reading, reading)
+        XCTAssertEqual(snapshot.freshness, .stale)
+    }
+
+    func testCurrentSnapshotStaysFreshWhenTheMostRecentAttemptSucceededAfterAnEarlierFailure() {
+        let store = InMemorySharedCacheStore()
+        let cache = AppGroupCache(store: store)
+        let now = Date()
+        cache.recordFailedFetch(now: now)
+        cache.put(reading, for: location.rounded, now: now.addingTimeInterval(1))
+        cache.recordSuccessfulFetch(now: now.addingTimeInterval(1))
+
+        let computer = WidgetTimelineComputer(store: store)
+        let snapshot = computer.currentSnapshot(for: location, now: now.addingTimeInterval(2))
+
+        XCTAssertEqual(snapshot.freshness, .fresh)
+    }
 }

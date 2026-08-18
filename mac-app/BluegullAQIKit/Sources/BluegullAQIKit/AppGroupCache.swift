@@ -172,6 +172,21 @@ public struct AppGroupCache: Sendable {
     /// mirror whichever location the menu bar happened to fetch last.
     private static let currentLocationKey = "aqi-cache-current-location"
 
+    /// Also deliberately outside `keyPrefix`, same reasoning as
+    /// `lastSuccessfulFetchKey` above -- the global counterpart
+    /// (bluegull-aqi-e70.39) to it: "when did a fetch attempt, by either
+    /// process, last fail" rather than "when did one last succeed."
+    /// Together the two let `isMostRecentFetchAttemptFailing` answer "is the
+    /// active data source currently broken" without any single location's
+    /// own TTL-bounded entry knowing anything about it -- a widget showing
+    /// a reading that's still within its freshness window has no way to
+    /// know the source it came from just started failing again, since nothing
+    /// about that reading itself changes when a later attempt for a
+    /// *different* location fails. Global, not per-location, same tradeoff
+    /// `lastFetchedAt` already accepts (see `AQIRefreshController`'s own
+    /// doc comment on it) -- deliberately simple over precise.
+    private static let lastFailedFetchKey = "aqi-last-failed-fetch-at"
+
     private let store: SharedCacheStore
 
     public init(store: SharedCacheStore) {
@@ -249,6 +264,34 @@ public struct AppGroupCache: Sendable {
     public func lastSuccessfulFetchDate() -> Date? {
         guard let data = store.data(forKey: Self.lastSuccessfulFetchKey) else { return nil }
         return try? JSONDecoder().decode(Date.self, from: data)
+    }
+
+    /// Records that a fetch attempt just failed (bluegull-aqi-e70.39) --
+    /// the symmetric counterpart to `recordSuccessfulFetch` above. Callers
+    /// write this on every failed attempt, not just once; only the most
+    /// recent timestamp matters, same as the success side.
+    public func recordFailedFetch(now: Date = Date()) {
+        store.set(try? JSONEncoder().encode(now), forKey: Self.lastFailedFetchKey)
+    }
+
+    /// nil if a fetch has never failed. See `lastFailedFetchKey`'s own doc
+    /// comment for why this is global rather than per-location.
+    public func lastFailedFetchDate() -> Date? {
+        guard let data = store.data(forKey: Self.lastFailedFetchKey) else { return nil }
+        return try? JSONDecoder().decode(Date.self, from: data)
+    }
+
+    /// True exactly when the most recent fetch attempt -- by either
+    /// process -- was a failure that hasn't been superseded by a later
+    /// success. Compares timestamps rather than a single boolean flag so
+    /// this can't drift out of sync if a caller records a failure without
+    /// ever recording the success that resolves it (or vice versa) --
+    /// there's only one source of truth (the two dates), not a third flag
+    /// that also has to be kept consistent with them.
+    public func isMostRecentFetchAttemptFailing(now: Date = Date()) -> Bool {
+        guard let failedAt = lastFailedFetchDate() else { return false }
+        guard let succeededAt = lastSuccessfulFetchDate() else { return true }
+        return failedAt > succeededAt
     }
 
     /// The most recently fetched, still-valid cached reading across every
