@@ -27,9 +27,13 @@ import Foundation
 /// on this client's next call even though `AQIFetchCoordinator` (and in
 /// turn `AQIRefreshController`) construct one `BluegullServiceClient` and
 /// reuse it for the app's whole run rather than rebuilding it per fetch.
+///
+/// That same `overrideDefaults` instance also backs the configurable
+/// request timeout (bluegull-aqi-e70.43) -- both are App Group-suite
+/// UserDefaults, so one injected instance covers both rather than adding a
+/// second, functionally-identical parameter.
 public struct BluegullServiceClient: Sendable {
     private static let defaultBaseURL = URL(string: "https://dev.aqi.bluegull.solutions/aqi")!
-    private static let requestTimeout: TimeInterval = 10
 
     private let urlSession: URLSession
     // UserDefaults isn't formally Sendable in the SDK, but Apple documents
@@ -100,7 +104,10 @@ public struct BluegullServiceClient: Sendable {
         guard let url = components.url else {
             throw AirNowError.unexpectedResponse
         }
-        var request = URLRequest(url: url, timeoutInterval: Self.requestTimeout)
+        // bluegull-aqi-e70.43: resolved fresh on every request, same
+        // reasoning as baseURL just above.
+        let timeout = RequestTimeoutStore.serviceTimeout(in: overrideDefaults)
+        var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = "GET"
         return request
     }

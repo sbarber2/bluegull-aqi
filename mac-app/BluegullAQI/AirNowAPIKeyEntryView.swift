@@ -9,18 +9,16 @@ import BluegullAQIKit
 /// a password back).
 ///
 /// Composed into `SettingsView` (bluegull-aqi-e70.9), reachable via
-/// `AQIPopoverView`'s gear icon.
+/// `AQIPopoverView`'s gear icon. As of bluegull-aqi-e70.43, `SettingsView`
+/// only ever renders this at all while Direct mode is selected (tab-style,
+/// see that type's own doc comment) -- this view no longer needs its own
+/// `.disabled(mode != .direct)` check (bluegull-aqi-e70.30's original
+/// mechanism), since it's hidden entirely rather than shown-but-inert.
 struct AirNowAPIKeyEntryView: View {
     @State private var apiKey = ""
     @State private var hasSavedKey = false
     @State private var errorMessage: String?
     @FocusState private var isFieldFocused: Bool
-
-    // bluegull-aqi-e70.30: the key is only meaningful in Direct mode --
-    // same store/key pattern as `DataSourceModeToggle`, so this can't
-    // disagree with it about what mode is actually selected.
-    @AppStorage(DataSourceModeStore.userDefaultsKey, store: DataSourceModeStore.sharedDefaults)
-    private var mode: DataSourceMode = DataSourceModeStore.defaultMode
 
     private let store: AirNowAPIKeyStore
 
@@ -34,7 +32,6 @@ struct AirNowAPIKeyEntryView: View {
                 .font(.headline)
             SecureField("Enter your AirNow API key", text: $apiKey)
                 .textFieldStyle(.roundedBorder)
-                .disabled(mode != .direct)
                 .focused($isFieldFocused)
                 .accessibilityIdentifier("airNowAPIKeyField")
             if let errorMessage {

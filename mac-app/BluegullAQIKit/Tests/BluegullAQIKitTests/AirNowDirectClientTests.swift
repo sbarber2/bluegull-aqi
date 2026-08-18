@@ -45,7 +45,7 @@ final class AirNowDirectClientTests: XCTestCase {
         MockURLProtocol.requestHandler = { [sampleResponseJSON] request in
             self.mockResponse(statusCode: 200, body: sampleResponseJSON, url: request.url!)
         }
-        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession())
+        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession(), timeoutDefaults: nil)
 
         let reading = try await client.fetchCurrentObservations(location: location, apiKey: fakeKey)
 
@@ -63,7 +63,7 @@ final class AirNowDirectClientTests: XCTestCase {
             capturedRequest = request
             return self.mockResponse(statusCode: 200, body: sampleResponseJSON, url: request.url!)
         }
-        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession())
+        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession(), timeoutDefaults: nil)
         _ = try await client.fetchCurrentObservations(location: location, apiKey: fakeKey)
 
         let url = try XCTUnwrap(capturedRequest?.url)
@@ -84,6 +84,37 @@ final class AirNowDirectClientTests: XCTestCase {
         XCTAssertEqual(queryDict["API_KEY"], fakeKey)
     }
 
+    // MARK: - Configurable timeout (bluegull-aqi-e70.43)
+
+    func testRequestUsesTheDefaultTimeoutWhenNoneIsConfigured() async throws {
+        var capturedRequest: URLRequest?
+        MockURLProtocol.requestHandler = { [sampleResponseJSON] request in
+            capturedRequest = request
+            return self.mockResponse(statusCode: 200, body: sampleResponseJSON, url: request.url!)
+        }
+        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession(), timeoutDefaults: nil)
+        _ = try await client.fetchCurrentObservations(location: location, apiKey: fakeKey)
+
+        let request = try XCTUnwrap(capturedRequest)
+        XCTAssertEqual(request.timeoutInterval, RequestTimeoutStore.defaultDirectTimeout)
+    }
+
+    func testRequestUsesAConfiguredTimeout() async throws {
+        let timeoutDefaults = try XCTUnwrap(UserDefaults(suiteName: "e70.43-direct-timeout-test-\(UUID())"))
+        timeoutDefaults.set(25.0, forKey: RequestTimeoutStore.directUserDefaultsKey)
+
+        var capturedRequest: URLRequest?
+        MockURLProtocol.requestHandler = { [sampleResponseJSON] request in
+            capturedRequest = request
+            return self.mockResponse(statusCode: 200, body: sampleResponseJSON, url: request.url!)
+        }
+        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession(), timeoutDefaults: timeoutDefaults)
+        _ = try await client.fetchCurrentObservations(location: location, apiKey: fakeKey)
+
+        let request = try XCTUnwrap(capturedRequest)
+        XCTAssertEqual(request.timeoutInterval, 25)
+    }
+
     func testWebServiceErrorBodyThrowsEvenWithHTTP200() async throws {
         // bluegull-aqi-10h.19: AirNow returns some errors (e.g. "no
         // observations for this location") with a 200 status.
@@ -93,7 +124,7 @@ final class AirNowDirectClientTests: XCTestCase {
         MockURLProtocol.requestHandler = { request in
             self.mockResponse(statusCode: 200, body: errorJSON, url: request.url!)
         }
-        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession())
+        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession(), timeoutDefaults: nil)
 
         do {
             _ = try await client.fetchCurrentObservations(location: location, apiKey: fakeKey)
@@ -108,7 +139,7 @@ final class AirNowDirectClientTests: XCTestCase {
         MockURLProtocol.requestHandler = { request in
             self.mockResponse(statusCode: 503, body: "Service Unavailable", url: request.url!)
         }
-        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession())
+        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession(), timeoutDefaults: nil)
 
         do {
             _ = try await client.fetchCurrentObservations(location: location, apiKey: fakeKey)
@@ -122,7 +153,7 @@ final class AirNowDirectClientTests: XCTestCase {
         MockURLProtocol.requestHandler = { request in
             self.mockResponse(statusCode: 200, body: "{\"unexpected\": \"shape\"}", url: request.url!)
         }
-        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession())
+        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession(), timeoutDefaults: nil)
 
         do {
             _ = try await client.fetchCurrentObservations(location: location, apiKey: fakeKey)
@@ -138,7 +169,7 @@ final class AirNowDirectClientTests: XCTestCase {
         MockURLProtocol.requestHandler = { request in
             self.mockResponse(statusCode: 200, body: "[]", url: request.url!)
         }
-        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession())
+        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession(), timeoutDefaults: nil)
 
         let reading = try await client.fetchCurrentObservations(location: location, apiKey: fakeKey)
         XCTAssertEqual(reading.pollutants, [])
@@ -148,7 +179,7 @@ final class AirNowDirectClientTests: XCTestCase {
         MockURLProtocol.requestHandler = { request in
             self.mockResponse(statusCode: 503, body: "Service Unavailable", url: request.url!)
         }
-        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession())
+        let client = AirNowDirectClient(urlSession: MockURLProtocol.makeSession(), timeoutDefaults: nil)
 
         do {
             _ = try await client.fetchCurrentObservations(location: location, apiKey: fakeKey)

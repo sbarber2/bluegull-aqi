@@ -159,7 +159,7 @@ final class AQIFetchCoordinatorTests: XCTestCase {
 
         let cache = AppGroupCache(store: InMemorySharedCacheStore())
         let coordinator = AQIFetchCoordinator(
-            directClient: AirNowDirectClient(urlSession: MockURLProtocol.makeSession()),
+            directClient: AirNowDirectClient(urlSession: MockURLProtocol.makeSession(), timeoutDefaults: nil),
             apiKeyStore: keyStore,
             cache: cache
         )
@@ -249,7 +249,7 @@ final class AQIFetchCoordinatorTests: XCTestCase {
         let cacheStore = InMemorySharedCacheStore()
         let cache = AppGroupCache(store: cacheStore)
         let coordinator = AQIFetchCoordinator(
-            directClient: AirNowDirectClient(urlSession: MockURLProtocol.makeSession()),
+            directClient: AirNowDirectClient(urlSession: MockURLProtocol.makeSession(), timeoutDefaults: nil),
             apiKeyStore: keyStore,
             cache: cache
         )
@@ -274,7 +274,7 @@ final class AQIFetchCoordinatorTests: XCTestCase {
         }
 
         let coordinator = AQIFetchCoordinator(
-            directClient: AirNowDirectClient(urlSession: MockURLProtocol.makeSession()),
+            directClient: AirNowDirectClient(urlSession: MockURLProtocol.makeSession(), timeoutDefaults: nil),
             apiKeyStore: keyStore,
             cache: AppGroupCache(store: InMemorySharedCacheStore())
         )
@@ -294,7 +294,7 @@ final class AQIFetchCoordinatorTests: XCTestCase {
 
     private func makeCoordinator(keychain: KeychainStore) -> AQIFetchCoordinator {
         AQIFetchCoordinator(
-            directClient: AirNowDirectClient(urlSession: MockURLProtocol.makeSession()),
+            directClient: AirNowDirectClient(urlSession: MockURLProtocol.makeSession(), timeoutDefaults: nil),
             apiKeyStore: AirNowAPIKeyStore(keychain: keychain),
             cache: AppGroupCache(store: InMemorySharedCacheStore())
         )

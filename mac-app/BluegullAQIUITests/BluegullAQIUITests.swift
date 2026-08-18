@@ -85,15 +85,32 @@ final class BluegullAQIUITests: XCTestCase {
     // bluegull-aqi-e70.30: the key is irrelevant in Service mode (the
     // default), so the field should start disabled and become editable
     // only after switching to Direct.
-    func testAPIKeyFieldDisabledOutsideDirectMode() throws {
+    // bluegull-aqi-e70.43: the key field is now hidden entirely outside
+    // Direct mode (tab-style Settings), not shown-but-disabled as it was
+    // under e70.30's original mechanism -- Service mode is the default, so
+    // this field shouldn't exist at all until Direct is explicitly picked.
+    func testAPIKeyFieldHiddenOutsideDirectMode() throws {
         openSettings()
 
-        let field = app.secureTextFields["airNowAPIKeyField"]
-        XCTAssertTrue(field.waitForExistence(timeout: 5))
-        XCTAssertFalse(field.isEnabled)
+        XCTAssertFalse(app.secureTextFields["airNowAPIKeyField"].exists)
 
         app.segmentedControls["dataSourceModePicker"].buttons["Direct (use my own AirNow key)"].click()
-        XCTAssertTrue(field.isEnabled)
+        XCTAssertTrue(app.secureTextFields["airNowAPIKeyField"].waitForExistence(timeout: 5))
+    }
+
+    // bluegull-aqi-e70.43: each source's timeout stepper only exists under
+    // its own tab, mirroring the API key field's own hidden-not-disabled
+    // treatment.
+    func testTimeoutSteppersAreScopedToTheirOwnTab() throws {
+        openSettings()
+
+        // Service is the default -- its stepper exists, Direct's doesn't.
+        XCTAssertTrue(app.steppers["serviceTimeoutStepper"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.steppers["directTimeoutStepper"].exists)
+
+        app.segmentedControls["dataSourceModePicker"].buttons["Direct (use my own AirNow key)"].click()
+        XCTAssertTrue(app.steppers["directTimeoutStepper"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.steppers["serviceTimeoutStepper"].exists)
     }
 
     func testAddAndRemovePinnedLocation() throws {

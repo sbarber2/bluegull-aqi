@@ -10,17 +10,23 @@ import Foundation
 /// since both call the same endpoint with the same error shape.
 public struct AirNowDirectClient: Sendable {
     private static let baseURL = URL(string: "https://www.airnowapi.org/aq/observation/current/ziplatlong/")!
-    private static let requestTimeout: TimeInterval = 10
 
     private let urlSession: URLSession
+    // UserDefaults isn't formally Sendable in the SDK, but Apple documents
+    // it as safe to use from multiple threads -- same treatment as
+    // `BluegullServiceClient`'s own `overrideDefaults`.
+    private nonisolated(unsafe) let timeoutDefaults: UserDefaults?
 
     /// `urlSession` is injectable for testing -- there's no "AirNow Local"
     /// equivalent to DynamoDB Local, so unit tests mock at the URLSession
     /// layer (a custom URLProtocol) rather than hitting the live API,
     /// matching the Python client's own test approach (mocked
     /// urllib.request.urlopen, no live AirNow traffic in the test suite).
-    public init(urlSession: URLSession = .shared) {
+    /// `timeoutDefaults` is injectable for the same reason -- tests point
+    /// it at an isolated suite instead of the real App Group one.
+    public init(urlSession: URLSession = .shared, timeoutDefaults: UserDefaults? = RequestTimeoutStore.sharedDefaults) {
         self.urlSession = urlSession
+        self.timeoutDefaults = timeoutDefaults
     }
 
     /// Fetches current NowCast observations for a location, one entry per
@@ -32,7 +38,7 @@ public struct AirNowDirectClient: Sendable {
     /// regardless of what precision the caller passed in.
     public func fetchCurrentObservations(location: Location, apiKey: String) async throws -> AQIReading {
         let location = location.rounded
-        let request = try Self.makeRequest(location: location, apiKey: apiKey)
+        let request = try makeRequest(location: location, apiKey: apiKey)
 
         let data: Data
         let response: URLResponse
@@ -65,8 +71,8 @@ public struct AirNowDirectClient: Sendable {
         return AQIReading(location: location, pollutants: pollutants)
     }
 
-    private static func makeRequest(location: Location, apiKey: String) throws -> URLRequest {
-        guard var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false) else {
+    private func makeRequest(location: Location, apiKey: String) throws -> URLRequest {
+        guard var components = URLComponents(url: Self.baseURL, resolvingAgainstBaseURL: false) else {
             throw AirNowError.unexpectedResponse
         }
         components.queryItems = [
@@ -78,7 +84,11 @@ public struct AirNowDirectClient: Sendable {
         guard let url = components.url else {
             throw AirNowError.unexpectedResponse
         }
-        var request = URLRequest(url: url, timeoutInterval: requestTimeout)
+        // bluegull-aqi-e70.43: resolved fresh on every request, not
+        // captured once at init, so changing the timeout in Settings takes
+        // effect on this client's next call.
+        let timeout = RequestTimeoutStore.directTimeout(in: timeoutDefaults)
+        var request = URLRequest(url: url, timeoutInterval: timeout)
         request.httpMethod = "GET"
         return request
     }

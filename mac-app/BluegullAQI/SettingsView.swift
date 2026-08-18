@@ -1,4 +1,5 @@
 import SwiftUI
+import BluegullAQIKit
 
 /// Composes the three settings pieces built separately
 /// (`DataSourceModeToggle`, `bluegull-aqi-e70.3`; `AirNowAPIKeyEntryView`,
@@ -7,6 +8,18 @@ import SwiftUI
 /// into a settings window." Built as part of `bluegull-aqi-e70.9`, since a
 /// UI test suite covering "settings flows" needs a settings flow that
 /// actually exists to click through.
+///
+/// `DataSourceModeToggle` doubles as a tab selector as of
+/// bluegull-aqi-e70.43: once Service mode grew its own setting (the
+/// configurable request timeout, alongside Direct mode's existing API key
+/// + its own timeout), showing both sources' config at once stopped making
+/// sense -- only the selected source's section renders below the toggle.
+/// This view keeps its own `mode` binding (same key/store as
+/// `DataSourceModeToggle`'s own, deliberately independent rather than
+/// threaded through as a binding parameter -- matches this codebase's
+/// existing precedent of multiple views each reading the same `@AppStorage`
+/// key directly, e.g. `MenuBarStatusLabel`/`MenuBarColorStyleToggle` both
+/// reading `MenuBarAppearanceStore.colorPillEnabledKey`).
 ///
 /// Hosted in its own `Window(id: "settings")` (`BluegullAQIApp`), not a
 /// `.sheet()` -- see `AQIPopoverView`'s doc comment on why that didn't
@@ -41,6 +54,13 @@ struct SettingsView: View {
     // supply one.
     var onDataSourceModeChange: () -> Void = {}
 
+    // bluegull-aqi-e70.43: decides which mode's config section to show
+    // below the toggle -- see this type's own doc comment on why this is a
+    // second, independent binding rather than one threaded down from
+    // DataSourceModeToggle.
+    @AppStorage(DataSourceModeStore.userDefaultsKey, store: DataSourceModeStore.sharedDefaults)
+    private var mode: DataSourceMode = DataSourceModeStore.defaultMode
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
@@ -53,8 +73,20 @@ struct SettingsView: View {
             }
 
             DataSourceModeToggle(onChange: onDataSourceModeChange)
-            Divider()
-            AirNowAPIKeyEntryView()
+
+            // bluegull-aqi-e70.43: only the selected source's own section,
+            // tab-style -- see this type's own doc comment.
+            switch mode {
+            case .direct:
+                AirNowAPIKeyEntryView()
+                DirectTimeoutStepper()
+            case .service:
+                Text("Service uses BlueGull's shared backend -- no API key needed.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                ServiceTimeoutStepper()
+            }
+
             Divider()
             PinnedLocationsView()
             Divider()

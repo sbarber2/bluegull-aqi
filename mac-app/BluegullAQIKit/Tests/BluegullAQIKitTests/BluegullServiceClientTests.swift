@@ -167,4 +167,39 @@ final class BluegullServiceClientTests: XCTestCase {
         let url = try XCTUnwrap(capturedRequest?.url)
         XCTAssertEqual(url.host, "dev.aqi.bluegull.solutions")
     }
+
+    // MARK: - Configurable timeout (bluegull-aqi-e70.43)
+
+    func testRequestUsesTheDefaultTimeoutWhenNoneIsConfigured() async throws {
+        let overrideDefaults = try XCTUnwrap(UserDefaults(suiteName: "e70.43-service-default-timeout-test-\(UUID())"))
+
+        var capturedRequest: URLRequest?
+        MockURLProtocol.requestHandler = { [sampleResponseJSON] request in
+            capturedRequest = request
+            return self.mockResponse(statusCode: 200, body: sampleResponseJSON, url: request.url!)
+        }
+        let client = BluegullServiceClient(urlSession: MockURLProtocol.makeSession(), overrideDefaults: overrideDefaults)
+        _ = try await client.fetchCurrentObservations(location: location)
+
+        let request = try XCTUnwrap(capturedRequest)
+        // The whole point of e70.43: 15s, not the old shared 10s.
+        XCTAssertEqual(request.timeoutInterval, RequestTimeoutStore.defaultServiceTimeout)
+        XCTAssertEqual(request.timeoutInterval, 15)
+    }
+
+    func testRequestUsesAConfiguredTimeout() async throws {
+        let overrideDefaults = try XCTUnwrap(UserDefaults(suiteName: "e70.43-service-configured-timeout-test-\(UUID())"))
+        overrideDefaults.set(45.0, forKey: RequestTimeoutStore.serviceUserDefaultsKey)
+
+        var capturedRequest: URLRequest?
+        MockURLProtocol.requestHandler = { [sampleResponseJSON] request in
+            capturedRequest = request
+            return self.mockResponse(statusCode: 200, body: sampleResponseJSON, url: request.url!)
+        }
+        let client = BluegullServiceClient(urlSession: MockURLProtocol.makeSession(), overrideDefaults: overrideDefaults)
+        _ = try await client.fetchCurrentObservations(location: location)
+
+        let request = try XCTUnwrap(capturedRequest)
+        XCTAssertEqual(request.timeoutInterval, 45)
+    }
 }
