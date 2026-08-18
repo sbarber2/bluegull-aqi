@@ -62,6 +62,37 @@ struct ResolvedPlaceNameCaption: View {
     }
 }
 
+/// Aged-reading indicator (bluegull-aqi-e70.42) -- same clock-badge icon +
+/// absolute-timestamp caption already used in the widget faces themselves
+/// (`BluegullAQIWidgetView`'s own `agedReadingRow`/`agedReadingCaption`,
+/// bluegull-aqi-dc2.6/dc2.7), reimplemented here rather than shared as one
+/// type: those live in the separate `BluegullAQIWidgetViews` module, which
+/// this app target doesn't depend on. `WidgetDetailView` had NO staleness
+/// indication at all before this -- found by Steve testing the widget's
+/// own e70.39 fix: "the widget has the stale (clock) indicator now... Not
+/// [sic] that the Air Quality Detail popup has no indication of staleness
+/// at all."
+///
+/// Absolute, not relative (bluegull-aqi-dc2.7's own format constraint) --
+/// `headline.observedAtDisplay` is the actual AirNow observation instant,
+/// in the observation's own reporting-area zone.
+struct AgedReadingIndicator: View {
+    let headline: PollutantReading
+
+    var body: some View {
+        HStack(spacing: 4) {
+            Image(systemName: "clock.badge.exclamationmark")
+                .font(.caption2)
+            if let observedAt = headline.observedAtDisplay {
+                Text(observedAt)
+                    .font(.caption2)
+                    .lineLimit(1)
+            }
+        }
+        .foregroundStyle(.secondary)
+    }
+}
+
 /// Two-tier attribution (bluegull-aqi-e70.10, bluegull-aqi-10h.15): credit
 /// the specific reporting agency for this reading first, when AirNow
 /// supplied one, then the static AirNow/EPA credit -- always shown, never

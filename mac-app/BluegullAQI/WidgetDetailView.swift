@@ -41,6 +41,16 @@ struct WidgetDetailView: View {
     // right at it.
     @State private var reading: AQIReading?
 
+    // bluegull-aqi-e70.42: this view had no staleness indication at all
+    // before -- unlike the widget face itself (dc2.5/dc2.6) and the menu
+    // bar popover (its own lastError banner), tapping through to "Air
+    // Quality Detail" showed a reading with zero indication it might be
+    // aged, or that the active data source might be currently failing
+    // (see WidgetTimelineComputer.currentSnapshot, which already folds
+    // bluegull-aqi-e70.39's cross-process failure signal into this exact
+    // value).
+    @State private var freshness: AQIFreshness?
+
     // bluegull-aqi-e70.27: same injection reasoning as `AQIPopoverView`'s
     // own `locationResolver` property.
     private let locationResolver: LocationResolver
@@ -110,6 +120,9 @@ struct WidgetDetailView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    if freshness == .stale {
+                        AgedReadingIndicator(headline: headline)
+                    }
                     Divider()
                     PollutantListView(pollutants: reading.pollutants)
                     Divider()
@@ -133,10 +146,16 @@ struct WidgetDetailView: View {
         // creating a fresh one; re-running for the new id is what makes
         // that case fetch too, not just the window's first-ever open.
         .task(id: location) {
-            reading = computer?.currentSnapshot(for: location).reading
+            refreshFromCache()
             guard reading == nil else { return }
             await refreshController?.fetchIfNeeded(for: location)
-            reading = computer?.currentSnapshot(for: location).reading
+            refreshFromCache()
         }
+    }
+
+    private func refreshFromCache() {
+        let snapshot = computer?.currentSnapshot(for: location)
+        reading = snapshot?.reading
+        freshness = snapshot?.freshness
     }
 }
