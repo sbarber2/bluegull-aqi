@@ -158,9 +158,19 @@ struct MenuBarAQILabelToggle: View {
 /// is the conventional "no value in this slot" mark and reads as neither
 /// mid-fetch (which an ellipsis would suggest, and nothing is fetching) nor
 /// alarming (which a "?" would).
+///
+/// Also falls back to the same icon+dash treatment whenever `lastError` is
+/// non-nil, even if `freshness` is still `.fresh` (bluegull-aqi-e70.37) --
+/// found by Steve switching data source modes with the service down: the
+/// cached reading was still within its TTL, so the number just sat there
+/// unchanged with no indication the *active* source was currently failing.
+/// Same "don't show a number I can't currently trust" reasoning as the
+/// staleness fallback above, not a separate visual -- reusing it instead of
+/// inventing a warning badge was Steve's own call once this gap was found.
 struct MenuBarStatusLabel: View {
     let reading: AQIReading?
     let freshness: AQIFreshness?
+    let lastError: AQIFetchError?
 
     // bluegull-aqi-e70.26: Steve's feedback was that the existing 8pt dot
     // undersells the category color. NOTE: the claim that the dot was
@@ -182,7 +192,7 @@ struct MenuBarStatusLabel: View {
     private var isAQILabelEnabled = MenuBarAppearanceStore.defaultAQILabelEnabled
 
     var body: some View {
-        if let reading, freshness == .fresh,
+        if let reading, freshness == .fresh, lastError == nil,
            let headline = reading.headlinePollutant,
            let aqi = headline.nowcastAQI, let category = headline.category {
             if isColorPillEnabled, let pillImage = pillImage(aqi: aqi, category: category) {

@@ -114,7 +114,8 @@ struct BluegullAQIApp: App {
             // to live somewhere always-rendered, so it's here regardless.
             MenuBarStatusLabel(
                 reading: refreshController?.latestReading,
-                freshness: refreshController?.latestReadingFreshness
+                freshness: refreshController?.latestReadingFreshness,
+                lastError: refreshController?.lastError
             )
                 .task { refreshController?.start() }
                 // Fetch immediately once permission is actually granted,

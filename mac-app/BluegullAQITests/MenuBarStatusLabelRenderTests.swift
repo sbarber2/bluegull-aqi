@@ -14,13 +14,13 @@ import BluegullAQIKit
 final class MenuBarStatusLabelRenderTests: XCTestCase {
     @MainActor
     func testRendersWithoutCrashingWithColorPillEnabled() {
-        let image = render(MenuBarStatusLabel(reading: sampleReading, freshness: .fresh), colorPillEnabled: true)
+        let image = render(MenuBarStatusLabel(reading: sampleReading, freshness: .fresh, lastError: nil), colorPillEnabled: true)
         XCTAssertNotNil(image)
     }
 
     @MainActor
     func testRendersWithoutCrashingWithColorPillDisabled() {
-        let image = render(MenuBarStatusLabel(reading: sampleReading, freshness: .fresh), colorPillEnabled: false)
+        let image = render(MenuBarStatusLabel(reading: sampleReading, freshness: .fresh, lastError: nil), colorPillEnabled: false)
         XCTAssertNotNil(image)
     }
 
@@ -28,13 +28,13 @@ final class MenuBarStatusLabelRenderTests: XCTestCase {
     // the AQI label through separately -- confirms each renders with it on.
     @MainActor
     func testRendersWithoutCrashingWithAQILabelEnabledAndColorPill() {
-        let image = render(MenuBarStatusLabel(reading: sampleReading, freshness: .fresh), colorPillEnabled: true, aqiLabelEnabled: true)
+        let image = render(MenuBarStatusLabel(reading: sampleReading, freshness: .fresh, lastError: nil), colorPillEnabled: true, aqiLabelEnabled: true)
         XCTAssertNotNil(image)
     }
 
     @MainActor
     func testRendersWithoutCrashingWithAQILabelEnabledAndPlainDot() {
-        let image = render(MenuBarStatusLabel(reading: sampleReading, freshness: .fresh), colorPillEnabled: false, aqiLabelEnabled: true)
+        let image = render(MenuBarStatusLabel(reading: sampleReading, freshness: .fresh, lastError: nil), colorPillEnabled: false, aqiLabelEnabled: true)
         XCTAssertNotNil(image)
     }
 
@@ -42,13 +42,27 @@ final class MenuBarStatusLabelRenderTests: XCTestCase {
     func testRendersWithoutCrashingWhenStale() {
         // bluegull-aqi-e70.31: a stale reading falls back to the icon+dash,
         // neither styling applies -- confirms that path still renders too.
-        let image = render(MenuBarStatusLabel(reading: sampleReading, freshness: .stale), colorPillEnabled: true)
+        let image = render(MenuBarStatusLabel(reading: sampleReading, freshness: .stale, lastError: nil), colorPillEnabled: true)
         XCTAssertNotNil(image)
     }
 
     @MainActor
     func testRendersWithoutCrashingWhenNoReading() {
-        let image = render(MenuBarStatusLabel(reading: nil, freshness: nil), colorPillEnabled: true)
+        let image = render(MenuBarStatusLabel(reading: nil, freshness: nil, lastError: nil), colorPillEnabled: true)
+        XCTAssertNotNil(image)
+    }
+
+    // bluegull-aqi-e70.37: a fresh-by-TTL reading still falls back to the
+    // icon+dash when the most recent fetch attempt failed -- confirmed live
+    // by Steve switching data source modes with the service down: the
+    // cached number just sat there with no indication the active source
+    // was currently failing.
+    @MainActor
+    func testRendersWithoutCrashingWhenFreshButLastFetchFailed() {
+        let image = render(
+            MenuBarStatusLabel(reading: sampleReading, freshness: .fresh, lastError: .serviceModeRateLimited),
+            colorPillEnabled: true
+        )
         XCTAssertNotNil(image)
     }
 
