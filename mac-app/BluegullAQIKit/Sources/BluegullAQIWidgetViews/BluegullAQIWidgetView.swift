@@ -179,11 +179,10 @@ struct SmallWidgetLayout: View {
             // bluegull-aqi-mtm.20: every widget shows its own location now,
             // not just whichever one the menu bar happens to be showing --
             // this is what actually makes that visible.
-            // bluegull-aqi-e70.35: noticeably larger than resolvedPlaceName
-            // below -- Steve wanted more headroom than a single text-style
-            // step gave (2026-08-18 follow-up).
+            // bluegull-aqi-e70.35: matches Medium/Large -- Steve settled on
+            // .body across all three sizes (2026-08-18 follow-up).
             Text(locationName)
-                .font(.subheadline)
+                .font(.body)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -255,7 +254,7 @@ struct MediumWidgetLayout: View {
             // bluegull-aqi-e70.35: see SmallWidgetLayout's own comment on
             // this pairing.
             Text(locationName)
-                .font(.subheadline)
+                .font(.body)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             if let resolvedPlaceName {
