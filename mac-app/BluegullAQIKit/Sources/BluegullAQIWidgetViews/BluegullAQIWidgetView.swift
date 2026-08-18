@@ -179,8 +179,11 @@ struct SmallWidgetLayout: View {
             // bluegull-aqi-mtm.20: every widget shows its own location now,
             // not just whichever one the menu bar happens to be showing --
             // this is what actually makes that visible.
+            // bluegull-aqi-e70.35: one step larger than resolvedPlaceName
+            // below -- Steve wanted the selected location (this) noticeably
+            // bigger than the discovered place name, not by a lot.
             Text(locationName)
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
@@ -249,8 +252,10 @@ struct MediumWidgetLayout: View {
         VStack(alignment: .leading, spacing: 4) {
             // bluegull-aqi-mtm.20: every widget shows its own location now,
             // not just whichever one the menu bar happens to be showing.
+            // bluegull-aqi-e70.35: one step larger than resolvedPlaceName
+            // below -- see SmallWidgetLayout's own comment on this pairing.
             Text(locationName)
-                .font(.caption2)
+                .font(.caption)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             if let resolvedPlaceName {
@@ -358,8 +363,10 @@ struct LargeWidgetLayout: View {
         VStack(alignment: .leading, spacing: 10) {
             // bluegull-aqi-mtm.20: every widget shows its own location now,
             // not just whichever one the menu bar happens to be showing.
+            // bluegull-aqi-e70.35: one step larger than resolvedPlaceName
+            // below -- see SmallWidgetLayout's own comment on this pairing.
             Text(locationName)
-                .font(.caption)
+                .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             if let resolvedPlaceName {
