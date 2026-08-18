@@ -155,7 +155,7 @@ struct BluegullAQIApp: App {
         // there too (see that file's own doc comment on the layout-
         // recursion bug that combination caused).
         Window("Settings", id: "settings") {
-            SettingsView()
+            SettingsView(onDataSourceModeChange: { Task { await refreshController?.refreshNow() } })
         }
         .windowResizability(.contentSize)
     }

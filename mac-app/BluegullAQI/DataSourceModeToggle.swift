@@ -17,12 +17,24 @@ struct DataSourceModeToggle: View {
     @AppStorage(DataSourceModeStore.userDefaultsKey, store: DataSourceModeStore.sharedDefaults)
     private var mode: DataSourceMode = DataSourceModeStore.defaultMode
 
+    // Called after the mode changes, so the caller (BluegullAQIApp) can
+    // trigger an immediate refetch under the newly selected source rather
+    // than leaving whatever was last fetched under the old mode showing
+    // until the next scheduled refresh, up to an hour away -- same
+    // "hygiene" reasoning, and the same pattern, as
+    // `MenuBarLocationPicker.onChange` (bluegull-aqi-e70.21). Without this,
+    // switching Direct<->Service silently kept showing stale data, which
+    // is exactly what Steve hit and reported before (see AQIPopoverView's
+    // own doc comment on bluegull-aqi-dc2.1's origin).
+    let onChange: () -> Void
+
     var body: some View {
         Picker("Data Source", selection: $mode) {
             Text("Service (no setup required)").tag(DataSourceMode.service)
             Text("Direct (use my own AirNow key)").tag(DataSourceMode.direct)
         }
         .pickerStyle(.segmented)
+        .onChange(of: mode) { onChange() }
         .accessibilityIdentifier("dataSourceModePicker")
     }
 }

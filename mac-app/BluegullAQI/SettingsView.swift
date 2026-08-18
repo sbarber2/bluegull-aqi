@@ -35,6 +35,12 @@ struct SettingsView: View {
     // feature, so it's deliberately not behind an ordinary visible control.
     @State private var isDevOverrideRevealed = false
 
+    // Forwarded straight to DataSourceModeToggle's own `onChange` -- see
+    // that property's doc comment. Defaults to a no-op so render tests
+    // (and any other caller with no refresh loop to trigger) don't need to
+    // supply one.
+    var onDataSourceModeChange: () -> Void = {}
+
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
@@ -46,7 +52,7 @@ struct SettingsView: View {
                     .accessibilityIdentifier("settingsDoneButton")
             }
 
-            DataSourceModeToggle()
+            DataSourceModeToggle(onChange: onDataSourceModeChange)
             Divider()
             AirNowAPIKeyEntryView()
             Divider()

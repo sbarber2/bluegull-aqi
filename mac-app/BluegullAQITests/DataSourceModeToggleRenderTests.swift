@@ -9,7 +9,7 @@ import SwiftUI
 final class DataSourceModeToggleRenderTests: XCTestCase {
     @MainActor
     func testRendersWithoutCrashing() {
-        let renderer = ImageRenderer(content: DataSourceModeToggle())
+        let renderer = ImageRenderer(content: DataSourceModeToggle(onChange: {}))
         XCTAssertNotNil(renderer.nsImage)
     }
 }
