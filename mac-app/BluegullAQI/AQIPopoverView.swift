@@ -9,16 +9,15 @@ import BluegullAQIKit
 /// `AQIReading`. Attribution (bluegull-aqi-e70.10) and the preliminary-data
 /// disclaimer (bluegull-aqi-dc2.4) are both rendered.
 struct AQIPopoverView: View {
-    // bluegull-aqi-e70.27: same key `MenuBarLocationPicker` itself reads,
-    // independently -- matching precedent elsewhere in this codebase (e.g.
-    // `MenuBarStatusLabel`/`MenuBarColorStyleToggle` both independently
-    // read `MenuBarAppearanceStore.colorPillEnabledKey`). Needed here only
-    // to decide whether to show the resolved-place-name caption below --
-    // a pinned location already has its own human-chosen name in the
-    // picker, so this only applies to the synthetic "current location"
-    // option.
-    @AppStorage(MenuBarLocationSelectionStore.userDefaultsKey)
-    private var selectedLocationID: String = MenuBarLocationSelectionStore.defaultSelectionID
+    // bluegull-aqi-e70.27: the *resolved* selection (fallback-aware, not a
+    // raw AppStorage string) reported by `MenuBarLocationPicker` -- needed
+    // here only to decide whether to show the resolved-place-name caption
+    // below; a pinned location already has its own human-chosen name in
+    // the picker, so this only applies to the synthetic "current location"
+    // option. See `MenuBarLocationPicker.onResolvedSelectionChange`'s own
+    // doc comment for why comparing a raw stored ID against the literal
+    // "current" sentinel was wrong.
+    @State private var resolvedLocationOption: LocationOption = .currentLocation
 
     let reading: AQIReading?
 
@@ -69,7 +68,10 @@ struct AQIPopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                MenuBarLocationPicker(onChange: onLocationChange)
+                MenuBarLocationPicker(
+                    onChange: onLocationChange,
+                    onResolvedSelectionChange: { resolvedLocationOption = $0 }
+                )
                 Spacer()
                 Button {
                     // LSUIElement (agent) apps aren't reliably made
@@ -83,7 +85,7 @@ struct AQIPopoverView: View {
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("settingsButton")
             }
-            if let reading, selectedLocationID == MenuBarLocationSelectionStore.defaultSelectionID {
+            if let reading, resolvedLocationOption == .currentLocation {
                 ResolvedPlaceNameCaption(location: reading.location, resolver: locationResolver)
             }
 

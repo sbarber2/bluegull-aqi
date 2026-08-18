@@ -24,6 +24,19 @@ struct MenuBarLocationPicker: View {
     /// waiting for the next scheduled refresh.
     let onChange: () -> Void
 
+    // bluegull-aqi-e70.27: reports the *resolved* selection (fallback-aware
+    // via `MenuBarLocationSelectionStore.selection(id:availableOptions:)`,
+    // same helper `AQIRefreshController` already uses) -- not just the raw
+    // stored ID. A stored ID that no longer matches any current pin (e.g.
+    // the pin it pointed at was since deleted) resolves to `.currentLocation`
+    // here too, matching what actually gets fetched; a caller comparing the
+    // raw AppStorage string against the literal "current" sentinel instead
+    // would wrongly treat that stale-ID state as "some pin," not current
+    // location -- exactly the bug this replaced (confirmed live: Steve had
+    // zero pinned locations left, but `menuBarLocationSelection` still held
+    // a stale pin UUID from before its pin was deleted).
+    var onResolvedSelectionChange: (LocationOption) -> Void = { _ in }
+
     var body: some View {
         Picker("Location", selection: $selectedID) {
             ForEach(options, id: \.persistenceID) { option in
@@ -32,8 +45,18 @@ struct MenuBarLocationPicker: View {
         }
         .labelsHidden()
         .pickerStyle(.menu)
-        .onAppear { options = WidgetLocationOptions.all(from: PinnedLocationsStore()) }
-        .onChange(of: selectedID) { onChange() }
+        .onAppear {
+            options = WidgetLocationOptions.all(from: PinnedLocationsStore())
+            reportResolvedSelection()
+        }
+        .onChange(of: selectedID) {
+            onChange()
+            reportResolvedSelection()
+        }
         .accessibilityIdentifier("menuBarLocationPicker")
+    }
+
+    private func reportResolvedSelection() {
+        onResolvedSelectionChange(MenuBarLocationSelectionStore.selection(id: selectedID, availableOptions: options))
     }
 }
