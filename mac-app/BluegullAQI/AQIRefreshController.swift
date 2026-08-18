@@ -201,6 +201,16 @@ final class AQIRefreshController {
             WidgetCenter.shared.reloadTimelines(ofKind: BluegullWidgetKind.aqi)
         } catch let error as AQIFetchError {
             lastError = error
+            // bluegull-aqi-e70.39's own signal (cache.recordFailedFetch(),
+            // called inside AQIFetchCoordinator on this same failure)
+            // updates the shared cache correctly, but nothing else tells a
+            // placed widget to go re-check it -- confirmed live: the
+            // failure landed in the App Group right on schedule, but the
+            // desktop widget still showed the old, not-yet-downgraded
+            // state because WidgetKit only naturally re-evaluates on its
+            // own reload policy (up to an hour away). Same nudge as the
+            // success branch above, just reached from the other outcome.
+            WidgetCenter.shared.reloadTimelines(ofKind: BluegullWidgetKind.aqi)
         } catch {
             // LocationResolverError or anything else -- no location to
             // fetch for. Leave latestReading as whatever was last cached;
