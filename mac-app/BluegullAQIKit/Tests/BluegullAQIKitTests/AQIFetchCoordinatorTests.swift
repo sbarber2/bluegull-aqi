@@ -125,7 +125,10 @@ final class AQIFetchCoordinatorTests: XCTestCase {
         }
     }
 
-    func testServiceModeFailureWrapsAsAirNowError() async {
+    // bluegull-aqi-e70.38: a non-429 Service-mode failure gets its own
+    // case, not the shared .airNowError -- AirNowError.userMessage's
+    // "AirNow"-specific wording doesn't apply to our own backend.
+    func testServiceModeFailureWrapsAsServiceModeErrorNotAirNowError() async {
         MockURLProtocol.requestHandler = { request in
             let response = HTTPURLResponse(url: request.url!, statusCode: 502, httpVersion: "HTTP/1.1", headerFields: nil)!
             return (response, Data(#"{"error": "upstream unavailable"}"#.utf8))
@@ -139,12 +142,39 @@ final class AQIFetchCoordinatorTests: XCTestCase {
 
         do {
             _ = try await coordinator.fetch(location: location, mode: .service)
-            XCTFail("Expected .airNowError")
+            XCTFail("Expected .serviceModeError")
         } catch let error as AQIFetchError {
-            guard case .airNowError = error else {
-                XCTFail("Expected .airNowError, got \(error)")
+            guard case .serviceModeError = error else {
+                XCTFail("Expected .serviceModeError, got \(error)")
                 return
             }
+        } catch {
+            XCTFail("Unexpected error type: \(error)")
+        }
+    }
+
+    // A body that doesn't parse as lambda_handler.py's own {"error": "..."}
+    // contract (e.g. API Gateway's own throttling/gateway-error response,
+    // which never reaches the handler) must still produce a real,
+    // non-"Unknown error" message -- Steve's own complaint.
+    func testServiceModeFailureWithUnparseableBodyStillProducesAGoodMessage() async {
+        MockURLProtocol.requestHandler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 500, httpVersion: "HTTP/1.1", headerFields: nil)!
+            return (response, Data("<html>Internal Server Error</html>".utf8))
+        }
+
+        let coordinator = AQIFetchCoordinator(
+            serviceClient: BluegullServiceClient(urlSession: MockURLProtocol.makeSession()),
+            apiKeyStore: AirNowAPIKeyStore(keychain: InMemoryKeychain()),
+            cache: AppGroupCache(store: InMemorySharedCacheStore())
+        )
+
+        do {
+            _ = try await coordinator.fetch(location: location, mode: .service)
+            XCTFail("Expected .serviceModeError")
+        } catch let error as AQIFetchError {
+            XCTAssertFalse(error.userMessage.localizedCaseInsensitiveContains("unknown"))
+            XCTAssertTrue(error.userMessage.contains("500"))
         } catch {
             XCTFail("Unexpected error type: \(error)")
         }
@@ -266,5 +296,48 @@ final class UserMessageTests: XCTestCase {
         // bluegull-aqi-dc2.2's actual ask: nudge toward Direct mode, not
         // just say "something went wrong."
         XCTAssertTrue(AQIFetchError.serviceModeRateLimited.userMessage.localizedCaseInsensitiveContains("Direct"))
+    }
+
+    // MARK: - serviceModeError (bluegull-aqi-e70.38)
+
+    func testServiceModeErrorMessageMentionsDirectMode() {
+        let error = AQIFetchError.serviceModeError(.httpError(statusCode: 500))
+        XCTAssertTrue(error.userMessage.localizedCaseInsensitiveContains("Direct"))
+    }
+
+    // Steve's own complaint, verbatim: "'Unknown error' usually means
+    // something we cannot anticipate, and the service not responding or
+    // otherwise telling us it's not available is hardly unexpected."
+    func testServiceModeErrorMessageNeverSaysUnknownError() {
+        let errors: [AirNowError] = [
+            .requestFailed("timed out"),
+            .unexpectedResponse,
+            .httpError(statusCode: 500),
+            .webServiceError(statusCode: 502, message: "No error details in response body"),
+            .decodingFailed("truncated"),
+        ]
+        for error in errors {
+            XCTAssertFalse(
+                AQIFetchError.serviceModeError(error).userMessage.localizedCaseInsensitiveContains("unknown"),
+                "\(error) produced a message that still says \"unknown\""
+            )
+        }
+    }
+
+    // AirNowError.userMessage says "AirNow" when describing what actually
+    // went wrong ("Couldn't reach AirNow..."), which is accurate for Direct
+    // mode but not for Service mode (talks to our own backend). The generic
+    // "switch to Direct mode... for your own AirNow key" nudge legitimately
+    // says "AirNow" too -- this only checks that the *failure description*
+    // itself doesn't delegate to the misleading AirNow-specific wording.
+    func testServiceModeErrorMessageDoesNotDelegateToAirNowSpecificWording() {
+        let underlying = AirNowError.requestFailed("timed out")
+        let error = AQIFetchError.serviceModeError(underlying)
+        XCTAssertFalse(error.userMessage.contains(underlying.userMessage))
+    }
+
+    func testServiceModeErrorMessageIncludesTheHTTPStatusWhenKnown() {
+        let error = AQIFetchError.serviceModeError(.httpError(statusCode: 503))
+        XCTAssertTrue(error.userMessage.contains("503"))
     }
 }

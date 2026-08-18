@@ -18,6 +18,17 @@ public enum AQIFetchError: Error, Equatable, Sendable {
     /// what decides when to use this case instead of `.airNowError`.
     case serviceModeRateLimited
 
+    /// Every other Service-mode failure (bluegull-aqi-e70.38) -- kept
+    /// separate from `.airNowError` even though it wraps the same
+    /// `AirNowError` type, because `AirNowError.userMessage` says "AirNow"
+    /// throughout, which is accurate for Direct mode (`AirNowDirectClient`
+    /// really does talk to AirNow) but actively misleading here: Service
+    /// mode talks to *our own* backend, which just happens to reuse
+    /// `AirNowError` as its wire-level error type (see
+    /// `BluegullServiceClient`'s own doc comment on why). This case builds
+    /// its own message instead of delegating to `error.userMessage`.
+    case serviceModeError(AirNowError)
+
     /// User-facing text (bluegull-aqi-e70.24) -- found genuinely missing:
     /// switching to Service mode silently failed every fetch with no UI
     /// indication why, making the whole app look broken/unresponsive
@@ -33,6 +44,36 @@ public enum AQIFetchError: Error, Equatable, Sendable {
             return error.userMessage
         case .serviceModeRateLimited:
             return "BlueGull's shared service is busy. Try again shortly, or switch to Direct mode in Settings for your own AirNow key with no shared limit."
+        case .serviceModeError(let error):
+            return "BlueGull's shared service \(Self.serviceFailureDescription(error)). Try again shortly, or switch to Direct mode in Settings for your own AirNow key."
+        }
+    }
+
+    /// bluegull-aqi-e70.38: Steve's own complaint, verbatim -- "'Unknown
+    /// error' usually means something we cannot anticipate, and the service
+    /// not responding or otherwise telling us it's not available is hardly
+    /// unexpected." Every one of `AirNowError`'s cases WAS already
+    /// anticipated; losing that distinction behind a generic message (or
+    /// AirNow-specific wording that doesn't apply to our own backend) was
+    /// the actual bug, not a missing case. No status-code guessing here --
+    /// this describes exactly the failure shape the client already knows,
+    /// never invents specifics it doesn't have.
+    private static func serviceFailureDescription(_ error: AirNowError) -> String {
+        switch error {
+        case .requestFailed:
+            // Not "right now" -- ComplianceTests bans that phrase project-
+            // wide (bluegull-aqi-10h.18), even here where it has nothing to
+            // do with NowCast-vs-spot-reading accuracy; the scan is a blunt
+            // literal-phrase match, not context-aware.
+            return "isn't reachable at the moment"
+        case .unexpectedResponse:
+            return "returned an unexpected response"
+        case .httpError(let statusCode):
+            return "returned an error (HTTP \(statusCode))"
+        case .webServiceError(let statusCode, _):
+            return "reported a problem (HTTP \(statusCode))"
+        case .decodingFailed:
+            return "returned a response we couldn't understand"
         }
     }
 }
@@ -118,7 +159,7 @@ public struct AQIFetchCoordinator: Sendable {
             if Self.isRateLimited(error) {
                 throw AQIFetchError.serviceModeRateLimited
             }
-            throw AQIFetchError.airNowError(error)
+            throw AQIFetchError.serviceModeError(error)
         }
     }
 

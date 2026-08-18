@@ -120,8 +120,17 @@ public struct BluegullServiceClient: Sendable {
         let error: String
     }
 
+    // bluegull-aqi-e70.38: "No error details in response body" instead of
+    // "Unknown error" -- we DO know something specific here (a non-2xx
+    // response arrived; its body just didn't match lambda_handler.py's own
+    // `{"error": "..."}` contract, e.g. API Gateway's own throttling/
+    // gateway-error responses, which never reach the handler at all). Not
+    // user-facing itself -- `AQIFetchError.serviceModeError` builds the
+    // actual displayed message from the status code, not this string -- but
+    // still worth being honest about for anything that logs it directly.
     private static func errorForFailedResponse(data: Data, statusCode: Int) -> AirNowError {
-        let message = (try? JSONDecoder().decode(ServiceErrorBody.self, from: data))?.error ?? "Unknown error"
+        let message = (try? JSONDecoder().decode(ServiceErrorBody.self, from: data))?.error
+            ?? "No error details in response body"
         return .webServiceError(statusCode: statusCode, message: message)
     }
 }

@@ -113,7 +113,7 @@ final class BluegullServiceClientTests: XCTestCase {
             XCTFail("Expected AirNowError.webServiceError")
         } catch AirNowError.webServiceError(let statusCode, let message) {
             XCTAssertEqual(statusCode, 503)
-            XCTAssertEqual(message, "Unknown error")
+            XCTAssertEqual(message, "No error details in response body")
         }
     }
 
