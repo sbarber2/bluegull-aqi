@@ -150,6 +150,13 @@ struct AQIPopoverView: View {
         Label(message, systemImage: "exclamationmark.triangle")
             .font(.caption)
             .foregroundStyle(.orange)
+            // bluegull-aqi-e70.40: without this, a longer message (e.g.
+            // AQIFetchError.serviceModeError's own text) truncated with an
+            // ellipsis instead of wrapping -- Text/Label don't grow
+            // vertically inside a VStack on their own; this tells SwiftUI
+            // to size for the wrapped content instead of clipping to a
+            // single line's height.
+            .fixedSize(horizontal: false, vertical: true)
     }
 
     // Live-updating (`Text(_:style:)`, not a formatted-once String) so it

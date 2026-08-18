@@ -45,7 +45,10 @@ public enum AQIFetchError: Error, Equatable, Sendable {
         case .serviceModeRateLimited:
             return "BlueGull's shared service is busy. Try again shortly, or switch to Direct mode in Settings for your own AirNow key with no shared limit."
         case .serviceModeError(let error):
-            return "BlueGull's shared service \(Self.serviceFailureDescription(error)). Try again shortly, or switch to Direct mode in Settings for your own AirNow key."
+            // bluegull-aqi-e70.40: "Service error: <reason>" -- Steve's
+            // own call, replacing the earlier "BlueGull's shared service
+            // <reason>" phrasing as too verbose.
+            return "Service error: \(Self.serviceFailureDescription(error)). Try again shortly, or switch to Direct mode in Settings for your own AirNow key."
         }
     }
 
@@ -57,7 +60,8 @@ public enum AQIFetchError: Error, Equatable, Sendable {
     /// AirNow-specific wording that doesn't apply to our own backend) was
     /// the actual bug, not a missing case. No status-code guessing here --
     /// this describes exactly the failure shape the client already knows,
-    /// never invents specifics it doesn't have.
+    /// never invents specifics it doesn't have. Phrased as a short clause
+    /// that reads naturally after the "Service error: " prefix above.
     private static func serviceFailureDescription(_ error: AirNowError) -> String {
         switch error {
         case .requestFailed:
@@ -65,15 +69,15 @@ public enum AQIFetchError: Error, Equatable, Sendable {
             // wide (bluegull-aqi-10h.18), even here where it has nothing to
             // do with NowCast-vs-spot-reading accuracy; the scan is a blunt
             // literal-phrase match, not context-aware.
-            return "isn't reachable at the moment"
+            return "not reachable at the moment"
         case .unexpectedResponse:
-            return "returned an unexpected response"
+            return "unexpected response"
         case .httpError(let statusCode):
-            return "returned an error (HTTP \(statusCode))"
+            return "HTTP \(statusCode)"
         case .webServiceError(let statusCode, _):
-            return "reported a problem (HTTP \(statusCode))"
+            return "HTTP \(statusCode)"
         case .decodingFailed:
-            return "returned a response we couldn't understand"
+            return "unreadable response"
         }
     }
 }
