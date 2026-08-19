@@ -997,6 +997,9 @@ boundary is one visible list instead of scattered across epics:
 | CloudFront in front of the API | `bluegull-aqi-q9r.33` | Cost/DoS benefit doesn't justify the complexity until real traffic exists |
 | App Attest device attestation | `bluegull-aqi-10h.14` | Confirmed supported on macOS 27+, but adopting it means real new server-side verification work and raising the minimum supported OS -- a scope decision, not this v1's default |
 | Branch protection on `main` | `bluegull-aqi-8ef.9` | Friction without benefit until CI produces status checks worth gating on |
+| Direct distribution outside the App Store | `bluegull-aqi-qkd` | v1 ships App Store-only (line 30); a Developer ID-signed side channel is a distribution-strategy decision, not a v1 blocker |
+| In-app version updates for the direct build | `bluegull-aqi-701` | Depends on direct distribution existing first; App Store build gets updates from the App Store itself |
+| TestFlight for beta/pre-release testers | `bluegull-aqi-wmo` | Same sandboxed build as the App Store release, so it's a process addition, not something v1 needs to ship |
 
 Note what is *not* on this list: attribution (`e70.10`, `mtm.14`), the
 preliminary-data disclaimer (`dc2.4`), official AQI colors, and the never-derive-AQI
