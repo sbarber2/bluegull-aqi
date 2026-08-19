@@ -3,14 +3,15 @@
 A macOS menu bar app and desktop widget that shows local air quality, using data from
 the US EPA's [AirNow](https://www.airnow.gov) program.
 
-> **Status: early scaffolding.** The backend (`service/`) and the shared Swift
-> package (`mac-app/BluegullAQIKit/`) exist as bare, tested skeletons — no real
-> AQI-fetching logic yet. The menu bar app, widget extension, and most of the
-> backend's actual behavior are still just design and task graph. See
+> **Status: pre-release.** The menu bar app, desktop widget, and backend service are
+> functional and covered by tests, but the app hasn't shipped yet — no version has
+> been tagged and it hasn't been submitted to the App Store. See
 > [doc/DESIGN.md](doc/DESIGN.md) for the full design and
-> [Task tracking](#task-tracking) for what's queued up.
+> [Task tracking](#task-tracking) for what's left.
 
-## What it will do
+See [Release Notes](doc/ReleaseNotes.md) for what's changed recently.
+
+## What it does
 
 - **Menu bar** — current overall AQI at a glance, always visible.
 - **Desktop widget** — current AQI plus the full pollutant breakdown (PM2.5, PM10,
@@ -44,24 +45,24 @@ know or care which one answered.
 ```
 bluegull-aqi/
 ├── doc/
-│   └── DESIGN.md          # the design record — start here
+│   ├── DESIGN.md              # the design record — start here
+│   └── ReleaseNotes.md        # version history
 ├── mac-app/
-│   ├── BluegullAQI/        # (planned) menu bar container app
-│   ├── BluegullAQIWidget/  # (planned) WidgetKit extension
-│   └── BluegullAQIKit/     # shared Swift package: models, clients, cache -- scaffolded
-├── service/                # AWS SAM backend — the caching proxy -- scaffolded
+│   ├── BluegullAQI.xcodeproj
+│   ├── BluegullAQI/            # menu bar container app (SwiftUI)
+│   ├── BluegullAQIWidget/      # WidgetKit desktop widget extension
+│   ├── BluegullAQIKit/         # shared Swift package: models, clients, cache, widget views
+│   ├── BluegullAQITests/, BluegullAQIUITests/
+│   └── branding/                # app icon source, DMG background
+├── service/                # AWS SAM backend — the caching proxy
 │   ├── template.yaml
 │   ├── src/
 │   └── tests/
 ├── .beads/                # issue tracker data (see Task tracking below)
-├── .github/workflows/     # (planned) CI
+├── .github/workflows/     # CI — mac-app-ci.yml, service-ci.yml, secret-scan.yml
 ├── CLAUDE.md, AGENTS.md   # instructions for AI coding agents
 └── LICENSE
 ```
-
-"Scaffolded" means a real, buildable, tested skeleton with no actual behavior yet —
-`service/`'s Lambda handler returns a placeholder response, `BluegullAQIKit` exports
-a version constant. `(planned)` means the directory doesn't exist yet.
 
 The `mac-app/` split exists so that the menu bar app and the widget extension share
 one core library rather than duplicating logic. It also reflects a platform
