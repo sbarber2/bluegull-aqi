@@ -4,7 +4,7 @@
 # detail (poetry, DynamoDB Local, SAM); this delegates to it rather than
 # duplicating it.
 .PHONY: mac-dev-setup test test-swift test-snapshots test-ui test-service snapshots record-snapshots \
-        app-build app-run app-launch app-stop app-clean widget-reset app-package \
+        app-build app-run app-launch app-stop app-clean widget-reset app-package github-release \
         service-deploy service-delete service-enable service-disable
 
 MAC_APP_DIR := mac-app
@@ -25,6 +25,8 @@ PACKAGE_APP := $(PACKAGE_EXPORT_DIR)/BluegullAQI.app
 # (confirmed by actually inspecting the export dir, not assumed). This is
 # a clean staging copy of just the .app, built fresh every run.
 PACKAGE_DMG_SOURCE_DIR := $(PACKAGE_BUILD_DIR)/dmg-source
+PACKAGE_DMG := $(PACKAGE_BUILD_DIR)/BluegullAQI.dmg
+RELEASE_NOTES_EXTRACT := $(PACKAGE_BUILD_DIR)/release-notes.md
 # Name of the one-time `xcrun notarytool store-credentials` keychain
 # profile -- see doc/DEVINSTALL.md "Package for ad-hoc distribution" for
 # setup. Not a secret itself (just a label); the credentials it points to
@@ -399,6 +401,38 @@ app-package:
 		--app-drop-link $(DMG_APPLINK_X) $(DMG_APPLINK_Y) \
 		--no-internet-enable \
 		--overwrite \
-		$(PACKAGE_BUILD_DIR)/BluegullAQI.dmg \
+		$(PACKAGE_DMG) \
 		$(PACKAGE_DMG_SOURCE_DIR)
-	@echo "Packaged, notarized DMG at $(PACKAGE_BUILD_DIR)/BluegullAQI.dmg"
+	@echo "Packaged, notarized DMG at $(PACKAGE_DMG)"
+
+# Publishes the DMG `app-package` just built as a GitHub Release
+# (bluegull-aqi-17f) -- automates the exact by-hand steps done for v0.1.0
+# and v0.1.1: pull the release body straight out of doc/ReleaseNotes.md's
+# matching "## X.Y.Z" section (awk, up to the next "## " heading) and hand
+# it plus the DMG to `gh release create` against the matching git tag.
+#
+# Deliberately does NOT bump the version, write release notes, or create
+# the git tag itself -- those stay their own deliberate, separate steps
+# (release notes committed BEFORE the tag, per this project's convention).
+# This only automates the upload that used to happen by hand afterward, so
+# it checks for and fails clearly on any of those three not already being
+# done, rather than half-publishing or guessing at intent:
+#   1. mac-app/build/BluegullAQI.dmg must exist -- run `make app-package`.
+#   2. The version's own git tag (vX.Y.Z, read from the *built app's own*
+#      MARKETING_VERSION, not project.yml's Debug-build fallback -- see
+#      that key's own comment) must already exist, so the release always
+#      matches what's actually in the DMG and what was actually tagged.
+#   3. doc/ReleaseNotes.md must already have a "## X.Y.Z" section for that
+#      version, committed.
+github-release:
+	$(eval RELEASE_VERSION := $(shell /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" $(PACKAGE_APP)/Contents/Info.plist 2>/dev/null))
+	@test -n "$(RELEASE_VERSION)" || { echo "Can't read MARKETING_VERSION from $(PACKAGE_APP)/Contents/Info.plist -- run 'make app-package' first."; exit 1; }
+	$(eval RELEASE_TAG := v$(RELEASE_VERSION))
+	@test -f "$(PACKAGE_DMG)" || { echo "$(PACKAGE_DMG) not found -- run 'make app-package' first."; exit 1; }
+	@git rev-parse "$(RELEASE_TAG)" >/dev/null 2>&1 || { echo "Git tag $(RELEASE_TAG) doesn't exist -- commit release notes, then 'git tag -a $(RELEASE_TAG) -m $(RELEASE_TAG)', push it, and re-run."; exit 1; }
+	@awk -v ver="$(RELEASE_VERSION)" \
+		'$$0 ~ "^## " ver " " { flag=1 } flag && $$0 ~ "^## " && $$0 !~ "^## " ver " " { exit } flag' \
+		doc/ReleaseNotes.md > $(RELEASE_NOTES_EXTRACT)
+	@test -s "$(RELEASE_NOTES_EXTRACT)" || { echo "No '## $(RELEASE_VERSION)' section found in doc/ReleaseNotes.md -- add and commit release notes for this version first."; exit 1; }
+	gh release create $(RELEASE_TAG) $(PACKAGE_DMG) --title $(RELEASE_TAG) --notes-file $(RELEASE_NOTES_EXTRACT)
+	@echo "Published https://github.com/sbarber2/bluegull-aqi/releases/tag/$(RELEASE_TAG)"

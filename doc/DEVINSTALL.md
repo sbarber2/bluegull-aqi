@@ -179,3 +179,31 @@ One-time setup:
 This is separate from the Mac App Store submission path
 (`bluegull-aqi-fw4` epic) — `make app-package` never touches App Store
 Connect.
+
+### Publish it as a GitHub Release
+
+```bash
+make github-release
+```
+
+Attaches the DMG `app-package` just built to a GitHub Release, with the
+release body pulled straight from `doc/ReleaseNotes.md`'s matching version
+section — automates what was done by hand for v0.1.0 and v0.1.1.
+
+This only automates the *publish* step. It deliberately doesn't bump the
+version, write release notes, or create the git tag — those stay their own
+deliberate steps, in this order:
+
+1. Bump `MARKETING_VERSION` in `mac-app/project.yml` and commit it (can be
+   bundled with the last feature/fix commit going into the release).
+2. Add that version's `## X.Y.Z` section to `doc/ReleaseNotes.md` and
+   commit it **on its own** — release notes land in their own commit
+   *before* the tag, never after.
+3. `git tag -a vX.Y.Z -m vX.Y.Z` on that release-notes commit, then
+   `git push && git push origin vX.Y.Z`.
+4. `make app-package`.
+5. `make github-release`.
+
+`make github-release` checks for each prerequisite (the DMG, the pushed
+tag, the release-notes section) and fails with a clear message naming
+whichever is missing, rather than half-publishing.
