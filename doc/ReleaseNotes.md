@@ -1,5 +1,15 @@
 # Blue Gull AQI Release Notes
 
+## 0.1.1 — 2026-08-23
+
+### Fixed
+
+- Menu bar and widgets no longer wait up to a full hour to retry after a fetch failure
+  — a failed fetch now retries with a backoff (60s, 120s, then holding at 4 minutes)
+  for up to ~19 minutes before falling back to the normal hourly schedule, so a
+  transient backend or upstream AirNow hiccup clears without an extended stretch of
+  "Data Unavailable"
+
 ## 0.1.0 — 2026-08-19
 
 - Changes since 2026-08-11 pre-release (which was inaccurately versioned as 1.0)
