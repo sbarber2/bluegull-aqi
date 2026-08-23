@@ -13,6 +13,34 @@ import Foundation
 public struct RefreshScheduler: Sendable {
     public static let defaultInterval: TimeInterval = 3600
 
+    /// bluegull-aqi-e70.47: how soon to retry after a fetch failure, instead
+    /// of waiting for the next slot on `defaultInterval`'s hourly cadence --
+    /// confirmed nothing else in the fetch path (`AppGroupCache.recordFailedFetch`,
+    /// `AQIFetchCoordinator`) retries sooner than the caller's own schedule,
+    /// so a transient error could otherwise cost up to an hour of no updates
+    /// by design, not by bug. This is the delay after the *first* failure;
+    /// subsequent retries back off from here (see `nextRefreshDate`).
+    public static let fastRetryInterval: TimeInterval = 60
+
+    /// Ceiling the backoff grows to and then holds at. Measured directly
+    /// (2026-08-22, dev backend logs cross-referenced against other
+    /// installs' offsets) that an AirNow timeout clustered around one
+    /// install's scheduled minute clears roughly 11-12 minutes later, not
+    /// "well under a minute" as originally assumed here -- doubling every
+    /// retry from `fastRetryInterval` would either overshoot that window in
+    /// one jump or take too many attempts to get there, so growth is capped
+    /// well below it and `maxFastRetries` does the work of covering the gap.
+    public static let maxFastRetryInterval: TimeInterval = 240
+
+    /// Caps how long the fast-retry cadence runs before falling back to the
+    /// normal schedule. 6 retries growing 60, 120, 240, 240, 240, 240
+    /// accumulate to ~19 minutes -- comfortable margin over the ~11-12
+    /// minute recovery window above, while an outage that outlasts that many
+    /// attempts is no longer "transient," and retrying indefinitely would
+    /// just hammer a backend that's genuinely down (and burn this account's
+    /// still-tight Lambda concurrency, bluegull-aqi-q9r.35).
+    public static let maxFastRetries = 6
+
     private static let offsetKey = "refresh-schedule-install-offset"
 
     private let store: SharedCacheStore
@@ -40,7 +68,23 @@ public struct RefreshScheduler: Sendable {
     /// The next refresh time strictly after `now`, on this install's
     /// stable, interval-spaced schedule (`installOffset`, `installOffset +
     /// interval`, `installOffset + 2*interval`, ...).
-    public func nextRefreshDate(after now: Date = Date(), interval: TimeInterval = defaultInterval) -> Date {
+    ///
+    /// `consecutiveFailures` (bluegull-aqi-e70.47) short-circuits that
+    /// schedule to an exponential backoff off `fastRetryInterval` (doubling
+    /// each attempt, capped at `maxFastRetryInterval`) after a recent run of
+    /// failures, up to `maxFastRetries` attempts -- `0` (the default)
+    /// reproduces the exact prior behavior, so every existing caller (in
+    /// particular `WidgetTimelineComputer`, which has no notion of the
+    /// *container* app's own fetch outcome to pass here) is unaffected.
+    public func nextRefreshDate(
+        after now: Date = Date(),
+        interval: TimeInterval = defaultInterval,
+        consecutiveFailures: Int = 0
+    ) -> Date {
+        if consecutiveFailures > 0, consecutiveFailures <= Self.maxFastRetries {
+            let backoff = Self.fastRetryInterval * pow(2, Double(consecutiveFailures - 1))
+            return now.addingTimeInterval(min(backoff, Self.maxFastRetryInterval))
+        }
         let phase = installOffset(interval: interval)
         let epoch = now.timeIntervalSince1970
         let k = ((epoch - phase) / interval).rounded(.down) + 1

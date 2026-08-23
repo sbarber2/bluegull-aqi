@@ -84,6 +84,13 @@ final class AQIRefreshController {
     private let menuBarLocationMirror: SharedMenuBarLocationStore
     private var refreshTask: Task<Void, Never>?
 
+    // bluegull-aqi-e70.47: drives RefreshScheduler's fast-retry cadence --
+    // counts only the menu bar's own selected-location fetch (the `do`
+    // block's `AQIFetchError` catch below), not the separate "keep Current
+    // Location warm" fetch further down, which already swallows its own
+    // errors via `try?` and was never what `lastError` tracked either.
+    private var consecutiveFailureCount = 0
+
     /// nil if the App Group suite couldn't be opened -- same graceful-
     /// degradation as `UserDefaultsCacheStore` elsewhere; there's nowhere
     /// to cache a result or read a previous one, so this controller simply
@@ -131,7 +138,7 @@ final class AQIRefreshController {
     private func runLoop() async {
         while !Task.isCancelled {
             await refreshNow()
-            let interval = scheduler.nextRefreshDate().timeIntervalSinceNow
+            let interval = scheduler.nextRefreshDate(consecutiveFailures: consecutiveFailureCount).timeIntervalSinceNow
             try? await Task.sleep(for: .seconds(max(interval, 1)))
         }
     }
@@ -192,6 +199,7 @@ final class AQIRefreshController {
             }
             lastFetchedAt = cache.lastSuccessfulFetchDate()
             lastError = nil
+            consecutiveFailureCount = 0
             // A widget pinned to the same location the menu bar just
             // fetched now has fresher data available than whatever it last
             // rendered. Nudging is the only sanctioned way to surface that
@@ -201,6 +209,7 @@ final class AQIRefreshController {
             WidgetCenter.shared.reloadTimelines(ofKind: BluegullWidgetKind.aqi)
         } catch let error as AQIFetchError {
             lastError = error
+            consecutiveFailureCount += 1
             // bluegull-aqi-e70.39's own signal (cache.recordFailedFetch(),
             // called inside AQIFetchCoordinator on this same failure)
             // updates the shared cache correctly, but nothing else tells a

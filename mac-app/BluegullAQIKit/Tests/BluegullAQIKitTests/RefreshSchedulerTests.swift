@@ -86,4 +86,66 @@ final class RefreshSchedulerTests: XCTestCase {
         XCTAssertEqual(nextA.timeIntervalSince1970, 600, accuracy: 0.001)
         XCTAssertEqual(nextB.timeIntervalSince1970, 1800, accuracy: 0.001)
     }
+
+    // bluegull-aqi-e70.47
+
+    func testFirstConsecutiveFailureUsesFastRetryInterval() {
+        let scheduler = RefreshScheduler(store: InMemorySharedCacheStore())
+        let now = Date()
+
+        let next = scheduler.nextRefreshDate(after: now, consecutiveFailures: 1)
+
+        XCTAssertEqual(next.timeIntervalSince(now), RefreshScheduler.fastRetryInterval, accuracy: 0.001)
+    }
+
+    func testConsecutiveFailuresBackOffExponentiallyUpToACap() {
+        // 60, 120, 240, then held at the 240s cap -- verified against
+        // measured AirNow recovery times (bluegull-aqi-e70.47), not just
+        // doubling forever.
+        let scheduler = RefreshScheduler(store: InMemorySharedCacheStore())
+        let now = Date()
+
+        let expected: [Int: TimeInterval] = [1: 60, 2: 120, 3: 240, 4: 240, 5: 240, 6: 240]
+        for (failures, delay) in expected {
+            let next = scheduler.nextRefreshDate(after: now, consecutiveFailures: failures)
+            XCTAssertEqual(next.timeIntervalSince(now), delay, accuracy: 0.001, "consecutiveFailures: \(failures)")
+        }
+    }
+
+    func testZeroConsecutiveFailuresReproducesTheNormalSchedule() {
+        // The default -- every pre-existing caller (WidgetTimelineComputer,
+        // in particular) has no notion of the container app's own fetch
+        // outcome to pass here, so this must be unaffected.
+        let scheduler = RefreshScheduler(store: InMemorySharedCacheStore())
+        let now = Date()
+
+        let withoutFailures = scheduler.nextRefreshDate(after: now)
+        let explicitZero = scheduler.nextRefreshDate(after: now, consecutiveFailures: 0)
+
+        XCTAssertEqual(withoutFailures, explicitZero)
+        XCTAssertNotEqual(withoutFailures.timeIntervalSince(now), RefreshScheduler.fastRetryInterval)
+    }
+
+    func testFastRetryCadenceStopsAfterMaxFastRetries() {
+        // An outage that outlasts maxFastRetries quick attempts is no
+        // longer "transient" -- falls back to the normal hourly schedule
+        // rather than hammering a backend that's genuinely down.
+        let scheduler = RefreshScheduler(store: InMemorySharedCacheStore())
+        let now = Date()
+
+        let stillFast = scheduler.nextRefreshDate(after: now, consecutiveFailures: RefreshScheduler.maxFastRetries)
+        let fallenBack = scheduler.nextRefreshDate(after: now, consecutiveFailures: RefreshScheduler.maxFastRetries + 1)
+
+        XCTAssertEqual(stillFast.timeIntervalSince(now), RefreshScheduler.maxFastRetryInterval, accuracy: 0.001)
+        XCTAssertNotEqual(fallenBack.timeIntervalSince(now), RefreshScheduler.maxFastRetryInterval)
+    }
+
+    func testFastRetryIntervalIsAlwaysStrictlyAfterNow() {
+        let scheduler = RefreshScheduler(store: InMemorySharedCacheStore())
+        let now = Date()
+
+        let next = scheduler.nextRefreshDate(after: now, consecutiveFailures: 1)
+
+        XCTAssertGreaterThan(next, now)
+    }
 }
