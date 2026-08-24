@@ -46,6 +46,34 @@ final class UserDefaultsCacheStoreTests: XCTestCase {
         XCTAssertNil(store.data(forKey: "test-key"))
     }
 
+    func testSetPostsACacheChangeBroadcast() async throws {
+        // bluegull-aqi-e70.49: this is the one real write path both the
+        // container app and the widget extension go through, so it's the
+        // one place that must broadcast for WidgetDetailView's live-update
+        // fix to work at all.
+        let store = try XCTUnwrap(UserDefaultsCacheStore(suiteName: testSuiteName))
+        var iterator = CacheChangeBroadcast.changes().makeAsyncIterator()
+
+        store.set(Data("hello".utf8), forKey: "test-key")
+
+        let element: Void? = await iterator.next()
+        XCTAssertNotNil(element)
+    }
+
+    func testSettingNilAlsoPostsACacheChangeBroadcast() async throws {
+        // A removal (e.g. an expired-entry sweep) can change what
+        // freshness/reading a caller sees just as much as a new value can
+        // -- both branches of `set` must broadcast, not just the write one.
+        let store = try XCTUnwrap(UserDefaultsCacheStore(suiteName: testSuiteName))
+        store.set(Data("hello".utf8), forKey: "test-key")
+        var iterator = CacheChangeBroadcast.changes().makeAsyncIterator()
+
+        store.set(nil, forKey: "test-key")
+
+        let element: Void? = await iterator.next()
+        XCTAssertNotNil(element)
+    }
+
     func testAllKeysReflectsWhatWasSet() throws {
         let store = try XCTUnwrap(UserDefaultsCacheStore(suiteName: testSuiteName))
         store.set(Data("a".utf8), forKey: "aqi-cache-key-a")

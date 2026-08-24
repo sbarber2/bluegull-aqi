@@ -55,17 +55,31 @@ struct WidgetDetailView: View {
     // own `locationResolver` property.
     private let locationResolver: LocationResolver
 
+    // bluegull-aqi-e70.49: without this, `reading`/`freshness` above are set
+    // once (by `.task(id:)` below) and never again -- a real bug found live:
+    // leave this window open across a later successful fetch (by either
+    // this process's own loop or the widget extension's independent one,
+    // bluegull-aqi-mtm.24) and it just sits showing whatever it loaded at
+    // open time, silently diverging from the menu bar/popover, which read a
+    // live `@Observable` property and always show the current value.
+    // Injected (not just called directly) so a test can simulate a change
+    // without a real Darwin notification round-trip -- same reasoning as
+    // `store`/`locationResolver` just above.
+    private let changeObserver: CacheChangeObserving
+
     init(
         location: Location?,
         refreshController: AQIRefreshController? = nil,
         store: SharedCacheStore? = UserDefaultsCacheStore(),
-        locationResolver: LocationResolver = LocationResolver()
+        locationResolver: LocationResolver = LocationResolver(),
+        changeObserver: CacheChangeObserving = DarwinCacheChangeObserver()
     ) {
         self.location = location
         self.refreshController = refreshController
         computer = store.map(WidgetTimelineComputer.init(store:))
         pinnedLocationsStore = PinnedLocationsStore(store: store)
         self.locationResolver = locationResolver
+        self.changeObserver = changeObserver
     }
 
     var body: some View {
@@ -147,9 +161,20 @@ struct WidgetDetailView: View {
         // that case fetch too, not just the window's first-ever open.
         .task(id: location) {
             refreshFromCache()
-            guard reading == nil else { return }
-            await refreshController?.fetchIfNeeded(for: location)
-            refreshFromCache()
+            if reading == nil {
+                await refreshController?.fetchIfNeeded(for: location)
+                refreshFromCache()
+            }
+            // bluegull-aqi-e70.49: keeps this window live for as long as
+            // `location` (this task's own id) stays selected -- a location
+            // change cancels this loop the same way it already cancels the
+            // fetch-on-open logic above (that's what `.task(id:)`, not a
+            // bare `.task`, buys both of them), so there's never a stale
+            // subscription still refreshing for a location this window has
+            // since moved on from.
+            for await _ in changeObserver.changes() {
+                refreshFromCache()
+            }
         }
     }
 

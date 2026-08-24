@@ -101,6 +101,14 @@ public struct UserDefaultsCacheStore: SharedCacheStore {
         } else {
             defaults.removeObject(forKey: key)
         }
+        // bluegull-aqi-e70.49: the one real write path both the container
+        // app and the widget extension go through (they're separate
+        // processes, each with their own `UserDefaultsCacheStore` instance
+        // over the same App Group suite) -- posting here, not scattered
+        // across `AppGroupCache`'s individual methods, means every write
+        // broadcasts regardless of which higher-level call produced it, and
+        // `InMemorySharedCacheStore` (every test's fake) stays untouched.
+        CacheChangeBroadcast.post()
     }
 
     public func allKeys() -> [String] {
