@@ -119,14 +119,40 @@ Parameters:
       shared across all callers and locations (bluegull-aqi-q9r.32) -- the
       stronger, more targeted defense against the cache-cardinality attack,
       since misses (not overall request volume) are what cost AirNow quota.
-      A conservative placeholder: AirNow's real per-key limit isn't published
-      and only appears on the account dashboard after registering
-      (bluegull-aqi-8ef.1) -- re-tune once that number is known.
+      80% of AirNow's confirmed real limit for this endpoint (500/hour, per
+      docs.airnowapi.org/CurrentObservationsByLatLon/docs -- see
+      doc/DESIGN.md "Rate limit -- confirmed 2026-08-24"), kept as
+      deliberate headroom rather than set to the exact ceiling.
+
+  AirNowRequestAlarmThreshold:
+    Type: Number
+    Default: 320
+    Description: >
+      Fires AirNowRequestVolumeAlarm once real AirNow calls within one
+      MissRateLimitWindowSeconds window reach this count. Defaults to 80% of
+      the default MissRateLimitBudget (400), itself 80% of AirNow's
+      confirmed 500/hour limit -- an early warning meant to fire before
+      MissRateLimiter itself starts rejecting calls with 429s, not a
+      duplicate of that enforcement. Re-tune together with
+      MissRateLimitBudget if that changes, since this doesn't scale with it
+      automatically.
+
+  AlarmNotificationTopicArn:
+    Type: String
+    Default: ""
+    Description: >
+      Optional SNS topic ARN to notify when AirNowRequestVolumeAlarm
+      changes state. Left empty by default -- the alarm still exists and is
+      visible in the CloudWatch console/API either way; this only adds
+      active notification. No topic is created here since one email
+      address's worth of subscription is a one-time manual step, not
+      something worth templating.
 
 Conditions:
   # See LambdaReservedConcurrentExecutions's own Description for why 0 is
   # a sentinel for "skip the reservation," not a real reserved value.
   HasReservedConcurrency: !Not [!Equals [!Ref LambdaReservedConcurrentExecutions, 0]]
+  HasAlarmNotificationTopic: !Not [!Equals [!Ref AlarmNotificationTopicArn, ""]]
 
 Resources:
   AqiHttpApi:
@@ -199,6 +225,56 @@ Resources:
       RetentionInDays: 30
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
+
+  # Counts real AirNow calls (one per attempt, not per cache hit) so usage
+  # can be watched against AirNow's own rate limit -- confirmed 500/hour for
+  # this endpoint, see doc/DESIGN.md "Rate limit -- confirmed 2026-08-24".
+  # MissRateLimitBudget above is 80% of that confirmed number, not a blind
+  # placeholder. Filters on airnow_client.py's own "Requesting AirNow observations from"
+  # INFO line -- already emitted on every real call, logged with only the
+  # static base URL (never the API key), so no code or log-format change is
+  # needed to add this. Reuses the existing log group and its 30-day
+  # retention rather than standing up separate metric-only infrastructure.
+  AirNowRequestMetricFilter:
+    Type: AWS::Logs::MetricFilter
+    Properties:
+      LogGroupName: !Ref AqiFunctionLogGroup
+      FilterPattern: '"Requesting AirNow observations from"'
+      MetricTransformations:
+        - MetricNamespace: BluegullAQI
+          MetricName: !Sub "${AWS::StackName}-AirNowRequests"
+          MetricValue: "1"
+          DefaultValue: 0
+          Unit: Count
+
+  # Early warning, not a second enforcement point: MissRateLimiter already
+  # rejects calls with 429 once MissRateLimitBudget is hit in a window
+  # (bluegull-aqi-q9r.32); this alarm just makes approaching that ceiling
+  # visible before it happens, at AirNowRequestAlarmThreshold. Period
+  # matches MissRateLimitWindowSeconds so "count within one window" means
+  # the same thing here as it does to the limiter -- if that parameter is
+  # overridden to something not a multiple of 60s, this Period becomes
+  # invalid; not guarded against here since MissRateLimitWindowSeconds was
+  # already a free-form Number before this alarm existed.
+  AirNowRequestVolumeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: >
+        Real AirNow API calls for this stack are approaching
+        AirNowRequestAlarmThreshold within one MissRateLimitWindowSeconds
+        window -- MissRateLimiter starts rejecting calls with 429 at
+        MissRateLimitBudget, itself 80% of AirNow's confirmed 500/hour
+        limit for this endpoint (see doc/DESIGN.md "Rate limit -- confirmed
+        2026-08-24").
+      Namespace: BluegullAQI
+      MetricName: !Sub "${AWS::StackName}-AirNowRequests"
+      Statistic: Sum
+      Period: !Ref MissRateLimitWindowSeconds
+      EvaluationPeriods: 1
+      Threshold: !Ref AirNowRequestAlarmThreshold
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      TreatMissingData: notBreaching
+      AlarmActions: !If [HasAlarmNotificationTopic, [!Ref AlarmNotificationTopicArn], !Ref "AWS::NoValue"]
 
   AqiFunctionExecutionRole:
     Type: AWS::IAM::Role

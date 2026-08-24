@@ -706,13 +706,32 @@ hourly-published observations — but it's soft language ("should"), not a hard 
 and it's the kind of interpretive question that's genuinely Steve's to weigh rather
 than mine to resolve by asserting a reading.
 
-### Not found / would need registration to check further
+### Rate limit -- confirmed 2026-08-24
 
-- **No specific numeric rate limit** appears in the public docs — the FAQ says limits
-  are per-service, enforced by blocking the key for the rest of the hour on
-  violation, and are non-negotiable. The actual number likely only appears on the
-  account dashboard after registering (`bluegull-aqi-8ef.1` already covers getting
-  this once we register).
+**CONFIRMED**, directly from AirNow's own per-service documentation
+(`docs.airnowapi.org/CurrentObservationsByLatLon/docs`, Steve, logged in): "Rate
+Limiting: This web service will respond to up to 500 requests within a one-hour
+period, after which an error message will be returned until the next hour."
+
+500/hour, for exactly the endpoint this service calls (`ziplatlong` current
+observations). Not a guess or a third-party figure -- the account dashboard itself
+doesn't state a number (its "Rate limiting" text just points to "documentation for
+each web service"), but the per-service doc it points to does, and this is it.
+
+History of getting here, since it took three passes: the original API/FAQ/Data
+Exchange Guidelines review (first pass at this design) found no number; the account
+dashboard, checked 2026-08-24 after registering, also had no number, just a pointer
+to per-service docs; a web search surfaced an unverified third-party "500/hour"
+figure from Home Assistant's/EarthSoft's AirNow integrations; and finally the actual
+per-service doc page (initially thought login-gated when fetched via an
+unauthenticated tool) confirmed that exact figure directly, once Steve checked it
+himself while logged in.
+
+`MissRateLimitBudget`'s 400/hour placeholder (`rate_limiter.py`,
+`service/template.yaml`) predates this confirmation and is no longer a blind
+guess -- it's 80% of a now-known real ceiling, which is a reasonable margin to keep
+rather than a placeholder to feel obligated to raise. Re-tune only with a deliberate
+reason, not just because the exact number is now known.
 - ~~**No explicit commercial-use clause, no App Store-specific restriction.**~~ —
   **Re-reviewed 2026-07-30** (`bluegull-aqi-8ef.15`), see below.
 

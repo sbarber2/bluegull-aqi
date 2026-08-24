@@ -26,11 +26,10 @@ from bluegull_aqi_service.cache import resolve_table
 # same cadence means we back off before AirNow ever has to.
 DEFAULT_WINDOW_SECONDS = 3600
 
-# Conservative placeholder: AirNow's actual per-key limit isn't published
-# and only appears on the account dashboard after registering
-# (bluegull-aqi-8ef.1; see doc/DESIGN.md "Not found / would need
-# registration to check further"). Override via MISS_RATE_LIMIT_BUDGET once
-# the real number is known.
+# 80% of AirNow's confirmed real limit for this endpoint (500/hour, per
+# docs.airnowapi.org/CurrentObservationsByLatLon/docs -- see doc/DESIGN.md
+# "Rate limit -- confirmed 2026-08-24"), kept as deliberate headroom rather
+# than set to the exact ceiling. Override via MISS_RATE_LIMIT_BUDGET.
 DEFAULT_BUDGET = 400
 
 # Distinct from location_key()'s "lat,lon" shape (cache.py) so a budget
