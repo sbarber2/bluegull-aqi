@@ -14,10 +14,10 @@ import Foundation
 /// error bodies are `{"error": "..."}`, not AirNow's own
 /// `{"WebServiceError": [...]}` shape.
 ///
-/// `defaultBaseURL` is hardcoded to the dev stack (bluegull-aqi-q9r.10) --
-/// deliberately, since that's the only environment actually deployed
-/// right now. Must switch to the prod custom domain before an App Store
-/// release; tracked as bluegull-aqi-fw4.6 so it isn't silently forgotten.
+/// `defaultBaseURL` is the prod custom domain (bluegull-aqi-fw4.6, switched
+/// 2026-08-24 once the prod stack existed to point at -- see
+/// doc/DESIGN.md). Steve's own dev machine stays on the dev stack via the
+/// hidden `overrideDefaults` field below, not a build-time flag.
 ///
 /// `overrideDefaults` (bluegull-aqi-e70.28) lets a hidden dev-only Settings
 /// field redirect requests elsewhere -- see `DevServiceURLOverrideStore`'s
@@ -33,7 +33,7 @@ import Foundation
 /// UserDefaults, so one injected instance covers both rather than adding a
 /// second, functionally-identical parameter.
 public struct BluegullServiceClient: Sendable {
-    private static let defaultBaseURL = URL(string: "https://dev.aqi.bluegull.solutions/aqi")!
+    private static let defaultBaseURL = URL(string: "https://aqi.bluegull.solutions/aqi")!
 
     private let urlSession: URLSession
     // UserDefaults isn't formally Sendable in the SDK, but Apple documents

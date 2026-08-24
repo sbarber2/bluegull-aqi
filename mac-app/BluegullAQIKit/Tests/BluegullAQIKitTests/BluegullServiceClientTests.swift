@@ -67,7 +67,7 @@ final class BluegullServiceClientTests: XCTestCase {
         _ = try await client.fetchCurrentObservations(location: location)
 
         let url = try XCTUnwrap(capturedRequest?.url)
-        XCTAssertEqual(url.host, "dev.aqi.bluegull.solutions")
+        XCTAssertEqual(url.host, "aqi.bluegull.solutions")
         XCTAssertEqual(url.path, "/aqi")
 
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
@@ -165,7 +165,7 @@ final class BluegullServiceClientTests: XCTestCase {
         _ = try await client.fetchCurrentObservations(location: location)
 
         let url = try XCTUnwrap(capturedRequest?.url)
-        XCTAssertEqual(url.host, "dev.aqi.bluegull.solutions")
+        XCTAssertEqual(url.host, "aqi.bluegull.solutions")
     }
 
     // MARK: - Configurable timeout (bluegull-aqi-e70.43)

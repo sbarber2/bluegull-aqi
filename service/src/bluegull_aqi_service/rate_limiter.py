@@ -29,7 +29,11 @@ DEFAULT_WINDOW_SECONDS = 3600
 # 80% of AirNow's confirmed real limit for this endpoint (500/hour, per
 # docs.airnowapi.org/CurrentObservationsByLatLon/docs -- see doc/DESIGN.md
 # "Rate limit -- confirmed 2026-08-24"), kept as deliberate headroom rather
-# than set to the exact ceiling. Override via MISS_RATE_LIMIT_BUDGET.
+# than set to the exact ceiling. This default is only what applies with no
+# override -- dev and prod share one AirNow key (same SSM parameter) and so
+# share that 500/hour ceiling, and each gets its own smaller split via
+# MISS_RATE_LIMIT_BUDGET in service/samconfig.toml (150 dev / 350 prod) so
+# they can't combine past it.
 DEFAULT_BUDGET = 400
 
 # Distinct from location_key()'s "lat,lon" shape (cache.py) so a budget
