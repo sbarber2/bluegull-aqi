@@ -93,6 +93,67 @@ struct AgedReadingIndicator: View {
     }
 }
 
+/// One labeled timestamp row -- absolute date/time/timezone at 1-second
+/// resolution, with a live-updating relative time in parentheses (bluegull-
+/// aqi-e70.48), e.g. "Observed: Tue Aug 12, 2026, 5:00:00 PM EDT (2 hours
+/// ago)". The one shared component both `AQIPopoverView` and
+/// `WidgetDetailView` use for both their "Observed" and "Updated" rows --
+/// before this existed, each view formatted its own "last updated" caption
+/// independently (relative-only in the popover, minute-resolution and
+/// stale-only in the widget detail window), which is exactly how they'd
+/// diverged into two different formats in the first place.
+///
+/// The relative suffix reuses `Text(_:style: .relative)`'s own live-update
+/// behavior -- SwiftUI re-renders it on its own tick, no `Timer` needed here,
+/// same mechanism `AQIPopoverView`'s previous `updatedCaption` already relied
+/// on. The absolute portion is a fixed string computed once from `date` and
+/// `timeZone`: unlike the relative text, an already-happened instant's own
+/// calendar date/time/timezone never changes, so -- unlike the relative
+/// suffix -- it doesn't need to re-render on a clock tick to stay correct.
+///
+/// `date` is non-optional; callers decide whether a timestamp exists at all
+/// (`if let`), same as the caption call sites this replaces.
+struct TimestampCaption: View {
+    let label: String
+    let date: Date
+    let timeZone: TimeZone
+
+    var body: some View {
+        (Text("\(label): ") + Text(Self.absoluteText(for: date, in: timeZone))
+            + Text(" (") + Text(date, style: .relative) + Text(")"))
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+    }
+
+    // Not `private` -- exposed so `TimestampCaptionTests` can assert the
+    // exact format/precision directly, the same way
+    // `PollutantReading.observedAtDisplay` (a plain String property) is
+    // tested directly rather than only through a render smoke test. A
+    // SwiftUI `Text`'s own rendered content isn't otherwise inspectable
+    // from XCTest without a snapshot, which would only prove "renders",
+    // not "renders the right string."
+    static func absoluteText(for date: Date, in timeZone: TimeZone) -> String {
+        absoluteFormatter(for: timeZone).string(from: date)
+    }
+
+    // Fixed en_US locale, same determinism reasoning as
+    // `PollutantReading.observedAtDisplay`'s own formatter -- this should
+    // read the same regardless of the viewer's system locale, not vary with
+    // it. "ss" for 1-second resolution (bluegull-aqi-e70.48's own spec),
+    // unlike that property's minute-only precision -- a separate formatter
+    // rather than reusing observedAtDisplay's, since changing that one's
+    // precision would also change the widget face's own aged-reading
+    // caption (BluegullAQIWidgetView, a different module with byte-stable
+    // golden-image snapshot tests), which this bead never asked to touch.
+    private static func absoluteFormatter(for timeZone: TimeZone) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US")
+        formatter.timeZone = timeZone
+        formatter.dateFormat = "EEE MMM d, yyyy, h:mm:ss a zzz"
+        return formatter
+    }
+}
+
 /// Two-tier attribution (bluegull-aqi-e70.10, bluegull-aqi-10h.15): credit
 /// the specific reporting agency for this reading first, when AirNow
 /// supplied one, then the static AirNow/EPA credit -- always shown, never

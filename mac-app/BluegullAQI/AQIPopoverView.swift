@@ -107,8 +107,17 @@ struct AQIPopoverView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                // bluegull-aqi-e70.48: both timestamps, always shown (not
+                // gated on freshness) -- observation time (the reporting
+                // station's own instant/zone) and update time (when this
+                // app itself last fetched, in the viewer's own zone) can
+                // genuinely differ, so both are shown rather than picking
+                // one.
+                if let observedAt = headline.observedAt {
+                    TimestampCaption(label: "Observed", date: observedAt, timeZone: headline.observedAtTimeZone)
+                }
                 if let lastFetchedAt {
-                    updatedCaption(lastFetchedAt)
+                    TimestampCaption(label: "Updated", date: lastFetchedAt, timeZone: .current)
                 }
                 Divider()
                 PollutantListView(pollutants: reading.pollutants)
@@ -157,22 +166,6 @@ struct AQIPopoverView: View {
             // to size for the wrapped content instead of clipping to a
             // single line's height.
             .fixedSize(horizontal: false, vertical: true)
-    }
-
-    // Live-updating (`Text(_:style:)`, not a formatted-once String) so it
-    // stays accurate the whole time the popover is open, without this view
-    // needing its own timer -- unlike the widget's equivalent
-    // (`BluegullAQIWidgetView`'s `staleCaption`), which formats a fixed
-    // string against WidgetKit's own Timeline "now" instead, since
-    // ImageRenderer-based golden-image snapshot tests need byte-stable
-    // output, not a live clock.
-    private func updatedCaption(_ date: Date) -> some View {
-        // `Text(_:style: .relative)` already renders "2 hours ago" on its
-        // own (Apple's own example for this style) -- no extra "ago" to
-        // append.
-        (Text("Updated ") + Text(date, style: .relative))
-            .font(.caption2)
-            .foregroundStyle(.secondary)
     }
 
 }

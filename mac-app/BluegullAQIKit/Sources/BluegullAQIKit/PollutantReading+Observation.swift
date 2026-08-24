@@ -53,8 +53,16 @@ public extension PollutantReading {
         guard let observedAt else { return nil }
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US")
-        formatter.timeZone = TimeZone(abbreviation: localTimeZone) ?? .current
+        formatter.timeZone = observedAtTimeZone
         formatter.dateFormat = "EEE MMM d, h:mm a zzz"
         return formatter.string(from: observedAt)
+    }
+
+    /// The reporting station's own time zone, parsed from `localTimeZone`
+    /// (e.g. "EDT") -- factored out of `observedAtDisplay` so
+    /// `TimestampCaption` (bluegull-aqi-e70.48) can format `observedAt` at
+    /// its own, different precision without duplicating this fallback.
+    var observedAtTimeZone: TimeZone {
+        TimeZone(abbreviation: localTimeZone) ?? .current
     }
 }

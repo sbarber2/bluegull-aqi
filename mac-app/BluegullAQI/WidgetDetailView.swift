@@ -51,6 +51,15 @@ struct WidgetDetailView: View {
     // value).
     @State private var freshness: AQIFreshness?
 
+    // bluegull-aqi-e70.48: this view previously had no fetch-time
+    // equivalent of the popover's own `lastFetchedAt` at all -- only
+    // `freshness` (fresh/stale/expired), never the actual instant. Sourced
+    // from `WidgetTimelineSnapshot.lastSuccessfulFetchDate`, which already
+    // existed in the widget's own data model (used by
+    // `WidgetTimelineComputer`'s timeline entries) but was never surfaced
+    // to this view before.
+    @State private var lastFetchedAt: Date?
+
     // bluegull-aqi-e70.27: same injection reasoning as `AQIPopoverView`'s
     // own `locationResolver` property.
     private let locationResolver: LocationResolver
@@ -134,8 +143,34 @@ struct WidgetDetailView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    // bluegull-aqi-e70.48: replaces AgedReadingIndicator's
+                    // stale-only *timestamp* text -- these two rows already
+                    // show the same observation instant it did, unconditionally
+                    // and with more precision, plus the fetch time it never
+                    // showed at all. Showing both would just duplicate the
+                    // observation timestamp when stale.
+                    if let observedAt = headline.observedAt {
+                        TimestampCaption(label: "Observed", date: observedAt, timeZone: headline.observedAtTimeZone)
+                    }
+                    if let lastFetchedAt {
+                        TimestampCaption(label: "Updated", date: lastFetchedAt, timeZone: .current)
+                    }
+                    // NOT superseded by the timestamps above: `freshness`
+                    // can be `.stale` even when `observedAt` looks recent,
+                    // because WidgetTimelineComputer.currentSnapshot folds
+                    // in whether the most recent fetch attempt (by either
+                    // process) actually failed (bluegull-aqi-e70.39) -- a
+                    // reading that's technically within its TTL is exactly
+                    // as untrustworthy as an aged one in that case, and
+                    // nothing in the timestamps themselves would show it
+                    // (they'd just read as recent). This is the only signal
+                    // for that in this view, so it stays, just without
+                    // repeating the observation instant text
+                    // AgedReadingIndicator used to also carry.
                     if freshness == .stale {
-                        AgedReadingIndicator(headline: headline)
+                        Label("Data may be out of date", systemImage: "exclamationmark.triangle")
+                            .font(.caption2)
+                            .foregroundStyle(.orange)
                     }
                     Divider()
                     PollutantListView(pollutants: reading.pollutants)
@@ -182,5 +217,6 @@ struct WidgetDetailView: View {
         let snapshot = computer?.currentSnapshot(for: location)
         reading = snapshot?.reading
         freshness = snapshot?.freshness
+        lastFetchedAt = snapshot?.lastSuccessfulFetchDate
     }
 }
