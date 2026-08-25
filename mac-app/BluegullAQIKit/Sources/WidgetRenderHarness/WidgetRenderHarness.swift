@@ -60,7 +60,15 @@ struct WidgetRenderHarness {
 
         for fixture in fixtures {
             let size = approximateSizes[fixture.family] ?? CGSize(width: 158, height: 158)
+            // The production view's `.containerBackground(for:)` (bluegull-
+            // aqi-e70.51's branded gradient) only paints when hosted by
+            // actual WidgetKit machinery -- same gap
+            // `BluegullAQIWidgetSnapshotTests.assertSnapshot` documents for
+            // the same reason, on the same call. This fill exists only so
+            // these PNGs are legible for visual inspection; it's not what
+            // makes the real widget's background correct on an actual host.
             let view = BluegullAQIWidgetView(entry: fixture.entry, familyOverride: fixture.family)
+                .background(WidgetBrand.backgroundGradient(midStopLocation: fixture.family == .systemLarge ? 0.30 : 0.48))
                 .frame(width: size.width, height: size.height)
 
             let renderer = ImageRenderer(content: view)

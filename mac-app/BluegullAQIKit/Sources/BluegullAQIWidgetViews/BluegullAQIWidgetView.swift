@@ -54,37 +54,32 @@ public struct BluegullAQIWidgetView: View {
                 emptyStateView
             }
         }
-        // bluegull-aqi-e70.51: TWO background calls, deliberately, for two
-        // different renderers:
+        // bluegull-aqi-e70.51: ONLY `.containerBackground(for:)` -- the real
+        // WidgetKit API for extending a background into the margin it
+        // reserves around content, which a plain `.background()` cannot
+        // reach on an actual host (confirmed live on Steve's real desktop,
+        // 2026-08-25: with `.background()` also present, the margin showed
+        // the *correct* gradient but the content area showed a second,
+        // differently-scaled copy of it -- the two layers are painted over
+        // DIFFERENT-sized bounds, so a percentage-based gradient's stops
+        // land at different absolute positions in each, producing a
+        // visible seam right at the content region's edge rather than a
+        // seamless fill).
         //
-        // 1. `.background()` -- fills only the content's own layout bounds,
-        //    not WidgetKit's reserved margin around it. This is what the
-        //    headless `ImageRenderer`-based snapshot harness actually
-        //    renders (confirmed live: `.containerBackground(for:)`'s
-        //    view-builder overload below renders NOTHING under the
-        //    harness -- WidgetRenderHarness has no real WidgetKit
-        //    container behind it to fulfill that closure), so it's what
-        //    keeps the golden images correct.
-        // 2. `.containerBackground(for: .widget) { gradient }` -- the
-        //    WidgetKit API that actually extends a background into that
-        //    reserved margin on a REAL widget host. Found live on Steve's
-        //    actual desktop (2026-08-25): with only `.background()` plus
-        //    the plain `.containerBackground(.background, for: .widget)`
-        //    style-overload this used to have, the margin painted with the
-        //    *system* background instead of the gradient -- a visible
-        //    white border around the branded content. The harness can't
-        //    catch that gap at all (it has no concept of WidgetKit's
-        //    margin to begin with), which is exactly why this needed a
-        //    real look, not just a passing test suite.
+        // This DOES mean the headless `ImageRenderer`-based snapshot
+        // harness renders no background at all (same "confirmed live, not
+        // assumed" finding as bluegull-aqi-mtm.11's own original comment on
+        // this same call, still true here) -- that's the SAME already-
+        // established gap `BluegullAQIWidgetSnapshotTests.testLargeTypicalDarkMode`
+        // already works around with its own test-only `.background(...)`,
+        // not something to paper over by re-adding a second layer here.
+        // See `assertSnapshot`/`testLargeTypicalDarkMode` in that file for
+        // where the golden-image-legibility fill now lives instead.
         //
-        // Both paint the identical gradient, so there's no visible seam
-        // between them on a real host -- `.background()`'s fill is simply
-        // redundant there, covered by `.containerBackground`'s own fill
-        // showing through the same colors. `midStopLocation` differs by
-        // family: Large's fuller pollutant list needs the lower portion
-        // solidly dark sooner than Small/Medium's shorter layouts do -- see
-        // that function's own doc comment.
-        .background(WidgetBrand.backgroundGradient(midStopLocation: family == .systemLarge ? 0.30 : 0.48))
+        // `midStopLocation` differs by family: Large's fuller pollutant
+        // list needs the lower portion solidly dark sooner than
+        // Small/Medium's shorter layouts do -- see that function's own doc
+        // comment.
         .containerBackground(for: .widget) {
             WidgetBrand.backgroundGradient(midStopLocation: family == .systemLarge ? 0.30 : 0.48)
         }

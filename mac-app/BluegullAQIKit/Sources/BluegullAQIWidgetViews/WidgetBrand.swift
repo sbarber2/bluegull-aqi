@@ -7,6 +7,13 @@ import BluegullAQIKit
 /// https://claude.ai/code/artifact/89fd3628-000e-4071-b65b-3a8eb37f2263).
 /// Widget-only for now -- not applied to the menu bar popover.
 ///
+/// `public`, not `internal`: `WidgetRenderHarness` (a separate executable
+/// target, plain `import` rather than `@testable`) needs
+/// `backgroundGradient` too, to reproduce the same test-only legibility
+/// fill `BluegullAQIWidgetSnapshotTests.assertSnapshot` uses -- see that
+/// function's own comment for why the real widget view can't paint this
+/// itself.
+///
 /// The two named colors are the app icon's own colors, duplicated here from
 /// `mac-app/branding/gen-dmg-background.py`'s `ARROW_BLUE`/`NAVY` constants
 /// -- same "each target converts at its own point of use" reasoning as
@@ -16,28 +23,28 @@ import BluegullAQIKit
 /// gotcha as that file: on a wide-gamut Display P3 Mac, `Color(red:green:
 /// blue:)` without an explicit color space renders these visibly
 /// differently than the source PNG/generator script intended.
-enum WidgetBrand {
+public enum WidgetBrand {
     /// `ARROW_BLUE` (112, 181, 236) -- the app icon's own light background
     /// blue. The gradient's *lightest* stop.
-    static let iconBlue = Color(.sRGB, red: 112 / 255, green: 181 / 255, blue: 236 / 255, opacity: 1)
+    public static let iconBlue = Color(.sRGB, red: 112 / 255, green: 181 / 255, blue: 236 / 255, opacity: 1)
 
     /// A blend between `iconBlue` and `navy`, used as the gradient's middle
     /// stop rather than letting the two brand colors blend on their own --
     /// a plain two-stop gradient between them read muddier in the design
     /// canvas than a deliberate three-stop one.
-    static let midBlue = Color(.sRGB, red: 62 / 255, green: 127 / 255, blue: 190 / 255, opacity: 1)
+    public static let midBlue = Color(.sRGB, red: 62 / 255, green: 127 / 255, blue: 190 / 255, opacity: 1)
 
     /// `NAVY` (20, 40, 70) -- the DMG background's title-text color, also
     /// used as this gradient's darkest stop and as the fixed text color for
     /// content sitting over the lighter part of the gradient (location
     /// name, resolved place name, Small's stale badge).
-    static let navy = Color(.sRGB, red: 20 / 255, green: 40 / 255, blue: 70 / 255, opacity: 1)
+    public static let navy = Color(.sRGB, red: 20 / 255, green: 40 / 255, blue: 70 / 255, opacity: 1)
 
     /// The branded background, `iconBlue` at top fading to `navy` at
     /// bottom. `midStopLocation` differs by widget family (see call
     /// sites): Large's pollutant list needs the lower portion solidly dark
     /// sooner than Small/Medium's shorter, less content-heavy layouts do.
-    static func backgroundGradient(midStopLocation: Double) -> LinearGradient {
+    public static func backgroundGradient(midStopLocation: Double) -> LinearGradient {
         LinearGradient(
             gradient: Gradient(stops: [
                 .init(color: iconBlue, location: 0),

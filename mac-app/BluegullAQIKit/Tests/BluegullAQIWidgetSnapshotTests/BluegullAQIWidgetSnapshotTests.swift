@@ -162,17 +162,18 @@ final class BluegullAQIWidgetSnapshotTests: XCTestCase {
 
     @MainActor
     func testLargeTypicalDarkMode() {
-        // The production view's `.containerBackground(.background, for:
-        // .widget)` (bluegull-aqi-mtm.11's real widget-code fix) only paints
-        // when hosted by actual WidgetKit machinery -- confirmed by a real
-        // capture: without an explicit fill here, this test's `.dark`
-        // override left `.primary`-colored text invisible (white-on-
-        // nothing) against ImageRenderer's default canvas. A real widget
-        // host draws the appropriate dark chrome around the same view;
-        // this fill exists only so the golden image itself is legible.
+        // Same gap `assertSnapshot` above now documents, on the same call
+        // -- originally `.background(Color.black)` (bluegull-aqi-mtm.11's
+        // real widget-code fix, back when the background was the adaptive
+        // system one and dark mode actually changed it); now the real
+        // brand gradient, matching `assertSnapshot`, since bluegull-aqi-
+        // e70.51 made the background fixed rather than adaptive -- this
+        // test's own point going forward is confirming dark mode no longer
+        // visibly changes anything, which it can only show if it's
+        // rendered against the real fill, not an arbitrary black stand-in.
         let view = BluegullAQIWidgetView(entry: typicalLargeEntry, familyOverride: .systemLarge)
             .environment(\.colorScheme, .dark)
-            .background(Color.black)
+            .background(WidgetBrand.backgroundGradient(midStopLocation: 0.30))
         GoldenImageAssertion.assert(view, named: "large-typical-dark", size: Self.largeSize)
     }
 
@@ -188,7 +189,18 @@ final class BluegullAQIWidgetSnapshotTests: XCTestCase {
 
     @MainActor
     private func assertSnapshot(_ entry: BluegullAQIWidgetEntry, family: WidgetFamily, size: CGSize, name: String) {
+        // The production view's `.containerBackground(for:)` (bluegull-aqi-
+        // e70.51's branded gradient) only paints when hosted by actual
+        // WidgetKit machinery -- same gap `testLargeTypicalDarkMode` below
+        // already documents for the same reason, on the same call. This
+        // fill exists only so the golden image itself is legible (white
+        // text would otherwise be invisible against ImageRenderer's
+        // default canvas); it is NOT what makes the real widget's
+        // background correct on an actual host, and must stay out of
+        // BluegullAQIWidgetView's own body -- see that type's own comment
+        // on why a second background layer there caused a visible seam.
         let view = BluegullAQIWidgetView(entry: entry, familyOverride: family)
+            .background(WidgetBrand.backgroundGradient(midStopLocation: family == .systemLarge ? 0.30 : 0.48))
         GoldenImageAssertion.assert(view, named: name, size: size)
     }
 
