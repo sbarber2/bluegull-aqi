@@ -111,6 +111,19 @@ struct AgedReadingIndicator: View {
 /// calendar date/time/timezone never changes, so -- unlike the relative
 /// suffix -- it doesn't need to re-render on a clock tick to stay correct.
 ///
+/// Absolute text and the relative parenthetical are on two separate lines,
+/// not one flowing line -- found live (Steve, 2026-08-24) that a single
+/// concatenated line wraps wherever it runs out of width, which can split
+/// the relative phrase itself (e.g. "...(2 hours" / "ago)"), orphaning
+/// "ago)" alone on its own line. Two fixed lines means the relative clause
+/// -- always short -- either fits whole or doesn't render, never splits.
+/// Both lines get `.fixedSize(horizontal: false, vertical: true)`: without
+/// it, a `Text` constrained by the caller's own fixed-width frame (e.g. the
+/// popover's `.frame(width: 300)`) truncates with an ellipsis instead of
+/// wrapping -- same bug, same fix as `AQIPopoverView`'s own
+/// `staleWarningBanner` (bluegull-aqi-e70.40) elsewhere in this file's
+/// sibling.
+///
 /// `date` is non-optional; callers decide whether a timestamp exists at all
 /// (`if let`), same as the caption call sites this replaces.
 struct TimestampCaption: View {
@@ -119,10 +132,14 @@ struct TimestampCaption: View {
     let timeZone: TimeZone
 
     var body: some View {
-        (Text("\(label): ") + Text(Self.absoluteText(for: date, in: timeZone))
-            + Text(" (") + Text(date, style: .relative) + Text(")"))
-            .font(.caption2)
-            .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 0) {
+            Text("\(label): \(Self.absoluteText(for: date, in: timeZone))")
+                .fixedSize(horizontal: false, vertical: true)
+            (Text("(") + Text(date, style: .relative) + Text(")"))
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .font(.caption2)
+        .foregroundStyle(.secondary)
     }
 
     // Not `private` -- exposed so `TimestampCaptionTests` can assert the
@@ -154,34 +171,43 @@ struct TimestampCaption: View {
     }
 }
 
-/// Two-tier attribution (bluegull-aqi-e70.10, bluegull-aqi-10h.15): credit
-/// the specific reporting agency for this reading first, when AirNow
-/// supplied one, then the static AirNow/EPA credit -- always shown, never
-/// omitted.
-struct AttributionFooter: View {
+/// Two-tier attribution (bluegull-aqi-e70.10, bluegull-aqi-10h.15) plus the
+/// preliminary-data disclaimer (bluegull-aqi-dc2.4), combined into one
+/// continuous wrapped paragraph (bluegull-aqi-e70.48 follow-up, Steve
+/// 2026-08-24) rather than the stacked separate lines `AttributionFooter`/
+/// `DisclaimerFooter` used to render -- these two were always shown
+/// together in both compliance surfaces (the menu bar popover and the
+/// widget's tap-to-expand detail view) and are all boilerplate credit/
+/// disclaimer text, not information a reader picks out individually, so one
+/// flowing paragraph reads better than three stacked fragments.
+///
+/// Sentence count varies (2 or 3) depending on whether AirNow supplied a
+/// specific reporting agency for this reading -- the agency-credit sentence
+/// is the only optional one; the AirNow/EPA credit and the disclaimer are
+/// never omitted.
+struct AttributionAndDisclaimerText: View {
     let headline: PollutantReading
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if let agencyCredit = headline.attributionText {
-                Text(agencyCredit)
-            }
-            Text(AttributionCopy.staticCredit)
-        }
-        .font(.caption2)
-        .foregroundStyle(.secondary)
-    }
-}
-
-/// The in-product preliminary-data disclaimer (bluegull-aqi-dc2.4) --
-/// shown alongside `AttributionFooter` in both compliance surfaces (the
-/// menu bar popover and the widget's tap-to-expand detail view), same
-/// reuse rationale as that view.
-struct DisclaimerFooter: View {
-    var body: some View {
-        Text(AttributionCopy.preliminaryDataDisclaimer)
+        Text(paragraph)
             .font(.caption2)
             .foregroundStyle(.secondary)
+            // Same truncation fix as `TimestampCaption`'s own doc comment
+            // explains -- a `Text` constrained by the caller's fixed-width
+            // frame truncates with an ellipsis instead of wrapping without
+            // this, and this paragraph is the longest text block in either
+            // panel.
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private var paragraph: String {
+        var sentences: [String] = []
+        if let agencyCredit = headline.attributionText {
+            sentences.append("\(agencyCredit).")
+        }
+        sentences.append("\(AttributionCopy.staticCredit).")
+        sentences.append(AttributionCopy.preliminaryDataDisclaimer)
+        return sentences.joined(separator: " ")
     }
 }
 

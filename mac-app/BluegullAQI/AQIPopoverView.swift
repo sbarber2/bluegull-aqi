@@ -107,23 +107,27 @@ struct AQIPopoverView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                Divider()
+                PollutantListView(pollutants: reading.pollutants)
                 // bluegull-aqi-e70.48: both timestamps, always shown (not
                 // gated on freshness) -- observation time (the reporting
                 // station's own instant/zone) and update time (when this
                 // app itself last fetched, in the viewer's own zone) can
                 // genuinely differ, so both are shown rather than picking
-                // one.
-                if let observedAt = headline.observedAt {
-                    TimestampCaption(label: "Observed", date: observedAt, timeZone: headline.observedAtTimeZone)
-                }
-                if let lastFetchedAt {
-                    TimestampCaption(label: "Updated", date: lastFetchedAt, timeZone: .current)
+                // one. Below the pollutant list, not above it (Steve,
+                // 2026-08-24) -- tight inner spacing (2, not the outer
+                // VStack's 16) since these two rows read as one related
+                // group.
+                VStack(alignment: .leading, spacing: 2) {
+                    if let observedAt = headline.observedAt {
+                        TimestampCaption(label: "Observed", date: observedAt, timeZone: headline.observedAtTimeZone)
+                    }
+                    if let lastFetchedAt {
+                        TimestampCaption(label: "Updated", date: lastFetchedAt, timeZone: .current)
+                    }
                 }
                 Divider()
-                PollutantListView(pollutants: reading.pollutants)
-                Divider()
-                AttributionFooter(headline: headline)
-                DisclaimerFooter()
+                AttributionAndDisclaimerText(headline: headline)
             } else if let lastError {
                 ContentUnavailableView(
                     "Can't Show Air Quality",

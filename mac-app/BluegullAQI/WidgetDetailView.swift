@@ -143,17 +143,24 @@ struct WidgetDetailView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+                    Divider()
+                    PollutantListView(pollutants: reading.pollutants)
                     // bluegull-aqi-e70.48: replaces AgedReadingIndicator's
                     // stale-only *timestamp* text -- these two rows already
                     // show the same observation instant it did, unconditionally
                     // and with more precision, plus the fetch time it never
                     // showed at all. Showing both would just duplicate the
-                    // observation timestamp when stale.
-                    if let observedAt = headline.observedAt {
-                        TimestampCaption(label: "Observed", date: observedAt, timeZone: headline.observedAtTimeZone)
-                    }
-                    if let lastFetchedAt {
-                        TimestampCaption(label: "Updated", date: lastFetchedAt, timeZone: .current)
+                    // observation timestamp when stale. Below the pollutant
+                    // list, not above it (Steve, 2026-08-24) -- tight inner
+                    // spacing (2, not the outer VStack's 16) since these two
+                    // rows read as one related group.
+                    VStack(alignment: .leading, spacing: 2) {
+                        if let observedAt = headline.observedAt {
+                            TimestampCaption(label: "Observed", date: observedAt, timeZone: headline.observedAtTimeZone)
+                        }
+                        if let lastFetchedAt {
+                            TimestampCaption(label: "Updated", date: lastFetchedAt, timeZone: .current)
+                        }
                     }
                     // NOT superseded by the timestamps above: `freshness`
                     // can be `.stale` even when `observedAt` looks recent,
@@ -173,10 +180,7 @@ struct WidgetDetailView: View {
                             .foregroundStyle(.orange)
                     }
                     Divider()
-                    PollutantListView(pollutants: reading.pollutants)
-                    Divider()
-                    AttributionFooter(headline: headline)
-                    DisclaimerFooter()
+                    AttributionAndDisclaimerText(headline: headline)
                 } else {
                     ContentUnavailableView(
                         "No Air Quality Data",
