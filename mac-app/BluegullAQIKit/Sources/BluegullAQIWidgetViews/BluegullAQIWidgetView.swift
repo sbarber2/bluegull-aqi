@@ -236,8 +236,15 @@ struct SmallWidgetLayout: View {
             // six-color scale bar plus a marker at the current reading's
             // position, below the number/descriptor -- matches the
             // approved design canvas's layout order, see AQIScaleBar's own
-            // doc comment.
-            AQIScaleBar(aqi: aqi, width: 92)
+            // doc comment. 124, not the design canvas's original 92 --
+            // Steve, 2026-08-25, live on the real widget: at 92 the
+            // marker's own 12pt diameter was wide enough relative to each
+            // 15%-width segment (~14pt at that width) to nearly cover the
+            // Good segment outright. Widened to use most of Small's actual
+            // available content width (~158pt widget minus WidgetKit's
+            // default ~16.5pt margin per side) so each segment has more
+            // room than the marker sitting on it.
+            AQIScaleBar(aqi: aqi, width: 124)
                 .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
