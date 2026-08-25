@@ -146,6 +146,17 @@ struct BluegullAQIApp: App {
                 .onOpenURL { url in
                     widgetDetailLocation = WidgetDeepLink.location(from: url)
                 }
+                // bluegull-aqi-e70.52: without this, the window keeps its
+                // default light-chrome title bar (dark title text,
+                // assuming a light content area below it) while
+                // WidgetDetailView's own content is now AppBrand's dark
+                // gradient -- found live, Steve: "black on something very
+                // dark." `.preferredColorScheme` on a Window scene's root
+                // view propagates to the whole NSWindow's appearance on
+                // macOS, not just this view's own SwiftUI environment, so
+                // it also switches the title bar to dark styling (light
+                // title text) to match.
+                .preferredColorScheme(.dark)
         }
         .windowResizability(.contentSize)
 
