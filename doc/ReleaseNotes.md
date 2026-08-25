@@ -1,5 +1,28 @@
 # Blue Gull AQI Release Notes
 
+## 0.1.2 — 2026-08-25
+
+### Added
+
+- Both the menu bar popover and the widget detail window now show when a reading was
+  observed and when this app itself last updated it — exact date, time, and time
+  zone, plus a live relative time (e.g. "2 hours ago")
+
+### Changed
+
+- Attribution and the preliminary-data disclaimer are now shown as one combined
+  paragraph instead of separate stacked lines
+- The app now talks to the production backend instead of the development backend
+  by default
+
+### Fixed
+
+- The Air Quality Detail window now updates live while left open, instead of
+  freezing at whatever it showed when it was opened
+- Pinned-location widgets could sit showing stale data for up to 3 hours without
+  refreshing even after being flagged as aged — they now refetch as soon as they
+  go stale, rather than waiting for a full expiry
+
 ## 0.1.1 — 2026-08-23
 
 ### Fixed
