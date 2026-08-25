@@ -51,15 +51,27 @@ struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
         var now = Date()
         var resolved = entry(for: configuration, now: now)
 
-        // Fetch right here, in this process, on an exact cache miss for a
-        // specifically-pinned location (bluegull-aqi-mtm.23/mtm.24) --
-        // rather than rendering "Data Unavailable" and waiting for the
-        // container app to notice and fetch on our behalf, which measured
-        // 3-5 minutes end-to-end (bluegull-aqi-mtm.22) versus 0.343s for
-        // this path on a real user-configured location. WidgetKit hands
-        // this provider the correct configuration promptly; it was only
-        // ever the *acting* on it that had to round-trip through another
-        // process.
+        // Fetch right here, in this process, on a cache miss OR a merely
+        // soft-stale reading for a specifically-pinned location (bluegull-
+        // aqi-mtm.23/mtm.24) -- rather than rendering "Data Unavailable" and
+        // waiting for the container app to notice and fetch on our behalf,
+        // which measured 3-5 minutes end-to-end (bluegull-aqi-mtm.22) versus
+        // 0.343s for this path on a real user-configured location. WidgetKit
+        // hands this provider the correct configuration promptly; it was
+        // only ever the *acting* on it that had to round-trip through
+        // another process.
+        //
+        // `freshness == .stale`, not just `reading == nil`, per
+        // `AQIFreshness.stale`'s own doc comment ("worth refetching to
+        // replace") -- found live, 2026-08-24: `AppGroupCache.get()`
+        // deliberately keeps returning a reading for the entire soft-to-hard
+        // window (up to 3 hours), so a `reading == nil`-only guard meant a
+        // pinned widget effectively only ever refetched once every ~3 hours
+        // (at hard expiry), not once it went stale past the 1-hour soft TTL
+        // the rest of the freshness system assumes -- two real pinned
+        // widgets (East Lansing, Marlton) both sat `.stale` for ~2 hours
+        // before this fix, never refetching in between despite WidgetKit
+        // calling this provider again in the meantime.
         //
         // Deliberately NOT done for a nil configured location ("Current
         // Location"): resolving GPS needs a location entitlement this
@@ -71,7 +83,7 @@ struct BluegullAQIWidgetTimelineProvider: AppIntentTimelineProvider {
         // returned before any of this existed. A widget is the wrong
         // surface for an error dialog, and the menu bar popover already
         // surfaces fetch errors properly (bluegull-aqi-e70.24).
-        if resolved.reading == nil,
+        if (resolved.reading == nil || resolved.freshness == .stale),
            let pinned = configuration.location?.location,
            let coordinator {
             _ = try? await coordinator.fetch(location: pinned, mode: DataSourceModeStore.currentMode())
