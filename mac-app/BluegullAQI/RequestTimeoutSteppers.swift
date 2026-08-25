@@ -13,12 +13,16 @@ struct ServiceTimeoutStepper: View {
     private var timeoutSeconds: Double = RequestTimeoutStore.defaultServiceTimeout
 
     var body: some View {
+        // Fixed white, not adaptive `.primary` (bluegull-aqi-a22) -- this
+        // control's only call site (SettingsView) shows it well below the
+        // top row, over AppBrand's dark lower gradient.
         Stepper(
             "Timeout: \(Int(timeoutSeconds))s",
             value: $timeoutSeconds,
             in: RequestTimeoutStore.minimumTimeout...RequestTimeoutStore.maximumTimeout,
             step: 5
         )
+        .foregroundStyle(.white)
         .accessibilityIdentifier("serviceTimeoutStepper")
     }
 }
@@ -28,12 +32,15 @@ struct DirectTimeoutStepper: View {
     private var timeoutSeconds: Double = RequestTimeoutStore.defaultDirectTimeout
 
     var body: some View {
+        // Fixed white, not adaptive `.primary` (bluegull-aqi-a22) -- same
+        // reasoning as `ServiceTimeoutStepper`'s own comment above.
         Stepper(
             "Timeout: \(Int(timeoutSeconds))s",
             value: $timeoutSeconds,
             in: RequestTimeoutStore.minimumTimeout...RequestTimeoutStore.maximumTimeout,
             step: 5
         )
+        .foregroundStyle(.white)
         .accessibilityIdentifier("directTimeoutStepper")
     }
 }

@@ -28,10 +28,16 @@ struct AirNowAPIKeyEntryView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Fixed white, not adaptive `.primary` (bluegull-aqi-a22) --
+            // this sits well below SettingsView's own top row, over
+            // AppBrand's dark lower gradient.
             Text("AirNow API Key")
                 .font(.headline)
+                .foregroundStyle(.white)
+            // bluegull-aqi-a22: `brandFieldStyle`, not `.roundedBorder` --
+            // see that modifier's own doc comment.
             SecureField("Enter your AirNow API key", text: $apiKey)
-                .textFieldStyle(.roundedBorder)
+                .brandFieldStyle()
                 .focused($isFieldFocused)
                 .accessibilityIdentifier("airNowAPIKeyField")
             if let errorMessage {
@@ -39,11 +45,20 @@ struct AirNowAPIKeyEntryView: View {
                     .font(.caption)
                     .foregroundStyle(.red)
             }
+            // bluegull-aqi-a22: `.borderedProminent`, not the plain
+            // default style -- same fix, same reasoning as
+            // PinnedLocationsView's own "Add" button (see its own doc
+            // comment): SettingsView's panel-wide `.tint(AppBrand.midBlue)`
+            // recolored plain buttons' TEXT to the same blue as the
+            // surrounding background, low-contrast especially once the
+            // window is key. Confirmed live, Steve, 2026-08-25.
             HStack {
                 Button("Save") { save() }
+                    .buttonStyle(.borderedProminent)
                     .disabled(apiKey.isEmpty)
                     .accessibilityIdentifier("saveAPIKeyButton")
                 Button("Clear") { clear() }
+                    .buttonStyle(.borderedProminent)
                     .disabled(!hasSavedKey && apiKey.isEmpty)
                     .accessibilityIdentifier("clearAPIKeyButton")
             }

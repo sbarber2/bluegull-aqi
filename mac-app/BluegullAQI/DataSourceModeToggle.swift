@@ -29,9 +29,19 @@ struct DataSourceModeToggle: View {
     let onChange: () -> Void
 
     var body: some View {
+        // bluegull-aqi-a22: short labels, not full sentences -- the
+        // sentence-length labels ("Service (no setup required)", "Direct
+        // (use my own AirNow key)") were this settings window's single
+        // widest piece of content, forcing SettingsView's own
+        // minWidth/idealWidth up to 420/460 to avoid truncating them
+        // (bluegull-aqi-e70.45). Each mode already has its own explanation
+        // right below the toggle once selected (SettingsView's Service
+        // caption, or AirNowAPIKeyEntryView's own "AirNow API Key" header
+        // for Direct), so the segmented control itself doesn't need to
+        // carry the full explanation too.
         Picker("Data Source", selection: $mode) {
-            Text("Service (no setup required)").tag(DataSourceMode.service)
-            Text("Direct (use my own AirNow key)").tag(DataSourceMode.direct)
+            Text("Service").tag(DataSourceMode.service)
+            Text("Direct").tag(DataSourceMode.direct)
         }
         .pickerStyle(.segmented)
         .onChange(of: mode) { onChange() }

@@ -51,3 +51,26 @@ enum AppBrand {
         )
     }
 }
+
+extension View {
+    /// Branded text-field/secure-field chrome (bluegull-aqi-a22) -- white
+    /// text on a filled `AppBrand.midBlue` box, not `.textFieldStyle(.roundedBorder)`'s
+    /// stark white-on-white box. Confirmed live, Steve, 2026-08-25: the
+    /// system style's plain white background was "very jarring" against
+    /// AppBrand's dark gradient (this was true even without forcing
+    /// `.preferredColorScheme(.dark)` -- `.roundedBorder` renders a light
+    /// box regardless of the surrounding content's own colors). `midBlue`,
+    /// not `navy` -- Steve asked for the same color as this panel's own
+    /// button chrome, which `.tint(AppBrand.navy)` (SettingsView's
+    /// DataSourceModeToggle) leaves the *lighter* of the two brand blues
+    /// as the one distinct enough to read as its own "control" surface
+    /// against navy's own darker background.
+    func brandFieldStyle() -> some View {
+        self
+            .textFieldStyle(.plain)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(AppBrand.midBlue, in: RoundedRectangle(cornerRadius: 6))
+    }
+}

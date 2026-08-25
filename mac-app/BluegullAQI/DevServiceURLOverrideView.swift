@@ -22,18 +22,29 @@ struct DevServiceURLOverrideView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            // Fixed white, not adaptive `.primary`/`.secondary`
+            // (bluegull-aqi-a22) -- this view's only call site
+            // (SettingsView) shows it well below the top row, over
+            // AppBrand's dark lower gradient.
             Text("Dev: Service Backend URL Override")
                 .font(.headline)
+                .foregroundStyle(.white)
             Text("Not a supported setting. Leave empty to use the real backend.")
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.72))
+            // bluegull-aqi-a22: `brandFieldStyle`, not `.roundedBorder` --
+            // see that modifier's own doc comment.
             TextField("https://…", text: $urlString)
-                .textFieldStyle(.roundedBorder)
+                .brandFieldStyle()
                 .accessibilityIdentifier("devServiceURLOverrideField")
+            // bluegull-aqi-a22: `.borderedProminent` -- same fix, same
+            // reasoning as AirNowAPIKeyEntryView's own Save/Clear.
             HStack {
                 Button("Save") { save() }
+                    .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("devServiceURLOverrideSaveButton")
                 Button("Clear") { clear() }
+                    .buttonStyle(.borderedProminent)
                     .accessibilityIdentifier("devServiceURLOverrideClearButton")
             }
         }

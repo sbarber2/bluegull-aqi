@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import BluegullAQIKit
 
@@ -64,8 +65,13 @@ struct SettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
+                // Fixed navy, not adaptive `.primary` (bluegull-aqi-a22)
+                // -- this sits at the very top, over AppBrand's lighter top
+                // gradient stop, same as every other top-of-content title
+                // in the popover/detail window (bluegull-aqi-e70.52).
                 Text("Settings")
                     .font(.title2.bold())
+                    .foregroundStyle(AppBrand.navy)
                     .gesture(TapGesture().modifiers(.option).onEnded { isDevOverrideRevealed.toggle() })
                 Spacer()
                 Button("Done") { dismissWindow(id: "settings") }
@@ -81,34 +87,121 @@ struct SettingsView: View {
                 AirNowAPIKeyEntryView()
                 DirectTimeoutStepper()
             case .service:
+                // Fixed white, not adaptive `.secondary` (bluegull-aqi-
+                // a22) -- everything below the title row sits over
+                // AppBrand's dark lower gradient.
                 Text("Service uses BlueGull's shared backend -- no API key needed.")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.82))
                 ServiceTimeoutStepper()
             }
 
-            Divider()
+            brandDivider
             PinnedLocationsView()
-            Divider()
+            brandDivider
             MenuBarColorStyleToggle()
             MenuBarAQILabelToggle()
 
             if isDevOverrideRevealed {
-                Divider()
+                brandDivider
                 DevServiceURLOverrideView()
             }
 
-            Divider()
+            brandDivider
             // bluegull-aqi-fw4.9: which exact build this is -- three
             // ad-hoc DMGs went out to a tester all labeled "1.0" before
             // this existed, indistinguishable from each other.
             Text(AppVersionInfo.current)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.72))
                 .accessibilityIdentifier("appVersionLabel")
         }
         .padding()
-        .frame(minWidth: 420, idealWidth: 460)
+        // bluegull-aqi-e70.45: narrowed from 420/460 now that
+        // DataSourceModeToggle's segmented labels are short ("Service"/
+        // "Direct", bluegull-aqi-a22) instead of full sentences -- that
+        // was this window's actual widest content, per this property's own
+        // prior doc comment; shortening it is what makes a narrower range
+        // safe rather than reintroducing the truncation the wider range was
+        // originally written to avoid. 360/400, not 340/360 -- Steve asked
+        // for the pinned-location fields 50% wider (bluegull-aqi-a22), so
+        // this needs enough room for the widened Address field (270) plus
+        // the Add button beside it.
+        //
+        // IMPORTANT, confirmed live 2026-08-25: none of this actually
+        // takes effect on a machine that already has a saved
+        // "NSWindow Frame settings" entry (AppKit's own frame autosave,
+        // keyed by this Window's `id` -- same mechanism WidgetDetailView's
+        // own doc comment describes for "widget-detail") -- a persisted
+        // frame from before this change (Steve's own dev machine had one
+        // at 1106pt wide) wins over whatever `idealWidth` SwiftUI computes
+        // here, silently. There's no code-level fix for an *existing*
+        // stale saved frame short of clearing it (`defaults delete
+        // solutions.bluegull.aqi "NSWindow Frame settings"` once, or
+        // resizing the window back down by hand) -- this only guarantees
+        // correct sizing for a window with no saved frame yet (a fresh
+        // install, or after that one-time clear).
+        .frame(minWidth: 360, idealWidth: 400)
+        // bluegull-aqi-a22: the branded background, extending Steve's
+        // popover/detail-window request (bluegull-aqi-e70.52) to Settings
+        // for visual consistency across every surface. Same reasoning as
+        // AQIPopoverView's own background -- a plain SwiftUI window, no
+        // WidgetKit container-margin complication, so an ordinary
+        // `.background()` is genuinely full-bleed.
+        .background(AppBrand.backgroundGradient())
+        // bluegull-aqi-a22: one shared tint for every bordered control in
+        // this panel (buttons, the segmented Picker, the switches below)
+        // -- Steve wanted the fields' new blue background (`brandFieldStyle`)
+        // and the buttons to visibly match, not just both-be-blue-ish in
+        // two different shades.
+        .tint(AppBrand.midBlue)
         .accessibilityIdentifier("settingsView")
+        // bluegull-aqi-a22: forcibly repositions the real NSWindow after it
+        // appears -- three things were tried and confirmed live, on Steve's
+        // three-display rig (2026-08-25: built-in 2560x1664 plus two
+        // external 1920x1200s), before landing on this one:
+        // `.defaultPosition(.center)` (BluegullAQIApp) did nothing --
+        // AppKit's initial placement for a window opened from a
+        // MenuBarExtra popover's gear button seems to anchor near that
+        // trigger point regardless of the scene-level hint.
+        // `NSWindow.center()` centers on "the screen with the most area"
+        // (Apple's own doc wording) -- still landed off-screen (System
+        // Events reported {1744, -1040}, size {400, 655}).
+        // Centering on `NSEvent.mouseLocation`'s own screen fared no
+        // better (System Events then reported {760, 253}, nominally
+        // within that screen's own bounds, still not visible to Steve --
+        // never fully explained; some Spaces/display-arrangement
+        // interaction on this rig, not a coordinate math bug as far as
+        // could be determined).
+        // What DID work, confirmed live: manually setting the window's
+        // position to a small, safe offset from the origin -- Steve
+        // confirmed {100, 100} was fully visible. This mirrors that
+        // exactly (not computed centering) -- a small top-left inset from
+        // `NSScreen.main`'s own `visibleFrame` origin, using the real
+        // screen bounds rather than a hardcoded global (100, 100) so this
+        // still behaves sanely on a single-display machine.
+        // `DispatchQueue.main.async`, not `.onAppear` directly, so this
+        // runs after AppKit's own initial placement pass, not before it.
+        .onAppear {
+            DispatchQueue.main.async {
+                guard let window = NSApp.windows.first(where: { $0.title == "Settings" }),
+                      let visibleFrame = NSScreen.main?.visibleFrame else { return }
+                let inset: CGFloat = 60
+                window.setFrameOrigin(CGPoint(
+                    x: visibleFrame.minX + inset,
+                    y: visibleFrame.maxY - window.frame.height - inset
+                ))
+            }
+        }
+    }
+
+    // Fixed white hairline, not the default `Divider()` -- that renders as
+    // adaptive system gray, which doesn't read against AppBrand's
+    // background (bluegull-aqi-a22), same fix as the popover/detail
+    // window's own (bluegull-aqi-e70.52).
+    private var brandDivider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.28))
+            .frame(height: 1)
     }
 }

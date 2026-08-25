@@ -255,7 +255,18 @@ struct MenuBarColorStyleToggle: View {
     private var isColorPillEnabled = MenuBarAppearanceStore.defaultColorPillEnabled
 
     var body: some View {
+        // Fixed white, not adaptive `.primary` (bluegull-aqi-a22) -- this
+        // control's only call site (SettingsView) shows it well below the
+        // top row, over AppBrand's dark lower gradient. `.toggleStyle(.switch)`,
+        // not the platform default `.checkbox` -- macOS's default Toggle
+        // style outside a Form is a checkbox with a small dark checkmark
+        // glyph, which Steve found hard to see against this background
+        // (confirmed live, 2026-08-25). The pill switch has no glyph to
+        // lose contrast, and its ON-state fill picks up this panel's own
+        // `.tint(AppBrand.midBlue)` (SettingsView) instead.
         Toggle("Show AQI category color in menu bar", isOn: $isColorPillEnabled)
+            .toggleStyle(.switch)
+            .foregroundStyle(.white)
             .accessibilityIdentifier("menuBarColorStyleToggle")
     }
 }
@@ -268,7 +279,12 @@ struct MenuBarAQILabelToggle: View {
     private var isAQILabelEnabled = MenuBarAppearanceStore.defaultAQILabelEnabled
 
     var body: some View {
+        // Fixed white + `.toggleStyle(.switch)`, not adaptive `.primary` +
+        // the platform-default checkbox (bluegull-aqi-a22) -- same
+        // reasoning as `MenuBarColorStyleToggle`'s own comment above.
         Toggle("Show \"AQI\" label in menu bar", isOn: $isAQILabelEnabled)
+            .toggleStyle(.switch)
+            .foregroundStyle(.white)
             .accessibilityIdentifier("menuBarAQILabelToggle")
     }
 }

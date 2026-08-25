@@ -167,8 +167,53 @@ struct BluegullAQIApp: App {
         // there too (see that file's own doc comment on the layout-
         // recursion bug that combination caused).
         Window("Settings", id: "settings") {
+            // bluegull-aqi-a22: deliberately NOT `.preferredColorScheme(.dark)`
+            // here, unlike the detail window's own (bluegull-aqi-e70.52) --
+            // confirmed live, Steve: forcing it also pushed every embedded
+            // AppKit control (the TextFields in PinnedLocationsView/
+            // AirNowAPIKeyEntryView especially) into dark-appearance
+            // rendering, which meant near-black text field backgrounds
+            // jarring against AppBrand's blue gradient. WidgetDetailView
+            // has no TextField-family controls at all, so it never hit
+            // this; Settings does, so it stays on the system's default
+            // (light) appearance for its controls even though its own
+            // content uses the dark gradient.
             SettingsView(onDataSourceModeChange: { Task { await refreshController?.refreshNow() } })
         }
         .windowResizability(.contentSize)
+        // bluegull-aqi-a22: belt-and-suspenders alongside
+        // `.windowResizability(.contentSize)` -- confirmed live, Steve,
+        // 2026-08-25: this window's own `NSWindow Frame settings`
+        // AppKit frame-autosave entry (keyed by this Window's `id`, same
+        // mechanism as `widget-detail`'s own, see `WidgetDetailView`'s
+        // doc comment) had gotten stuck at 1106pt wide from a much older
+        // session, and every later `SettingsView` sizing change was
+        // silently masked by AppKit restoring that old frame on launch
+        // regardless of what `.windowResizability(.contentSize)` computed
+        // from content (verified directly: `ImageRenderer` measuring
+        // `SettingsView` in isolation reported exactly the intended
+        // 400pt-wide ideal size the whole time -- the SwiftUI layout was
+        // never the problem). No SwiftUI API disables that autosave
+        // outright; `.defaultSize` doesn't override an *existing* saved
+        // frame either, but gives a same explicit fallback for the
+        // literal first-ever launch (no saved frame yet at all), so a
+        // fresh install doesn't depend on `.windowResizability` alone.
+        .defaultSize(width: 400, height: 620)
+        // bluegull-aqi-a22: a SECOND, distinct real bug found live,
+        // Steve, 2026-08-25 -- not the width/truncation issue above.
+        // Once Direct mode + several Pinned Locations rows pushed this
+        // window's content taller than its previously-saved frame, the
+        // saved frame's position (its BOTTOM edge, in AppKit's bottom-up
+        // coordinates) stayed fixed while the window grew upward to fit
+        // the new height, pushing most of the window off the TOP of the
+        // screen -- Steve saw only a one-row sliver ("the first pinned
+        // location is only half-shown... where are the other 9"), not a
+        // squeezed-but-fully-visible list. `.defaultPosition(.center)`
+        // only applies with no saved position yet (same one-time-fallback
+        // caveat as `.defaultSize` above), but keeps a *future* content
+        // growth spike from repeating this off-screen-until-manually-
+        // cleared failure for a fresh install that's never opened this
+        // window before.
+        .defaultPosition(.center)
     }
 }
