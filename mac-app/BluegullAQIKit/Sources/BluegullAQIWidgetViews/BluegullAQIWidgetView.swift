@@ -223,9 +223,20 @@ struct SmallWidgetLayout: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            Text("\(aqi)")
-                .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
-                .foregroundStyle(.white)
+            // bluegull-aqi-klu: without this, the widget face never
+            // literally says "AQI" anywhere -- Steve: "Would like to have
+            // it actually say AQI on the widget faces." Unit-style label,
+            // not a full sentence -- baseline-aligned next to the number
+            // the way a temperature reading pairs a degree number with "F"
+            // rather than restating "temperature."
+            HStack(alignment: .lastTextBaseline, spacing: 4) {
+                Text("\(aqi)")
+                    .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
+                Text("AQI")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.68))
+            }
             Text(category.descriptor)
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.82))
@@ -313,9 +324,16 @@ struct MediumWidgetLayout: View {
 
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(aqi)")
-                        .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white)
+                    // bluegull-aqi-klu: see SmallWidgetLayout's own comment
+                    // on this same "AQI" unit-style label.
+                    HStack(alignment: .lastTextBaseline, spacing: 4) {
+                        Text("\(aqi)")
+                            .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
+                            .foregroundStyle(.white)
+                        Text("AQI")
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.68))
+                    }
                     // Otherwise the headline number is unlabeled: otherPollutants
                     // deliberately excludes the headline itself from the side
                     // list below (bluegull-aqi-0u4), so without this the widget
@@ -439,9 +457,19 @@ struct LargeWidgetLayout: View {
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Text("\(aqi)")
-                    .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
-                    .foregroundStyle(.white)
+                // bluegull-aqi-klu: see SmallWidgetLayout's own comment on
+                // this same "AQI" unit-style label. Nested HStack with its
+                // own tighter spacing (4) so "AQI" reads as the number's
+                // unit, distinct from this outer HStack's 10pt gap before
+                // the category descriptor.
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(aqi)")
+                        .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
+                    Text("AQI")
+                        .font(.subheadline)
+                        .foregroundStyle(.white.opacity(0.68))
+                }
                 Text(category.descriptor)
                     .font(.subheadline)
                     .foregroundStyle(.white.opacity(0.85))
