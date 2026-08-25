@@ -54,18 +54,41 @@ public struct BluegullAQIWidgetView: View {
                 emptyStateView
             }
         }
-        // Required since macOS 14/iOS 17 -- a widget that never calls this
-        // gets no background fill from a headless renderer (confirmed via a
-        // real bluegull-aqi-mtm.11 golden-image snapshot: dark-mode text
-        // came out invisible, white-on-transparent, because nothing behind
-        // it adapted to the color scheme). A real widget host has
-        // historically papered over a missing containerBackground with an
-        // automatic default, but relying on that is exactly the kind of
-        // implicit behavior Apple's own WWDC23 guidance says to stop doing.
+        // bluegull-aqi-e70.51: the actual branded fill -- an ordinary
+        // `.background()`, not painted via `.containerBackground(for:)`'s
+        // view-builder overload. Confirmed live (not assumed) that overload
+        // renders NOTHING under the headless `ImageRenderer`-based snapshot
+        // harness (WidgetRenderHarness has no WidgetKit container behind
+        // it to fulfill that closure) -- a real golden image came back with
+        // no gradient at all and the new white text invisible against the
+        // harness's plain white canvas. An ordinary `.background()` is
+        // portable: it renders identically here, in the harness, and on a
+        // real widget host, since it's plain view composition, not
+        // WidgetKit-specific API. `midStopLocation` differs by family:
+        // Large's fuller pollutant list needs the lower portion solidly
+        // dark sooner than Small/Medium's shorter layouts do -- see that
+        // function's own doc comment.
+        .background(WidgetBrand.backgroundGradient(midStopLocation: family == .systemLarge ? 0.30 : 0.48))
+        // Still required since macOS 14/iOS 17 -- a widget that never
+        // calls this at all gets no background from a headless renderer
+        // (confirmed via a real bluegull-aqi-mtm.11 golden-image snapshot:
+        // dark-mode text came out invisible, white-on-transparent, because
+        // nothing behind it adapted to the color scheme) and WidgetKit
+        // itself expects a real host to get at least one call. The plain
+        // system `.background` style-overload (not the view-builder one
+        // above) is what that snapshot actually confirmed works headlessly
+        // -- kept exactly as-is; the `.background()` gradient above is what
+        // viewers actually see, painted in front of this.
         .containerBackground(.background, for: .widget)
     }
 
     private var emptyStateView: some View {
+        // White, not adaptive `.secondary` -- bluegull-aqi-e70.51's branded
+        // background applies here too (the shared `.containerBackground`
+        // above covers every case in this Group, not just the populated
+        // layouts), and this block sits vertically centered, which lands
+        // on the gradient's mid-to-dark portion in every family, where
+        // white reads reliably (see WidgetBrand.backgroundGradient).
         VStack(spacing: 4) {
             // So two "No Data" widgets pointed at different locations
             // (bluegull-aqi-mtm.20) don't look identical -- the whole
@@ -73,18 +96,18 @@ public struct BluegullAQIWidgetView: View {
             // location it's actually waiting on data for.
             Text(entry.locationName)
                 .font(.caption2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.85))
                 .lineLimit(1)
             Image(systemName: "aqi.medium")
                 .font(.title2)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.85))
             Text(emptyStateHeadline)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.85))
             if let staleCaption {
                 Text(staleCaption)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.72))
             }
         }
         .multilineTextAlignment(.center)
@@ -181,39 +204,51 @@ struct SmallWidgetLayout: View {
             // this is what actually makes that visible.
             // bluegull-aqi-e70.35: matches Medium/Large -- Steve settled on
             // .body across all three sizes (2026-08-18 follow-up).
+            // bluegull-aqi-e70.51: fixed navy, not adaptive `.secondary`
+            // -- sits over the lighter top of WidgetBrand's background
+            // gradient, where navy is the readable choice (see that
+            // gradient's own doc comment).
             Text(locationName)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(WidgetBrand.navy.opacity(0.88))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
             if let resolvedPlaceName {
                 Text(resolvedPlaceName)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WidgetBrand.navy.opacity(0.62))
                     .lineLimit(1)
                     .minimumScaleFactor(0.7)
             }
-            Circle()
-                .fill(category.color.swiftUIColor)
-                .frame(width: 12, height: 12)
-                .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 1))
             Text("\(aqi)")
                 .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
+                .foregroundStyle(.white)
             Text(category.descriptor)
                 .font(.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.white.opacity(0.82))
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
+            // bluegull-aqi-e70.51: replaces the small colored category dot
+            // (which used to sit above the AQI number) with the full
+            // six-color scale bar plus a marker at the current reading's
+            // position, below the number/descriptor -- matches the
+            // approved design canvas's layout order, see AQIScaleBar's own
+            // doc comment.
+            AQIScaleBar(aqi: aqi, width: 92)
+                .padding(.top, 2)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         // bluegull-aqi-dc2.6: no room in `.systemSmall` for the absolute
         // aged-reading caption Medium/Large show -- a corner badge is the
         // whole indicator here, same "still shown, marked as aged" intent.
+        // Fixed navy (bluegull-aqi-e70.51), not adaptive `.secondary` --
+        // this corner sits over the gradient's lighter top, same reasoning
+        // as `locationName` above.
         .overlay(alignment: .topTrailing) {
             if isStale {
                 Image(systemName: "clock.badge.exclamationmark")
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WidgetBrand.navy.opacity(0.75))
                     .padding(4)
             }
         }
@@ -253,25 +288,24 @@ struct MediumWidgetLayout: View {
             // not just whichever one the menu bar happens to be showing.
             // bluegull-aqi-e70.35: see SmallWidgetLayout's own comment on
             // this pairing.
+            // bluegull-aqi-e70.51: fixed navy, not adaptive `.secondary`
+            // -- see SmallWidgetLayout's own comment on this same change.
             Text(locationName)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(WidgetBrand.navy.opacity(0.88))
                 .lineLimit(1)
             if let resolvedPlaceName {
                 Text(resolvedPlaceName)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WidgetBrand.navy.opacity(0.62))
                     .lineLimit(1)
             }
 
             HStack(alignment: .top, spacing: 12) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Circle()
-                        .fill(category.color.swiftUIColor)
-                        .frame(width: 10, height: 10)
-                        .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 0.75))
                     Text("\(aqi)")
                         .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white)
                     // Otherwise the headline number is unlabeled: otherPollutants
                     // deliberately excludes the headline itself from the side
                     // list below (bluegull-aqi-0u4), so without this the widget
@@ -280,14 +314,25 @@ struct MediumWidgetLayout: View {
                     // PM2.5 and the only visible name on screen was "OZONE."
                     Text(headline.parameterName)
                         .font(.caption2)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.white.opacity(0.68))
                     Text(category.descriptor)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.white.opacity(0.82))
+                    // bluegull-aqi-e70.51: replaces the small colored
+                    // category dot -- see AQIScaleBar's own doc comment.
+                    AQIScaleBar(aqi: aqi, width: 128)
+                        .padding(.top, 4)
                 }
 
                 if !otherPollutants.isEmpty {
-                    Divider()
+                    // Fixed white hairline, not the default `Divider()` --
+                    // that renders as adaptive system gray, which doesn't
+                    // read against WidgetBrand's background (bluegull-aqi-
+                    // e70.51).
+                    Rectangle()
+                        .fill(Color.white.opacity(0.28))
+                        .frame(width: 1)
+                        .frame(maxHeight: .infinity)
                     VStack(alignment: .leading, spacing: 4) {
                         ForEach(otherPollutants, id: \.parameterName) { pollutant in
                             pollutantRow(pollutant)
@@ -319,17 +364,23 @@ struct MediumWidgetLayout: View {
                     .lineLimit(1)
             }
         }
-        .foregroundStyle(.secondary)
+        // Fixed white, not adaptive `.secondary` (bluegull-aqi-e70.51) --
+        // this row sits at the bottom, over the gradient's darkest part.
+        .foregroundStyle(.white.opacity(0.72))
     }
 
     private func pollutantRow(_ pollutant: PollutantReading) -> some View {
         HStack(spacing: 4) {
+            // Fixed white, not the default adaptive `.primary` (bluegull-
+            // aqi-e70.51).
             Text(pollutant.parameterName)
                 .font(.caption)
+                .foregroundStyle(.white.opacity(0.88))
             if let pollutantAQI = pollutant.nowcastAQI, let pollutantCategory = pollutant.category {
                 // See LargeWidgetLayout's own pollutantRow for why this is
                 // a colored background + contrasting text, not colored
-                // text (bluegull-aqi-mtm.19).
+                // text (bluegull-aqi-mtm.19). Unchanged by bluegull-aqi-
+                // e70.51 -- already self-contained against any background.
                 Text("\(pollutantAQI)")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(pollutantCategory.color.contrastingTextColor)
@@ -364,30 +415,47 @@ struct LargeWidgetLayout: View {
             // not just whichever one the menu bar happens to be showing.
             // bluegull-aqi-e70.35: see SmallWidgetLayout's own comment on
             // this pairing.
+            // bluegull-aqi-e70.51: fixed navy, not adaptive `.secondary`
+            // -- see SmallWidgetLayout's own comment on this same change.
             Text(locationName)
                 .font(.body)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(WidgetBrand.navy.opacity(0.88))
                 .lineLimit(1)
             if let resolvedPlaceName {
                 Text(resolvedPlaceName)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(WidgetBrand.navy.opacity(0.62))
                     .lineLimit(1)
             }
 
             HStack(alignment: .firstTextBaseline, spacing: 10) {
-                Circle()
-                    .fill(category.color.swiftUIColor)
-                    .frame(width: 12, height: 12)
-                    .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 1))
                 Text("\(aqi)")
                     .font(.system(size: aqiFontSize, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
                 Text(category.descriptor)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.85))
             }
 
-            Divider()
+            // bluegull-aqi-e70.51: replaces the small colored category dot
+            // (which used to sit alongside the AQI number above) with the
+            // full-width six-color scale bar plus a marker at the current
+            // reading's position -- see AQIScaleBar's own doc comment.
+            // GeometryReader, not a fixed width like Small/Medium use --
+            // Large's own mockup ran it the full content width, which
+            // varies slightly by device, unlike those two fixed-size
+            // layouts.
+            GeometryReader { geometry in
+                AQIScaleBar(aqi: aqi, width: geometry.size.width, height: 8)
+            }
+            .frame(height: 16)
+
+            // Fixed white hairline, not the default `Divider()` -- that
+            // renders as adaptive system gray, which doesn't read against
+            // WidgetBrand's background (bluegull-aqi-e70.51).
+            Rectangle()
+                .fill(Color.white.opacity(0.28))
+                .frame(height: 1)
 
             VStack(alignment: .leading, spacing: 4) {
                 // parameterName is unique within one AQIReading (see
@@ -420,13 +488,18 @@ struct LargeWidgetLayout: View {
                     .lineLimit(1)
             }
         }
-        .foregroundStyle(.secondary)
+        // Fixed white, not adaptive `.secondary` (bluegull-aqi-e70.51) --
+        // this row sits at the bottom, over the gradient's darkest part.
+        .foregroundStyle(.white.opacity(0.72))
     }
 
     private func pollutantRow(_ pollutant: PollutantReading) -> some View {
         HStack {
+            // Fixed white, not the default adaptive `.primary` (bluegull-
+            // aqi-e70.51).
             Text(PollutantCopy.spelledOutName(forParameterName: pollutant.parameterName))
                 .font(.caption)
+                .foregroundStyle(.white.opacity(0.88))
             Spacer()
             if let pollutantAQI = pollutant.nowcastAQI, let pollutantCategory = pollutant.category {
                 // Colored background + black/white contrasting text, not
@@ -434,7 +507,8 @@ struct LargeWidgetLayout: View {
                 // colored text had poor contrast for the lighter
                 // categories (Good/Moderate/USG), found by Steve against
                 // AirNow's own AQI Legend panel styling
-                // (bluegull-aqi-mtm.19).
+                // (bluegull-aqi-mtm.19). Unchanged by bluegull-aqi-e70.51 --
+                // already self-contained against any background.
                 Text("\(pollutantAQI)")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(pollutantCategory.color.contrastingTextColor)
@@ -443,10 +517,11 @@ struct LargeWidgetLayout: View {
                     .background(pollutantCategory.color.swiftUIColor, in: RoundedRectangle(cornerRadius: 4))
             } else {
                 // Raw-concentration-only entry, no computed AQI supplied --
-                // never invent one (bluegull-aqi-10h.17).
+                // never invent one (bluegull-aqi-10h.17). Fixed white, not
+                // adaptive `.secondary` (bluegull-aqi-e70.51).
                 Text("—")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.72))
             }
         }
     }
