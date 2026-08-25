@@ -68,10 +68,21 @@ struct AQIPopoverView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
+                // `.tint` here, not `.foregroundStyle` -- `MenuBarLocationPicker`
+                // is a stock `.menu`-style `Picker` (MenuBarLocationPicker.swift),
+                // which macOS renders as a native pull-down control; `.tint`
+                // is the modifier that actually reaches a Picker's own label
+                // text/chevron color on that style, `.foregroundStyle` is
+                // documented to not reliably affect it. NOT independently
+                // confirmed live yet that this reads well against
+                // AppBrand's background -- worth a specific look, unlike
+                // the plain-Text elements elsewhere in this file which are
+                // straightforward to reason about.
                 MenuBarLocationPicker(
                     onChange: onLocationChange,
                     onResolvedSelectionChange: { resolvedLocationOption = $0 }
                 )
+                .tint(AppBrand.navy)
                 Spacer()
                 Button {
                     // LSUIElement (agent) apps aren't reliably made
@@ -80,7 +91,11 @@ struct AQIPopoverView: View {
                     NSApp.activate(ignoringOtherApps: true)
                     openWindow(id: "settings")
                 } label: {
+                    // Fixed navy, not the default adaptive tint -- this
+                    // sits at the very top, over AppBrand's lighter top
+                    // gradient stop.
                     Image(systemName: "gearshape")
+                        .foregroundStyle(AppBrand.navy.opacity(0.75))
                 }
                 .buttonStyle(.plain)
                 .accessibilityIdentifier("settingsButton")
@@ -105,9 +120,9 @@ struct AQIPopoverView: View {
                 if let notice = category.beyondScaleNotice {
                     Text(notice)
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.white.opacity(0.82))
                 }
-                Divider()
+                brandDivider
                 PollutantListView(pollutants: reading.pollutants)
                 // bluegull-aqi-e70.48: both timestamps, always shown (not
                 // gated on freshness) -- observation time (the reporting
@@ -126,20 +141,29 @@ struct AQIPopoverView: View {
                         TimestampCaption(label: "Updated", date: lastFetchedAt, timeZone: .current)
                     }
                 }
-                Divider()
+                brandDivider
                 AttributionAndDisclaimerText(headline: headline)
             } else if let lastError {
+                // .white best-effort: stock SwiftUI `ContentUnavailableView`
+                // doesn't expose its internal title/description styling
+                // directly, so this chains a top-level foregroundStyle
+                // rather than editing text that isn't reachable here. NOT
+                // independently confirmed live yet whether it actually
+                // recolors both the title and the description, or just
+                // one -- worth a specific look.
                 ContentUnavailableView(
                     "Can't Show Air Quality",
                     systemImage: "exclamationmark.triangle",
                     description: Text(lastError.userMessage)
                 )
+                .foregroundStyle(.white)
             } else {
                 ContentUnavailableView(
                     "No Air Quality Data",
                     systemImage: "aqi.medium",
                     description: Text("BlueGull AQI hasn't fetched a reading yet.")
                 )
+                .foregroundStyle(.white)
             }
 
             // LSUIElement (menu bar-only, bluegull-aqi-e70.1) means no Dock
@@ -147,16 +171,27 @@ struct AQIPopoverView: View {
             // needs Activity Monitor or a terminal `pkill`. Found the hard
             // way: this genuinely didn't exist until Steve asked, having
             // just hit exactly that dead end.
-            Divider()
+            brandDivider
             Button("Quit BlueGull AQI") {
                 NSApp.terminate(nil)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(.white.opacity(0.72))
             .accessibilityIdentifier("quitButton")
         }
         .padding()
         .frame(width: 300)
+        // bluegull-aqi-e70.52: the branded background, extending Steve's
+        // widget-face request (bluegull-aqi-e70.51) to this surface for
+        // visual consistency. No WidgetKit container-margin complication
+        // here (unlike the widget faces) -- this is a plain SwiftUI
+        // popover, so an ordinary `.background()` is genuinely full-bleed,
+        // no second call needed. Small `midStopLocation` (AppBrand's own
+        // default, 0.12): this view's content height varies a lot
+        // (error/empty states vs. a full pollutant list plus timestamps
+        // plus the attribution paragraph), and only the very top row
+        // (location picker, resolved place) ever needs the lighter top.
+        .background(AppBrand.backgroundGradient())
     }
 
     private func staleWarningBanner(_ message: String) -> some View {
@@ -172,4 +207,13 @@ struct AQIPopoverView: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
+    // Fixed white hairline, not the default `Divider()` -- that renders as
+    // adaptive system gray, which doesn't read against AppBrand's
+    // background (bluegull-aqi-e70.52), same fix as the widget faces'
+    // own (bluegull-aqi-e70.51).
+    private var brandDivider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.28))
+            .frame(height: 1)
+    }
 }

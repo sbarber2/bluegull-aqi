@@ -16,13 +16,23 @@ struct AQIHeadlineBadge: View {
             Circle()
                 .fill(category.color.swiftUIColor)
                 .frame(width: 14, height: 14)
-                .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 1))
+                // White, not `Color.primary.opacity(0.15)` -- this sat
+                // below a plain adaptive background before; AppBrand's
+                // fixed navy-ish background (both call sites now use it)
+                // needs a light ring for the same subtle-definition
+                // purpose, not a dark one that all but vanishes against a
+                // dark fill.
+                .overlay(Circle().strokeBorder(Color.white.opacity(0.3), lineWidth: 1))
             VStack(alignment: .leading, spacing: 2) {
+                // Fixed white, not the default adaptive `.primary` -- both
+                // call sites (AQIPopoverView, WidgetDetailView) now show
+                // this over AppBrand's fixed background.
                 Text("\(aqi)")
                     .font(.system(size: 34, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white)
                 Text(category.descriptor)
                     .font(.headline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.white.opacity(0.85))
             }
         }
     }
@@ -49,9 +59,12 @@ struct ResolvedPlaceNameCaption: View {
     @State private var placeName: String?
 
     var body: some View {
+        // Fixed navy, not adaptive `.secondary` -- both call sites
+        // (AQIPopoverView, WidgetDetailView) show this at the very top of
+        // their content, over AppBrand's lighter top gradient stop.
         Text("Near \(placeName ?? coordinateText)")
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(AppBrand.navy.opacity(0.62))
             .task(id: location) {
                 placeName = try? await resolver.placeName(for: location)
             }
@@ -139,7 +152,10 @@ struct TimestampCaption: View {
                 .fixedSize(horizontal: false, vertical: true)
         }
         .font(.caption2)
-        .foregroundStyle(.secondary)
+        // Fixed white, not adaptive `.secondary` -- both call sites show
+        // this well below the top of their content, over AppBrand's darker
+        // gradient region.
+        .foregroundStyle(.white.opacity(0.82))
     }
 
     // Not `private` -- exposed so `TimestampCaptionTests` can assert the
@@ -191,7 +207,10 @@ struct AttributionAndDisclaimerText: View {
     var body: some View {
         Text(paragraph)
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            // Fixed white, not adaptive `.secondary` -- both call sites
+            // show this near the bottom of their content, over AppBrand's
+            // darker gradient region.
+            .foregroundStyle(.white.opacity(0.72))
             // Same truncation fix as `TimestampCaption`'s own doc comment
             // explains -- a `Text` constrained by the caller's fixed-width
             // frame truncates with an ellipsis instead of wrapping without

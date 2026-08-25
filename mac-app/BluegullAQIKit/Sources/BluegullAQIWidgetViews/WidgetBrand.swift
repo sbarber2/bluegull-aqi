@@ -5,7 +5,11 @@ import BluegullAQIKit
 /// Brand colors and the branded background/scale-bar treatment for the
 /// widget faces (bluegull-aqi-e70.51, design canvas
 /// https://claude.ai/code/artifact/89fd3628-000e-4071-b65b-3a8eb37f2263).
-/// Widget-only for now -- not applied to the menu bar popover.
+/// The same brand colors also back the menu bar popover and widget detail
+/// window now, via a separate duplicate, `AppBrand`
+/// (`mac-app/BluegullAQI/AppBrand.swift`) -- not this type directly, since
+/// those live in a different target; see `AppBrand`'s own doc comment for
+/// why it's a duplicate rather than a shared import.
 ///
 /// `public`, not `internal`: `WidgetRenderHarness` (a separate executable
 /// target, plain `import` rather than `@testable`) needs

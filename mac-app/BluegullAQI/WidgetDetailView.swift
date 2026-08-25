@@ -124,9 +124,13 @@ struct WidgetDetailView: View {
                         AQIHeadlineBadge(aqi: aqi, category: category)
                         Spacer()
                         VStack(alignment: .trailing, spacing: 2) {
+                            // Fixed navy, not adaptive `.secondary`
+                            // (bluegull-aqi-e70.52) -- this HStack is the
+                            // first thing in the content, over AppBrand's
+                            // lighter top gradient stop.
                             Text(locationName)
                                 .font(.body)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(AppBrand.navy.opacity(0.88))
                             // bluegull-aqi-e70.27: `location == nil` is
                             // exactly the "Current Location" case (see
                             // `locationName`'s own doc comment above) -- a
@@ -141,9 +145,9 @@ struct WidgetDetailView: View {
                     if let notice = category.beyondScaleNotice {
                         Text(notice)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.white.opacity(0.82))
                     }
-                    Divider()
+                    brandDivider
                     PollutantListView(pollutants: reading.pollutants)
                     // bluegull-aqi-e70.48: replaces AgedReadingIndicator's
                     // stale-only *timestamp* text -- these two rows already
@@ -179,18 +183,48 @@ struct WidgetDetailView: View {
                             .font(.caption2)
                             .foregroundStyle(.orange)
                     }
-                    Divider()
+                    brandDivider
                     AttributionAndDisclaimerText(headline: headline)
                 } else {
+                    // .white best-effort: stock SwiftUI
+                    // `ContentUnavailableView` doesn't expose its internal
+                    // title/description styling directly -- same caveat as
+                    // `AQIPopoverView`'s own use of this type, not
+                    // independently confirmed live yet.
                     ContentUnavailableView(
                         "No Air Quality Data",
                         systemImage: "aqi.medium",
                         description: Text("BlueGull AQI hasn't cached a reading for this widget yet.")
                     )
+                    .foregroundStyle(.white)
                 }
             }
             .padding()
+            // bluegull-aqi-e70.52: the gradient lives INSIDE the
+            // ScrollView, behind the content VStack, sized to the
+            // content's own natural (possibly tall) height -- not behind
+            // the ScrollView itself. Deliberate: every text color choice
+            // above (navy near the top, white everywhere else) is per-
+            // ELEMENT, matching where that element normally sits in the
+            // content. A background fixed to the WINDOW instead would stay
+            // in place while the user scrolls the content over it,
+            // eventually putting white-colored content (scrolled up from
+            // lower down) over the fixed background's still-light top --
+            // wrong contrast. Painting it here means the gradient scrolls
+            // in lockstep with the content, so each element's local
+            // background always matches what its color was chosen for,
+            // regardless of scroll position.
+            .background(AppBrand.backgroundGradient())
         }
+        // Solid navy, not a second gradient layer -- a fallback for when
+        // this resizable window (its frame is user-adjustable and
+        // persisted, see this view's own comment above) is taller than the
+        // content, leaving empty space below it. A flat color can't
+        // produce the seam a second *gradient* layer did on the widget
+        // faces (bluegull-aqi-e70.51's own real bug, fixed there by
+        // removing the second layer entirely) -- it matches whatever's
+        // visible at the gradient's own bottom edge exactly, at any size.
+        .background(AppBrand.navy)
         .frame(width: 320)
         .accessibilityIdentifier("widgetDetailView")
         // `.task(id:)`, not `.task` -- this is a singleton Window
@@ -215,6 +249,16 @@ struct WidgetDetailView: View {
                 refreshFromCache()
             }
         }
+    }
+
+    // Fixed white hairline, not the default `Divider()` -- that renders as
+    // adaptive system gray, which doesn't read against AppBrand's
+    // background (bluegull-aqi-e70.52), same fix as the widget faces' own
+    // (bluegull-aqi-e70.51).
+    private var brandDivider: some View {
+        Rectangle()
+            .fill(Color.white.opacity(0.28))
+            .frame(height: 1)
     }
 
     private func refreshFromCache() {
