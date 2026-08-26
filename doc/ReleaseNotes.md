@@ -1,5 +1,30 @@
 # Blue Gull AQI Release Notes
 
+## 0.2.0 — 2026-08-25
+
+### Added
+
+- Widget faces (all three sizes) now show a colored AQI category scale with a marker
+  for the current reading, over a new Blue Gull-branded gradient background instead
+  of the plain system background
+- The menu bar popover and Air Quality Detail window now use the same branded
+  background and color treatment as the widgets, for visual consistency across the
+  whole app
+- Widget faces now label the number "AQI" instead of showing a bare, unlabeled figure
+
+### Changed
+
+- Settings panel is narrower and uses the same branded background; its text fields,
+  buttons, and toggles now use a themed style instead of stock white/checkbox
+  controls
+- Pinned Locations list is now scrollable instead of growing the window indefinitely
+  as more locations are added
+
+### Fixed
+
+- Settings panel is no longer excessively wide
+- The explanatory text above Pinned Locations now wraps instead of getting cut off
+
 ## 0.1.2 — 2026-08-25
 
 ### Added
