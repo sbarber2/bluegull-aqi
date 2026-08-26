@@ -99,6 +99,10 @@ struct SettingsView: View {
             brandDivider
             PinnedLocationsView()
             brandDivider
+            // bluegull-aqi-fvt: grouped with the other app-behavior
+            // toggles below it, not off on its own -- same visual
+            // treatment, same section.
+            LaunchAtLoginToggle()
             MenuBarColorStyleToggle()
             MenuBarAQILabelToggle()
 
