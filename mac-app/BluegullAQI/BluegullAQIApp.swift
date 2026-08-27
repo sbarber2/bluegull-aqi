@@ -175,18 +175,28 @@ struct BluegullAQIApp: App {
         // there too (see that file's own doc comment on the layout-
         // recursion bug that combination caused).
         Window("Settings", id: "settings") {
-            // bluegull-aqi-a22: deliberately NOT `.preferredColorScheme(.dark)`
-            // here, unlike the detail window's own (bluegull-aqi-e70.52) --
-            // confirmed live, Steve: forcing it also pushed every embedded
-            // AppKit control (the TextFields in PinnedLocationsView/
-            // AirNowAPIKeyEntryView especially) into dark-appearance
-            // rendering, which meant near-black text field backgrounds
-            // jarring against AppBrand's blue gradient. WidgetDetailView
-            // has no TextField-family controls at all, so it never hit
-            // this; Settings does, so it stays on the system's default
-            // (light) appearance for its controls even though its own
-            // content uses the dark gradient.
+            // bluegull-aqi-a22 originally left this OUT (unlike the
+            // detail window's own, bluegull-aqi-e70.52) -- confirmed live
+            // back then, forcing it pushed every embedded AppKit control
+            // (the TextFields in PinnedLocationsView/AirNowAPIKeyEntryView
+            // especially, still `.textFieldStyle(.roundedBorder)` at the
+            // time) into dark-appearance rendering, meaning near-black
+            // text field backgrounds jarring against the gradient.
+            //
+            // bluegull-aqi-as9: re-added. That original reason no longer
+            // applies -- every text/secure field in Settings now uses
+            // `brandFieldStyle()` (`.textFieldStyle(.plain)` plus a
+            // custom-drawn background), not the system's own light/dark-
+            // adaptive chrome, so there's nothing left for a forced dark
+            // appearance to darken unpleasantly. And it's needed now:
+            // Settings dropped the gradient for a flat, uniformly dark
+            // `AppBrand.settingsBackground` (that same bead), which is
+            // dark all the way to the very top -- without this, the
+            // window keeps its default light-chrome title bar (dark
+            // title text) over that dark content, the same illegible
+            // dark-on-dark WidgetDetailView itself had before its own fix.
             SettingsView(onDataSourceModeChange: { Task { await refreshController?.refreshNow() } })
+                .preferredColorScheme(.dark)
         }
         .windowResizability(.contentSize)
         // bluegull-aqi-a22: belt-and-suspenders alongside

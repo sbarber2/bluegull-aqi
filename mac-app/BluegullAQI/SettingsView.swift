@@ -65,13 +65,14 @@ struct SettingsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
-                // Fixed navy, not adaptive `.primary` (bluegull-aqi-a22)
-                // -- this sits at the very top, over AppBrand's lighter top
-                // gradient stop, same as every other top-of-content title
-                // in the popover/detail window (bluegull-aqi-e70.52).
+                // Fixed white (bluegull-aqi-as9) -- Settings now uses a
+                // flat `AppBrand.settingsBackground`, not the gradient, so
+                // every foreground element is just white, no top-vs-
+                // bottom judgment call. See `settingsBackground`'s own
+                // doc comment for why.
                 Text("Settings")
                     .font(.title2.bold())
-                    .foregroundStyle(AppBrand.navy)
+                    .foregroundStyle(.white)
                     .gesture(TapGesture().modifiers(.option).onEnded { isDevOverrideRevealed.toggle() })
                 Spacer()
                 Button("Done") { dismissWindow(id: "settings") }
@@ -87,9 +88,11 @@ struct SettingsView: View {
                 AirNowAPIKeyEntryView()
                 DirectTimeoutStepper()
             case .service:
-                // Fixed white, not adaptive `.secondary` (bluegull-aqi-
-                // a22) -- everything below the title row sits over
-                // AppBrand's dark lower gradient.
+                // Fixed white, not adaptive `.secondary` -- this whole
+                // panel is a flat `AppBrand.settingsBackground` now
+                // (bluegull-aqi-as9), so every foreground element is
+                // just white, no per-element gradient-position judgment
+                // call.
                 Text("Service uses BlueGull's shared backend -- no API key needed.")
                     .font(.caption)
                     .foregroundStyle(.white.opacity(0.82))
@@ -99,12 +102,21 @@ struct SettingsView: View {
             brandDivider
             PinnedLocationsView()
             brandDivider
-            // bluegull-aqi-fvt: grouped with the other app-behavior
-            // toggles below it, not off on its own -- same visual
-            // treatment, same section.
-            LaunchAtLoginToggle()
-            MenuBarColorStyleToggle()
-            MenuBarAQILabelToggle()
+            // bluegull-aqi-as9: a tighter inner VStack (8, not the outer
+            // VStack's own 20) -- Steve: "less space between them." These
+            // read as one related group of app-behavior options (plus
+            // CompletelyRemoveButton, moved up here from below the
+            // version label per Steve's own request -- "with the
+            // options," not off on its own at the very bottom anymore),
+            // so a tighter, denser spacing between them reads better than
+            // the same wide gaps used between unrelated sections
+            // elsewhere in this panel.
+            VStack(alignment: .leading, spacing: 8) {
+                LaunchAtLoginToggle()
+                MenuBarColorStyleToggle()
+                MenuBarAQILabelToggle()
+                CompletelyRemoveButton()
+            }
 
             if isDevOverrideRevealed {
                 brandDivider
@@ -119,14 +131,6 @@ struct SettingsView: View {
                 .font(.caption2)
                 .foregroundStyle(.white.opacity(0.72))
                 .accessibilityIdentifier("appVersionLabel")
-
-            // bluegull-aqi-8iz: last, not grouped with the other toggles
-            // above -- a "danger zone at the bottom" placement, same
-            // convention as e.g. GitHub's own repo-settings page for its
-            // "Delete this repository," so it's reachable but never sits
-            // next to routine, frequently-touched controls.
-            brandDivider
-            CompletelyRemoveButton()
         }
         .padding()
         // bluegull-aqi-e70.45: narrowed from 420/460 now that
@@ -154,13 +158,15 @@ struct SettingsView: View {
         // correct sizing for a window with no saved frame yet (a fresh
         // install, or after that one-time clear).
         .frame(minWidth: 360, idealWidth: 400)
-        // bluegull-aqi-a22: the branded background, extending Steve's
-        // popover/detail-window request (bluegull-aqi-e70.52) to Settings
-        // for visual consistency across every surface. Same reasoning as
-        // AQIPopoverView's own background -- a plain SwiftUI window, no
-        // WidgetKit container-margin complication, so an ordinary
-        // `.background()` is genuinely full-bleed.
-        .background(AppBrand.backgroundGradient())
+        // bluegull-aqi-as9: a FLAT background, not `AppBrand.backgroundGradient()`
+        // -- reverted from the gradient bluegull-aqi-a22 originally gave
+        // this panel. Steve, 2026-08-27: "It's been way too fiddly to
+        // deal with making the foreground... contrast with gradient
+        // background... getting user complaints about the contrast."
+        // See `AppBrand.settingsBackground`'s own doc comment for the
+        // full reasoning -- scoped to Settings alone; the popover and
+        // detail window keep the gradient.
+        .background(AppBrand.settingsBackground)
         // bluegull-aqi-a22: one shared tint for every bordered control in
         // this panel (buttons, the segmented Picker, the switches below)
         // -- Steve wanted the fields' new blue background (`brandFieldStyle`)

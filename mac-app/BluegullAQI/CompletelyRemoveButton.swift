@@ -41,11 +41,23 @@ struct CompletelyRemoveButton: View {
     @State private var showConfirmation = false
 
     var body: some View {
-        Button(role: .destructive) {
+        // bluegull-aqi-as9: `.borderedProminent`, no `role: .destructive`
+        // and no red tint -- Steve, 2026-08-27: filled red was "too eye-
+        // catching" for something that isn't a routine action; this
+        // isn't something users reach for daily, unlike Save/Clear, and
+        // shouldn't visually compete with them for attention. Inherits
+        // SettingsView's own panel-wide `.tint(AppBrand.midBlue)`
+        // instead, same as Add/Save/Clear -- reads as an ordinary button,
+        // not an alarm, with the actual "this is serious" signal carried
+        // by the confirmation dialog's own wording and destructive-role
+        // "Remove Everything" action below, not by the trigger button's
+        // color.
+        Button {
             showConfirmation = true
         } label: {
             Text("Completely Remove BlueGull AQI\u{2026}")
         }
+        .buttonStyle(.borderedProminent)
         .accessibilityIdentifier("completelyRemoveButton")
         .confirmationDialog(
             "Completely remove BlueGull AQI?",

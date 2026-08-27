@@ -50,6 +50,25 @@ enum AppBrand {
             endPoint: .bottom
         )
     }
+
+    /// `SettingsView`'s own background (bluegull-aqi-as9,
+    /// Steve, 2026-08-27) -- a flat color, not `backgroundGradient()`,
+    /// deliberately scoped to Settings ALONE; the popover and detail
+    /// window keep the gradient. Reasoning, Steve's own words: "It's been
+    /// way too fiddly to deal with making the foreground (text and icons)
+    /// contrast with gradient background... getting user complaints
+    /// about the contrast." Settings has far more small controls (fields,
+    /// toggles, buttons, captions) than the other two surfaces, each one
+    /// needing its own top-vs-bottom-of-gradient color judgment call --
+    /// that per-element navy-or-white decision was the actual source of
+    /// the fiddliness and the complaints, not the brand colors
+    /// themselves. A flat background removes the judgment call entirely:
+    /// every foreground element in Settings is just `.white` now, no
+    /// exceptions. `navy`, not `midBlue` -- `midBlue` is already this
+    /// panel's own CONTROL-surface color (`brandFieldStyle`, button
+    /// tint), so the page background needs to read as a distinct,
+    /// darker surface behind those controls, not blend into them.
+    static let settingsBackground = navy
 }
 
 extension View {
