@@ -72,6 +72,14 @@ struct BluegullAQIApp: App {
         // host process races the real single-instance lock and exits
         // immediately whenever a real signed instance is already running.
         guard !Self.isRunningTests else { return }
+        // bluegull-aqi-8iz: BEFORE the Settings Window scene (below) ever
+        // gets a chance to create its NSWindow and restore a saved frame
+        // into it -- see `SettingsWindowFrameSanitizer`'s own doc comment
+        // for why this specific ordering (launch-time, not the window's
+        // own `.onAppear`) is what avoids a visible flash of the old,
+        // oversized layout for anyone upgrading from a version installed
+        // before the Settings redesign (bluegull-aqi-a22).
+        SettingsWindowFrameSanitizer.scrubIfStale()
         // Before anything reads the mode (the fetch loop starts as soon as
         // `refreshController` is constructed, just below) -- moves a
         // pre-existing Direct-mode choice out of UserDefaults.standard,

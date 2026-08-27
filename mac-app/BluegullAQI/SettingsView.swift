@@ -119,6 +119,14 @@ struct SettingsView: View {
                 .font(.caption2)
                 .foregroundStyle(.white.opacity(0.72))
                 .accessibilityIdentifier("appVersionLabel")
+
+            // bluegull-aqi-8iz: last, not grouped with the other toggles
+            // above -- a "danger zone at the bottom" placement, same
+            // convention as e.g. GitHub's own repo-settings page for its
+            // "Delete this repository," so it's reachable but never sits
+            // next to routine, frequently-touched controls.
+            brandDivider
+            CompletelyRemoveButton()
         }
         .padding()
         // bluegull-aqi-e70.45: narrowed from 420/460 now that
@@ -184,12 +192,38 @@ struct SettingsView: View {
         // `NSScreen.main`'s own `visibleFrame` origin, using the real
         // screen bounds rather than a hardcoded global (100, 100) so this
         // still behaves sanely on a single-display machine.
+        //
+        // bluegull-aqi-8iz, revised from the unconditional version above:
+        // only intervenes when `isStaleFrame` says the CURRENT frame is
+        // actually broken (see that function's own doc comment) -- a
+        // real, live concern Steve raised, not just this dev machine's
+        // own 3-display quirk: anyone who installed a pre-a22 version and
+        // upgraded by just dragging the new .app over the old one (how
+        // virtually everyone upgrades -- nobody runs an uninstaller
+        // first) still carries THAT version's stale saved frame (up to
+        // 1106pt wide, per this exact bug's own earlier investigation)
+        // into the redesigned, much-narrower Settings panel. Gating on
+        // `isStaleFrame`, rather than always repositioning on every open
+        // the way the first version of this fix did, also means a user's
+        // own deliberate resize/move of this window (once it's a sane
+        // size to begin with) is respected afterward instead of snapping
+        // back to the same spot every time they open Settings.
         // `DispatchQueue.main.async`, not `.onAppear` directly, so this
         // runs after AppKit's own initial placement pass, not before it.
         .onAppear {
             DispatchQueue.main.async {
                 guard let window = NSApp.windows.first(where: { $0.title == "Settings" }),
-                      let visibleFrame = NSScreen.main?.visibleFrame else { return }
+                      SettingsWindowFrameSanitizer.isStale(window.frame) else { return }
+                // Reset WIDTH only, not height -- `isStale` no longer
+                // checks height at all (see its own doc comment on why a
+                // fixed height cap kept misfiring on this panel's own
+                // legitimate growth); a stale frame's real problem is
+                // always its width or its position, and `.windowResizability
+                // (.contentSize)` (BluegullAQIApp's Window scene) re-derives
+                // the correct height from actual content on its own right
+                // after this, so there's no need to guess one here.
+                window.setContentSize(NSSize(width: 400, height: window.frame.height))
+                guard let visibleFrame = NSScreen.main?.visibleFrame else { return }
                 let inset: CGFloat = 60
                 window.setFrameOrigin(CGPoint(
                     x: visibleFrame.minX + inset,

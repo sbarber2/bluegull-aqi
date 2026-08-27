@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Regenerate mac-app/branding/dmg-background.png.
 
-Run this after changing app-package's DMG_WINDOW_W/H, DMG_ICON_X/Y, or
-DMG_APPLINK_X/Y in the root Makefile -- the arrow and text positions here
-are hand-tuned to those exact numbers. Needs Pillow: `pip install pillow`
-(not part of this repo's normal Python deps, since this only runs when
-someone touches the branding).
+Run this after changing app-package's DMG_WINDOW_W/H, DMG_ICON_X/Y,
+DMG_APPLINK_X/Y, or DMG_UNINSTALL_X/Y in the root Makefile -- the arrow
+and text positions here are hand-tuned to those exact numbers. Needs
+Pillow: `pip install pillow` (not part of this repo's normal Python
+deps, since this only runs when someone touches the branding).
 
 Layout notes (found by actually building a DMG with create-dmg and
 screenshotting the real Finder window, not by assuming):
@@ -27,7 +27,7 @@ screenshotting the real Finder window, not by assuming):
 from PIL import Image, ImageDraw, ImageFont
 
 SCALE = 4  # supersample for anti-aliasing, then downsample
-W, H = 660, 400  # must match Makefile's DMG_WINDOW_W/H
+W, H = 660, 620  # must match Makefile's DMG_WINDOW_W/H
 
 BG = (234, 244, 252)
 NAVY = (20, 40, 70)
@@ -81,6 +81,12 @@ draw.polygon([(x * SCALE, y * SCALE) for x, y in pts], fill=ARROW_BLUE)
 # Bottom instruction text -- see the clipping note in the module
 # docstring for why this sits at y=302 rather than nearer the bottom.
 center_text("Drag to Applications to install", BODY_FONT, 302, NAVY)
+
+# Uninstall row (bluegull-aqi-8iz): well below the install row/caption
+# above (302), matching DMG_UNINSTALL_Y (490) with room on both sides for
+# the icon (DMG_ICON_SIZE 128, so +/-64) plus Finder's own filename label
+# under it.
+center_text("To uninstall BlueGull AQI, run this script", BODY_FONT, 400, NAVY)
 
 img = img.resize((W, H), Image.LANCZOS)
 out_path = __file__.rsplit("/", 1)[0] + "/dmg-background.png"
