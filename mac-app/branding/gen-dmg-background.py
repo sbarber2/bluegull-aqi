@@ -82,11 +82,17 @@ draw.polygon([(x * SCALE, y * SCALE) for x, y in pts], fill=ARROW_BLUE)
 # docstring for why this sits at y=302 rather than nearer the bottom.
 center_text("Drag to Applications to install", BODY_FONT, 302, NAVY)
 
-# Uninstall row (bluegull-aqi-8iz): well below the install row/caption
-# above (302), matching DMG_UNINSTALL_Y (490) with room on both sides for
-# the icon (DMG_ICON_SIZE 128, so +/-64) plus Finder's own filename label
-# under it.
-center_text("To uninstall BlueGull AQI, run this script", BODY_FONT, 400, NAVY)
+# Utility scripts row (bluegull-aqi-8iz, kill-all added after): well
+# below the install row/caption above (302), matching DMG_UTILITY_ROW_Y
+# (490) with room on both sides for the icons (DMG_ICON_SIZE 128, so
+# +/-64) plus Finder's own filename labels under them. One caption for
+# both, not one each -- the two icons sit at the SAME X positions as the
+# app/Applications-link pair above (180/480), so labeling them
+# individually here would either sit awkwardly off-center from each icon
+# or require repeating the arrow's own layout math for a second row;
+# Finder's own filename label under each icon already says which is
+# which.
+center_text("Troubleshooting: uninstall, or force-quit if something's stuck", BODY_FONT, 400, NAVY)
 
 img = img.resize((W, H), Image.LANCZOS)
 out_path = __file__.rsplit("/", 1)[0] + "/dmg-background.png"

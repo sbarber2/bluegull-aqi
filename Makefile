@@ -57,16 +57,26 @@ DMG_ICON_X := 180
 DMG_ICON_Y := 170
 DMG_APPLINK_X := 480
 DMG_APPLINK_Y := 170
-# Uninstall script (bluegull-aqi-8iz): a second, visually separated row
-# below the install row -- centered (DMG_WINDOW_W / 2), well clear of the
-# "Drag to Applications to install" caption above it. DMG_WINDOW_H grew
-# from 400 to fit this row with the same bottom margin the original
-# layout kept -- see mac-app/branding/gen-dmg-background.py's own doc
-# comment on Finder's visible-content-vs-requested-height clipping
-# behavior before changing any of these without re-screenshotting.
-DMG_UNINSTALL_X := 330
-DMG_UNINSTALL_Y := 490
+# Utility scripts row (bluegull-aqi-8iz, kill-all added after): a second,
+# visually separated row below the install row, well clear of the "Drag
+# to Applications to install" caption above it. DMG_WINDOW_H grew from
+# 400 to fit this row with the same bottom margin the original layout
+# kept -- see mac-app/branding/gen-dmg-background.py's own doc comment on
+# Finder's visible-content-vs-requested-height clipping behavior before
+# changing any of these without re-screenshotting.
+#
+# Two icons side by side, not stacked -- DMG_UNINSTALL_X/DMG_KILL_X
+# deliberately reuse the exact same X positions as DMG_ICON_X/
+# DMG_APPLINK_X above (180/480), the one pair of coordinates in this
+# whole layout actually confirmed to render correctly (Steve, live,
+# 2026-08-25/27) -- adding kill-all.command as a second icon in the SAME
+# row this way needs no new vertical space and no unverified new
+# coordinates, unlike growing the window for a third row would.
+DMG_UTILITY_ROW_Y := 490
+DMG_UNINSTALL_X := 180
 DMG_UNINSTALL_NAME := Uninstall BlueGull AQI.command
+DMG_KILL_X := 480
+DMG_KILL_NAME := Kill All BlueGull AQI Processes.command
 
 # One-time setup for a genuinely fresh macOS install (bluegull-aqi-x0u) --
 # gets you from "brand new Mac" to able to run test-swift/app-run/
@@ -121,7 +131,7 @@ mac-dev-setup:
 	@# shell, never this non-interactive one or a subsequent recipe line
 	@# (each is its own subshell in plain Make).
 	eval "$$([ -x /opt/homebrew/bin/brew ] && /opt/homebrew/bin/brew shellenv || /usr/local/bin/brew shellenv)" && \
-	brew install xcodegen create-dmg aws-sam-cli awscli gh beads betterleaks openjdk pipx python@3.14 && \
+	brew install xcodegen create-dmg fileicon aws-sam-cli awscli gh beads betterleaks openjdk pipx python@3.14 && \
 	pipx install poetry && \
 	export PATH="$$HOME/.local/bin:$$PATH" && \
 	(cd $(MAC_APP_DIR) && xcodegen generate) && \
@@ -400,13 +410,25 @@ app-package:
 	rm -rf $(PACKAGE_DMG_SOURCE_DIR)
 	mkdir -p $(PACKAGE_DMG_SOURCE_DIR)
 	cp -R $(PACKAGE_APP) $(PACKAGE_DMG_SOURCE_DIR)/
-	@# bluegull-aqi-8iz: the uninstall script, source of truth at
-	@# mac-app/scripts/uninstall.command -- copied in (not symlinked; a
+	@# bluegull-aqi-8iz/kill-all follow-up: the utility scripts, source of
+	@# truth at mac-app/scripts/*.command -- copied in (not symlinked; a
 	@# symlink wouldn't survive `ditto`/DMG creation cleanly) and marked
-	@# executable so double-clicking it from Finder runs it directly
+	@# executable so double-clicking either from Finder runs it directly
 	@# rather than opening it in a text editor.
 	cp $(MAC_APP_DIR)/scripts/uninstall.command "$(PACKAGE_DMG_SOURCE_DIR)/$(DMG_UNINSTALL_NAME)"
 	chmod +x "$(PACKAGE_DMG_SOURCE_DIR)/$(DMG_UNINSTALL_NAME)"
+	cp $(MAC_APP_DIR)/scripts/kill-all.command "$(PACKAGE_DMG_SOURCE_DIR)/$(DMG_KILL_NAME)"
+	chmod +x "$(PACKAGE_DMG_SOURCE_DIR)/$(DMG_KILL_NAME)"
+	@# Custom Finder icons for both scripts (bluegull-aqi-8iz follow-up)
+	@# -- confirmed live, Steve, 2026-08-28: without this, Finder renders
+	@# a small text-file's icon as a live text-content preview thumbnail
+	@# at this DMG's 128px icon size, not a generic script icon, which
+	@# read as broken/wrong. mac-app/branding/gen-script-icons.swift is
+	@# the source of truth for uninstall-icon.png/kill-all-icon.png;
+	@# `fileicon` (brew) applies a PNG as a file's custom Finder icon
+	@# directly, no manual .icns/Rez/SetFile steps needed.
+	fileicon set "$(PACKAGE_DMG_SOURCE_DIR)/$(DMG_UNINSTALL_NAME)" $(MAC_APP_DIR)/branding/uninstall-icon.png
+	fileicon set "$(PACKAGE_DMG_SOURCE_DIR)/$(DMG_KILL_NAME)" $(MAC_APP_DIR)/branding/kill-all-icon.png
 	create-dmg \
 		--volname "BlueGull AQI" \
 		--volicon $(PACKAGE_BUILD_DIR)/BluegullAQI.icns \
@@ -416,7 +438,8 @@ app-package:
 		--icon "BluegullAQI.app" $(DMG_ICON_X) $(DMG_ICON_Y) \
 		--hide-extension "BluegullAQI.app" \
 		--app-drop-link $(DMG_APPLINK_X) $(DMG_APPLINK_Y) \
-		--icon "$(DMG_UNINSTALL_NAME)" $(DMG_UNINSTALL_X) $(DMG_UNINSTALL_Y) \
+		--icon "$(DMG_UNINSTALL_NAME)" $(DMG_UNINSTALL_X) $(DMG_UTILITY_ROW_Y) \
+		--icon "$(DMG_KILL_NAME)" $(DMG_KILL_X) $(DMG_UTILITY_ROW_Y) \
 		--no-internet-enable \
 		--overwrite \
 		$(PACKAGE_DMG) \
