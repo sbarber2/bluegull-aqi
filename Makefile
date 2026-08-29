@@ -75,7 +75,12 @@ DMG_APPLINK_Y := 170
 # Kill on the left (180), Uninstall on the right (480) -- Steve's own
 # ordering request, 2026-08-28 (swapped from the original left-to-right
 # order once he saw it rendered).
-DMG_UTILITY_ROW_Y := 490
+#
+# Y tightened from 490 to 450 (2026-08-29 follow-up): Steve had to
+# scroll the DMG window to see the icons' own filename labels at 490 --
+# see mac-app/branding/gen-dmg-background.py's own comment on this same
+# change for the caption side of it.
+DMG_UTILITY_ROW_Y := 450
 DMG_KILL_X := 180
 DMG_KILL_NAME := Kill All BlueGull AQI Processes.command
 DMG_UNINSTALL_X := 480

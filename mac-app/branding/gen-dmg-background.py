@@ -80,22 +80,30 @@ draw.polygon([(x * SCALE, y * SCALE) for x, y in pts], fill=ARROW_BLUE)
 
 # Bottom instruction text -- see the clipping note in the module
 # docstring for why this sits at y=302 rather than nearer the bottom.
-center_text("Drag to Applications to install", BODY_FONT, 302, NAVY)
+# Text itself is Steve's own (2026-08-28 follow-up) -- a hint that
+# re-running the installer over a live instance should kill it first,
+# added once the utility row below existed to point to.
+center_text("Drag to Applications to install. Kill all processes before re-running", BODY_FONT, 302, NAVY)
 
-# Utility scripts row (bluegull-aqi-8iz, kill-all added after): well
-# below the install row/caption above (302), matching DMG_UTILITY_ROW_Y
-# (490) with room on both sides for the icons (DMG_ICON_SIZE 128, so
-# +/-64) plus Finder's own filename labels under them. One caption for
-# both, not one each -- the two icons sit at the SAME X positions as the
-# app/Applications-link pair above (180/480), so labeling them
-# individually here would either sit awkwardly off-center from each icon
-# or require repeating the arrow's own layout math for a second row;
-# Finder's own filename label under each icon already says which is
-# which. Wording is Steve's own (2026-08-28 follow-up), replacing an
-# earlier "Troubleshooting: uninstall, or force-quit if something's
-# stuck" -- left-to-right order here matches the icons' own left-to-right
-# order (kill at 180, uninstall at 480).
-center_text("Kill all BlueGull AQI Processes or Completely Uninstall", BODY_FONT, 400, NAVY)
+# Utility scripts row (bluegull-aqi-8iz, kill-all added after) -- Y
+# values tightened from 400/490 to 357/450 (bluegull-aqi follow-up,
+# 2026-08-29): Steve had to scroll the DMG window to see the icons'
+# own Finder-drawn filename labels, since the old 490 placed the
+# icon+label bottom (~574) past the visible-content boundary for a
+# 620pt window (~560, per this module's own empirical 60pt-overhead
+# note above). Shrinking the gap between the two caption lines (98 ->
+# 55) and keeping the SAME 90pt gap from caption to icon row shifts
+# the whole block up by 43pt, comfortably back under that boundary --
+# confirmed by rendering and mounting a real DMG, not assumed.
+#
+# One caption for both icons, not one each -- the two icons sit at the
+# SAME X positions as the app/Applications-link pair above (180/480),
+# so labeling them individually here would either sit awkwardly off-
+# center from each icon or require repeating the arrow's own layout
+# math for a second row; Finder's own filename label under each icon
+# already says which is which. Left-to-right order here matches the
+# icons' own left-to-right order (kill at 180, uninstall at 480).
+center_text("Kill all BlueGull AQI processes or completely uninstall", BODY_FONT, 357, NAVY)
 
 img = img.resize((W, H), Image.LANCZOS)
 out_path = __file__.rsplit("/", 1)[0] + "/dmg-background.png"
