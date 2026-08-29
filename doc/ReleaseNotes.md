@@ -1,5 +1,27 @@
 # Blue Gull AQI Release Notes
 
+## 0.2.1 — 2026-08-29
+
+### Added
+
+- Optional "Launch BlueGull AQI at login" toggle in Settings
+- "Completely Remove BlueGull AQI…" button in Settings for a one-click uninstall
+  — clears all settings, cached data, and the saved AirNow API key
+- The release DMG now includes standalone Uninstall and Kill-All-Processes
+  utilities alongside the app, for when it isn't currently running
+
+### Changed
+
+- Settings panel background is now a flat color instead of a gradient, for more
+  reliable contrast throughout
+- Settings panel is more compact, with tighter spacing between the app-behavior
+  toggles
+
+### Fixed
+
+- Settings window could reopen at an oversized or off-screen size after
+  upgrading from an older version
+
 ## 0.2.0 — 2026-08-25
 
 ### Added
