@@ -72,11 +72,14 @@ DMG_APPLINK_Y := 170
 # 2026-08-25/27) -- adding kill-all.command as a second icon in the SAME
 # row this way needs no new vertical space and no unverified new
 # coordinates, unlike growing the window for a third row would.
+# Kill on the left (180), Uninstall on the right (480) -- Steve's own
+# ordering request, 2026-08-28 (swapped from the original left-to-right
+# order once he saw it rendered).
 DMG_UTILITY_ROW_Y := 490
-DMG_UNINSTALL_X := 180
-DMG_UNINSTALL_NAME := Uninstall BlueGull AQI.command
-DMG_KILL_X := 480
+DMG_KILL_X := 180
 DMG_KILL_NAME := Kill All BlueGull AQI Processes.command
+DMG_UNINSTALL_X := 480
+DMG_UNINSTALL_NAME := Uninstall BlueGull AQI.command
 
 # One-time setup for a genuinely fresh macOS install (bluegull-aqi-x0u) --
 # gets you from "brand new Mac" to able to run test-swift/app-run/

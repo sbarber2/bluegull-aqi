@@ -91,8 +91,11 @@ center_text("Drag to Applications to install", BODY_FONT, 302, NAVY)
 # individually here would either sit awkwardly off-center from each icon
 # or require repeating the arrow's own layout math for a second row;
 # Finder's own filename label under each icon already says which is
-# which.
-center_text("Troubleshooting: uninstall, or force-quit if something's stuck", BODY_FONT, 400, NAVY)
+# which. Wording is Steve's own (2026-08-28 follow-up), replacing an
+# earlier "Troubleshooting: uninstall, or force-quit if something's
+# stuck" -- left-to-right order here matches the icons' own left-to-right
+# order (kill at 180, uninstall at 480).
+center_text("Kill all BlueGull AQI Processes or Completely Uninstall", BODY_FONT, 400, NAVY)
 
 img = img.resize((W, H), Image.LANCZOS)
 out_path = __file__.rsplit("/", 1)[0] + "/dmg-background.png"

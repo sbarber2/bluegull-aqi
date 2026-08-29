@@ -15,10 +15,21 @@
 // Makefile's app-package target) applies these PNGs as each file's
 // custom Finder icon so they show something deliberate instead.
 //
-// Colors match AppBrand's own palette (mac-app/BluegullAQI/AppBrand.swift)
-// -- navy background, midBlue ring accent, white glyph -- so these read
-// as part of the same brand family as the app icon and every other
-// branded surface, not a mismatched generic icon.
+// Colors, Steve's own follow-up request (2026-08-28): background =
+// AppBrand.iconBlue (the app icon's OWN background blue -- "the same
+// color as the AQI icon"), border = AppBrand.navy. Originally shipped
+// the other way around (navy background, midBlue ring) -- revised once
+// Steve actually saw it rendered.
+//
+// Size, same follow-up: `create-dmg`'s `--icon-size` is ONE setting for
+// the whole Finder window (confirmed via `create-dmg --help` -- no
+// per-file size option exists; this is a Finder icon-view limitation,
+// not just a create-dmg one), so these can't be shown at a genuinely
+// different pixel size than the app icon while sharing that window.
+// `CONTENT_SCALE` below is the workaround: it draws the icon artwork
+// smaller within its own transparent canvas, so it visually reads as
+// smaller inside the SAME uniform Finder icon slot -- 0.75 here for
+// Steve's own "about 25% smaller" ask.
 //
 // Symbol names were verified by actually rendering and looking at the
 // result, not assumed -- `NSImage(systemSymbolName:)` does NOT return nil
@@ -28,36 +39,49 @@
 
 import AppKit
 
+let iconBlue = NSColor(srgbRed: 112 / 255, green: 181 / 255, blue: 236 / 255, alpha: 1)
 let navy = NSColor(srgbRed: 20 / 255, green: 40 / 255, blue: 70 / 255, alpha: 1)
-let midBlue = NSColor(srgbRed: 62 / 255, green: 127 / 255, blue: 190 / 255, alpha: 1)
 
-func renderIcon(symbolName: String, ringColor: NSColor, outputPath: String) {
-    let size = NSSize(width: 512, height: 512)
-    let image = NSImage(size: size)
+// Fraction of the full canvas the icon artwork itself occupies -- see the
+// module header's own comment on why this, not a smaller canvas outright
+// (fileicon/Finder both expect a square input and scale it to fit the
+// window's one shared --icon-size regardless of the source image's own
+// pixel dimensions, so a smaller canvas wouldn't visually shrink
+// anything; the padding has to be baked INTO the image content instead).
+let CONTENT_SCALE: CGFloat = 0.75
+
+func renderIcon(symbolName: String, outputPath: String) {
+    let canvasSize = NSSize(width: 512, height: 512)
+    let image = NSImage(size: canvasSize)
     image.lockFocus()
 
-    // Background: navy rounded square, matching AppBrand.navy -- same
-    // "control surface" language as the rest of the app's branding.
-    let bgRect = NSRect(origin: .zero, size: size)
-    let bgPath = NSBezierPath(roundedRect: bgRect, xRadius: 110, yRadius: 110)
-    navy.setFill()
+    let contentSize = NSSize(width: canvasSize.width * CONTENT_SCALE, height: canvasSize.height * CONTENT_SCALE)
+    let contentOrigin = NSPoint(x: (canvasSize.width - contentSize.width) / 2, y: (canvasSize.height - contentSize.height) / 2)
+    let bgRect = NSRect(origin: contentOrigin, size: contentSize)
+
+    // Background: AppBrand.iconBlue -- "the same color as the AQI icon"
+    // (Steve, 2026-08-28), not navy.
+    let cornerRadius = 110 * CONTENT_SCALE
+    let bgPath = NSBezierPath(roundedRect: bgRect, xRadius: cornerRadius, yRadius: cornerRadius)
+    iconBlue.setFill()
     bgPath.fill()
 
-    // Ring accent, matching AppBrand.midBlue -- ties visually to the
-    // filled-button/field color used everywhere else in Settings.
-    let ringRect = bgRect.insetBy(dx: 24, dy: 24)
-    let ringPath = NSBezierPath(roundedRect: ringRect, xRadius: 96, yRadius: 96)
-    ringPath.lineWidth = 14
-    ringColor.setStroke()
+    // Border: AppBrand.navy, not midBlue -- same follow-up request.
+    let ringInset = 24 * CONTENT_SCALE
+    let ringRect = bgRect.insetBy(dx: ringInset, dy: ringInset)
+    let ringPath = NSBezierPath(roundedRect: ringRect, xRadius: cornerRadius - ringInset, yRadius: cornerRadius - ringInset)
+    ringPath.lineWidth = 14 * CONTENT_SCALE
+    navy.setStroke()
     ringPath.stroke()
 
-    // The SF Symbol itself, white, centered, large.
-    let config = NSImage.SymbolConfiguration(pointSize: 220, weight: .medium)
+    // The SF Symbol itself, white, centered, scaled down with everything
+    // else so it stays proportional to the smaller background.
+    let config = NSImage.SymbolConfiguration(pointSize: 220 * CONTENT_SCALE, weight: .medium)
     if let symbol = NSImage(systemSymbolName: symbolName, accessibilityDescription: nil)?
         .withSymbolConfiguration(config) {
         let tinted = symbol.image(withTintColor: .white)
         let symbolSize = tinted.size
-        let origin = NSPoint(x: (size.width - symbolSize.width) / 2, y: (size.height - symbolSize.height) / 2)
+        let origin = NSPoint(x: (canvasSize.width - symbolSize.width) / 2, y: (canvasSize.height - symbolSize.height) / 2)
         tinted.draw(at: origin, from: .zero, operation: .sourceOver, fraction: 1)
     }
 
@@ -88,5 +112,5 @@ extension NSImage {
 }
 
 let outDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "."
-renderIcon(symbolName: "trash", ringColor: midBlue, outputPath: "\(outDir)/uninstall-icon.png")
-renderIcon(symbolName: "power", ringColor: midBlue, outputPath: "\(outDir)/kill-all-icon.png")
+renderIcon(symbolName: "trash", outputPath: "\(outDir)/uninstall-icon.png")
+renderIcon(symbolName: "power", outputPath: "\(outDir)/kill-all-icon.png")
