@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  bluegull-aqi-hib.10 VARIANT A: hib.5's literal proposal -- the agent calls
+  xpc_activity_register() itself, with the criteria in code.
+
+  RunAtLoad IS set here, and that is not a contradiction of hib.3 -- it is the
+  bootstrap hole made explicit. Criteria that live in code can only be
+  registered by code that runs, so SOMETHING has to start this agent once
+  before any schedule exists. RunAtLoad is the cheapest honest stand-in for
+  "the user launched the container app once."
+
+  Reading the result: RunAtLoad explains ONE process start per login. It does
+  not explain an ACTIVITY_RUN five minutes later, and it does not explain a
+  SECOND process start with a different pid. Those are the signal. If wakes
+  only ever appear in the pid RunAtLoad created, the activity is not surviving
+  the process and this variant fails.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>solutions.bluegull.hib10.register</string>
+
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/hib10-agent</string>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HIB10_MODE</key>
+		<string>register</string>
+		<key>HIB10_ACTIVITY</key>
+		<string>solutions.bluegull.hib10.register.wake</string>
+	</dict>
+
+	<key>RunAtLoad</key>
+	<true/>
+
+	<key>EnablePressuredExit</key>
+	<true/>
+	<key>EnableTransactions</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Adaptive</string>
+
+	<!-- No LaunchEvents on purpose: this variant's whole point is that the
+	     schedule is established from code instead. -->
+</dict>
+</plist>

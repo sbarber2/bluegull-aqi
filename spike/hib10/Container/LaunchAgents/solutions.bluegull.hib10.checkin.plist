@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  bluegull-aqi-hib.10 VARIANT B: the activity is declared HERE, in the launchd
+  plist, and the agent picks it up with XPC_ACTIVITY_CHECK_IN.
+
+  This is the variant that has to work for the hib epic's design to exist,
+  because it is the only one without a bootstrap hole: launchd learns the
+  schedule at registration time, so it can start the agent even though the
+  agent has never run and the container app may never be launched again.
+
+  DELIBERATELY ABSENT: RunAtLoad and KeepAlive. That absence is the experiment.
+  If something runs this agent, launchd did it on the activity's account.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>solutions.bluegull.hib10.checkin</string>
+
+	<!-- Bundle-relative, per SMAppService.h: lets the app be moved after
+	     install without breaking the agent. -->
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/hib10-agent</string>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HIB10_MODE</key>
+		<string>checkin</string>
+		<key>HIB10_ACTIVITY</key>
+		<string>solutions.bluegull.hib10.checkin.wake</string>
+	</dict>
+
+	<!-- Question 4: with these two set and the agent ending its transaction,
+	     launchd should reap the idle process between wakes. If the pid stays
+	     the same across wakes, it didn't, and "on demand" is a costume. -->
+	<key>EnablePressuredExit</key>
+	<true/>
+	<key>EnableTransactions</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Adaptive</string>
+
+	<!-- Question 1: does SMAppService registration preserve this key at all?
+	     SMAppService.h promises only "the standard launchd.plist keys" plus
+	     BundleProgram and says nothing about LaunchEvents. What tips the odds
+	     toward yes is xpc/activity.h's own description of XPC_ACTIVITY_CHECK_IN:
+	     "previously registered activity using the same identifier (for example,
+	     an activity taken from a launchd property list)" -- so plist-declared
+	     activities are a documented, supported thing. Whether they survive
+	     SMAppService specifically is the open part.
+
+	     Interval/GracePeriod are short here purely for spike turnaround. Note
+	     RequireNetworkConnectivity, which weatherd sets and hib.5 copies, is
+	     NOT a public constant in xpc/activity.h -- omitted deliberately. -->
+	<key>LaunchEvents</key>
+	<dict>
+		<key>com.apple.xpc.activity</key>
+		<dict>
+			<key>solutions.bluegull.hib10.checkin.wake</key>
+			<dict>
+				<key>Interval</key>
+				<integer>300</integer>
+				<key>GracePeriod</key>
+				<integer>60</integer>
+				<key>Repeating</key>
+				<true/>
+				<key>AllowBattery</key>
+				<true/>
+				<key>Priority</key>
+				<string>Utility</string>
+			</dict>
+		</dict>
+	</dict>
+</dict>
+</plist>

@@ -1,0 +1,101 @@
+# bluegull-aqi-hib.10 spike. Deliberately a SEPARATE xcodegen project from
+# mac-app/, not extra targets in it: this is throwaway code with throwaway
+# bundle ids, and it must not be possible to ship it by accident.
+name: Hib10Spike
+options:
+  bundleIdPrefix: solutions.bluegull.hib10
+  deploymentTarget:
+    macOS: "14.0"
+
+# Manual Developer ID signing, not the real project's Automatic. Automatic
+# would want these three fresh bundle ids registered on the developer portal
+# first; Developer ID needs nothing from the portal because none of the
+# entitlements here (app-sandbox alone) require a provisioning profile. It is
+# also HIGHER fidelity than an Apple Development build -- the shipping helper
+# would be Developer ID signed, and TCC/locationd grants are pinned to the
+# signing identity, so testing under the identity we'd actually ship is the
+# right call.
+settings:
+  base:
+    DEVELOPMENT_TEAM: G5DWPBWHQ5
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGN_IDENTITY: Developer ID Application
+    ENABLE_HARDENED_RUNTIME: true
+    MARKETING_VERSION: "0.0.1"
+    CURRENT_PROJECT_VERSION: "1"
+
+targets:
+  Hib10Container:
+    type: application
+    platform: macOS
+    sources:
+      - path: Container/ContainerApp.swift
+      # SMAppService.agent(plistName:) resolves the plist from the app's own
+      # Contents/Library/LaunchAgents -- per SMAppService.h that path is not
+      # negotiable, so this copy phase is load-bearing, not packaging taste.
+      - path: Container/LaunchAgents
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchAgents
+    dependencies:
+      # Lands at Contents/MacOS/hib10-agent, which is what both plists name in
+      # their BundleProgram key. Re-signed on copy so the agent keeps its own
+      # code-signing identity -- a separate identity is the entire reason a
+      # helper needs its own TCC grant, so getting this wrong would quietly
+      # invalidate the experiment.
+      - target: Hib10Agent
+        embed: true
+        codeSignOnCopy: true
+        copy:
+          destination: executables
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: solutions.bluegull.hib10.container
+    info:
+      path: Container/Info.plist
+      properties:
+        CFBundleDisplayName: hib.10 spike
+        LSApplicationCategoryType: public.app-category.developer-tools
+    # Spelled out here, not just pointed at: xcodegen GENERATES the file at
+    # this path from these properties and overwrites whatever was there. A
+    # hand-written entitlements file with only `path:` gets silently replaced
+    # by an empty <dict/> on the next `generate` -- which happened here, and
+    # produced a signed-but-unsandboxed agent that looked fine until the
+    # signature was inspected. Same shape as mac-app/project.yml.
+    entitlements:
+      path: Container/Container.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+
+  Hib10Agent:
+    type: tool
+    platform: macOS
+    sources:
+      - path: Agent/main.swift
+    settings:
+      base:
+        PRODUCT_NAME: hib10-agent
+        PRODUCT_BUNDLE_IDENTIFIER: solutions.bluegull.hib10.agent
+        # A command-line tool has no Info.plist file, so the identity that
+        # launchd and TCC see has to be embedded in the Mach-O itself. Without
+        # this the agent has no bundle identifier at all and is not a distinct
+        # subject to the system -- which would make the whole "separate TCC
+        # identity" premise untestable.
+        GENERATE_INFOPLIST_FILE: true
+        CREATE_INFOPLIST_SECTION_IN_BINARY: true
+    entitlements:
+      path: Agent/Agent.entitlements
+      properties:
+        # Sandboxed on purpose: the shipping helper would have to be, for the
+        # Mac App Store, and an unsandboxed spike would prove the wrong thing.
+        com.apple.security.app-sandbox: true
+
+schemes:
+  Hib10Container:
+    build:
+      targets:
+        Hib10Container: all
+        Hib10Agent: all
+    run:
+      config: Debug

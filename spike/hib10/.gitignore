@@ -1,0 +1,4 @@
+# Throwaway build output and the generated Xcode project -- `make build`
+# recreates both from project.yml.
+build/
+Hib10Spike.xcodeproj/

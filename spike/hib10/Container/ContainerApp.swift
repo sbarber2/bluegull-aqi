@@ -1,0 +1,173 @@
+// bluegull-aqi-hib.10 spike container.
+//
+// Stands in for BluegullAQI purely as the thing that owns the agent and can
+// register it. Deliberately ugly and deliberately separate from the real app:
+// this project exists to be thrown away once hib.1 is answered.
+//
+// Not LSUIElement, unlike the real app -- the spike needs a window and a Dock
+// icon so it can actually be driven and, more importantly, so "quit it" is
+// unambiguous. Questions 2 and 3 both hinge on the container being genuinely
+// not running.
+
+import ServiceManagement
+import SwiftUI
+import os
+
+let log = Logger(subsystem: "solutions.bluegull.hib10", category: "container")
+
+/// The two experiments, each an independently registrable agent so a single
+/// reboot can answer both -- reboots are the slow part of this spike.
+enum Variant: String, CaseIterable, Identifiable {
+    case checkin = "solutions.bluegull.hib10.checkin"
+    case register = "solutions.bluegull.hib10.register"
+
+    var id: String { rawValue }
+    var plistName: String { "\(rawValue).plist" }
+
+    var title: String {
+        switch self {
+        case .checkin: "B — activity declared in the plist (LaunchEvents + CHECK_IN)"
+        case .register: "A — activity registered in code (hib.5's proposal)"
+        }
+    }
+
+    var note: String {
+        switch self {
+        case .checkin: "No RunAtLoad, no KeepAlive. If this wakes, the epic's design is real."
+        case .register: "RunAtLoad, to give the code somewhere to run once. Watch for a SECOND pid."
+        }
+    }
+
+    var service: SMAppService { SMAppService.agent(plistName: plistName) }
+}
+
+/// Lets the whole experiment be driven from a script instead of by clicking:
+/// `HIB10_ACTION=register /Applications/Hib10Container.app/Contents/MacOS/Hib10Container`.
+/// SMAppService resolves its plists relative to `Bundle.main`, so this has to
+/// run from inside the installed bundle -- it cannot be a separate CLI tool.
+/// Runs before any window appears and exits immediately, which also makes
+/// "the container app is not running" trivially true for questions 2 and 3.
+func runHeadlessActionIfRequested() {
+    guard let action = ProcessInfo.processInfo.environment["HIB10_ACTION"] else { return }
+
+    for variant in Variant.allCases {
+        let service = variant.service
+        do {
+            switch action {
+            case "register": try service.register()
+            case "unregister": try service.unregister()
+            case "status": break
+            default:
+                FileHandle.standardError.write(Data("unknown HIB10_ACTION \(action)\n".utf8))
+                exit(2)
+            }
+            print("\(action) \(variant.rawValue): OK -> status=\(describe(service.status))")
+            log.notice("\(action, privacy: .public) \(variant.rawValue, privacy: .public): OK status=\(describe(service.status), privacy: .public)")
+        } catch {
+            let ns = error as NSError
+            print("\(action) \(variant.rawValue): FAILED \(ns.domain) \(ns.code) — \(ns.localizedDescription) -> status=\(describe(service.status))")
+            log.error("\(action, privacy: .public) \(variant.rawValue, privacy: .public): FAILED \(ns.domain, privacy: .public) \(ns.code, privacy: .public) \(ns.localizedDescription, privacy: .public)")
+        }
+    }
+    exit(0)
+}
+
+func describe(_ status: SMAppService.Status) -> String {
+    switch status {
+    case .notRegistered: "notRegistered"
+    case .enabled: "enabled"
+    case .requiresApproval: "requiresApproval"
+    case .notFound: "notFound"
+    @unknown default: "unknown(\(status.rawValue))"
+    }
+}
+
+@main
+struct Hib10ContainerApp: App {
+    init() { runHeadlessActionIfRequested() }
+
+    var body: some Scene {
+        Window("hib.10 spike", id: "main") {
+            ContentView()
+                .frame(minWidth: 620, minHeight: 420)
+        }
+        .windowResizability(.contentSize)
+    }
+}
+
+struct ContentView: View {
+    @State private var transcript: [String] = []
+    @State private var statuses: [String: String] = [:]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("bluegull-aqi-hib.10")
+                .font(.headline)
+            Text("Register, then quit this app. Everything after that is launchd's doing.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            ForEach(Variant.allCases) { variant in
+                GroupBox {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(variant.title).font(.subheadline.bold())
+                        Text(variant.note).font(.caption).foregroundStyle(.secondary)
+                        HStack {
+                            Button("Register") { act("register", variant) { try variant.service.register() } }
+                            Button("Unregister") { act("unregister", variant) { try variant.service.unregister() } }
+                            Button("Status") { refresh(variant) }
+                            Spacer()
+                            Text(statuses[variant.rawValue] ?? "—")
+                                .font(.system(.caption, design: .monospaced))
+                        }
+                    }
+                    .padding(6)
+                }
+            }
+
+            // The registered path is what SMAppService actually resolved, which
+            // is worth seeing: registration records where the app was, so a
+            // later move (Downloads -> Applications, say) is a real failure mode
+            // and one worth catching here rather than blaming on the activity.
+            Text("Bundle: \(Bundle.main.bundleURL.path)")
+                .font(.system(.caption2, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+
+            ScrollView {
+                Text(transcript.joined(separator: "\n"))
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .padding()
+        .onAppear { Variant.allCases.forEach(refresh) }
+    }
+
+    private func act(_ what: String, _ variant: Variant, _ body: () throws -> Void) {
+        do {
+            try body()
+            say("\(what) \(variant.rawValue): OK")
+            log.notice("\(what, privacy: .public) \(variant.rawValue, privacy: .public): OK")
+        } catch {
+            // Question 1's most likely failure shape: register() throwing
+            // because the plist carries a key SMAppService won't accept. The
+            // NSError domain/code matters more than the message here, so print
+            // both rather than localizedDescription alone.
+            let ns = error as NSError
+            say("\(what) \(variant.rawValue): FAILED \(ns.domain) \(ns.code) — \(ns.localizedDescription)")
+            log.error("\(what, privacy: .public) \(variant.rawValue, privacy: .public): FAILED \(ns.domain, privacy: .public) \(ns.code, privacy: .public)")
+        }
+        refresh(variant)
+    }
+
+    private func refresh(_ variant: Variant) {
+        statuses[variant.rawValue] = describe(variant.service.status)
+    }
+
+    private func say(_ line: String) {
+        transcript.append("\(Date().formatted(date: .omitted, time: .standard))  \(line)")
+    }
+}
