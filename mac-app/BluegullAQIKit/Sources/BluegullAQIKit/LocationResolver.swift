@@ -7,6 +7,15 @@ public enum LocationResolverError: Error, Equatable, Sendable {
     /// (bluegull-aqi-e70.2), not this package's job.
     case permissionDenied
     case locationUnavailable(String)
+    /// CoreLocation never answered at all within the deadline
+    /// (bluegull-aqi-10h.22) -- neither a fix nor an error arrived.
+    /// Deliberately distinct from `.locationUnavailable`, which is
+    /// CoreLocation actively *reporting* failure: this case is silence,
+    /// and silence is what used to suspend the caller forever. The two
+    /// want different responses -- a reported failure is worth surfacing
+    /// to the user, whereas silence is usually transient and worth just
+    /// retrying on the normal schedule. Carries the deadline that elapsed.
+    case timedOut(TimeInterval)
     case geocodingFailed(String)
     /// The geocoder ran successfully but found nothing for the query.
     case noResults
@@ -73,26 +82,70 @@ public protocol ReverseGeocoder: Sendable {
 
 // MARK: - Real implementations
 
+/// The slice of `CLLocationManager` that `SystemLocationProvider` actually
+/// uses, so the deadline logic below is testable without CoreLocation
+/// (bluegull-aqi-10h.22). Every other system dependency in this file was
+/// already behind a protocol for exactly this reason; `CLLocationManager`
+/// was the one that wasn't, which is precisely why "the request never
+/// called back" had no test covering it and shipped as a hang.
+protocol LocationManaging: AnyObject {
+    var authorizationStatus: CLAuthorizationStatus { get }
+    var delegate: CLLocationManagerDelegate? { get set }
+    func requestLocation()
+    func stopUpdatingLocation()
+}
+
+extension CLLocationManager: LocationManaging {}
+
 /// Wraps `CLLocationManager`. Requests a single location fix per call
 /// (`requestLocation()`, not continuous updates) -- appropriate for "where
 /// is the user right now," not live tracking.
+///
+/// Every call is bounded by `timeout` (bluegull-aqi-10h.22).
+/// `requestLocation()` promises a delegate callback "shortly," but in
+/// practice it can go silent -- no fix obtainable, Wi-Fi positioning
+/// unavailable with no GPS, location services wedged -- and the previous
+/// version resumed its continuation *only* from the two delegate
+/// callbacks, so silence suspended the caller forever. In the long-lived
+/// menu bar app that is an invisible stall in one refresh cycle. In any
+/// short-lived process holding a launchd transaction it means the process
+/// never exits at all, which is why this surfaced while reviewing the
+/// bluegull-aqi-hib helper design.
 ///
 /// Not verified live: CoreLocation's authorization flow needs a properly
 /// signed, entitled app with an `Info.plist` usage-description string,
 /// none of which a bare Swift package test target has -- the same
 /// entitlement barrier hit verifying bluegull-aqi-10h.5's Keychain code.
-/// Real verification happens once this is wired into the actual app.
+/// The *timeout* behaviour is unit-tested through `LocationManaging`; what
+/// still needs a real app is the authorization flow itself.
 ///
 /// Not safe to call `currentLocation()` concurrently on the same instance
-/// -- each call replaces the in-flight delegate. Callers should await one
+/// -- each call replaces the in-flight request. Callers should await one
 /// request before starting another, which matches how this is actually
 /// used (a single "get my location" action, not concurrent fan-out).
 public final class SystemLocationProvider: NSObject, LocationProvider, @unchecked Sendable {
-    private let manager: CLLocationManager
-    private var activeDelegate: LocationRequestDelegate?
+    /// Deadline for a single fix. Chosen to match
+    /// `RequestTimeoutStore.defaultServiceTimeout` in magnitude but
+    /// deliberately NOT read from it -- that store configures *network*
+    /// timeouts per data source, which is a different failure with
+    /// different tuning pressure. A blown deadline here isn't fatal: the
+    /// caller fails one cycle and `RefreshScheduler`'s fast-retry
+    /// (bluegull-aqi-e70.47) picks it up 60s later.
+    public static let defaultTimeout: TimeInterval = 15
 
-    override public init() {
-        manager = CLLocationManager()
+    private let manager: LocationManaging
+    private let timeout: TimeInterval
+    /// Keeps the in-flight request alive: `CLLocationManager.delegate` is
+    /// a weak reference, so nothing else retains it for the duration.
+    private var activeRequest: LocationRequest?
+
+    override public convenience init() {
+        self.init(manager: CLLocationManager())
+    }
+
+    init(manager: LocationManaging, timeout: TimeInterval = SystemLocationProvider.defaultTimeout) {
+        self.manager = manager
+        self.timeout = timeout
         super.init()
     }
 
@@ -104,31 +157,103 @@ public final class SystemLocationProvider: NSObject, LocationProvider, @unchecke
             break
         }
 
+        let request = LocationRequest(manager: manager, timeout: timeout)
+        activeRequest = request
+        manager.delegate = request
+
         return try await withCheckedThrowingContinuation { continuation in
-            let delegate = LocationRequestDelegate(continuation: continuation)
-            activeDelegate = delegate
-            manager.delegate = delegate
+            // Arms the deadline as part of storing the continuation, so
+            // there is no window where a caller is suspended with nothing
+            // scheduled to wake it. Must precede `requestLocation()`, which
+            // is free to call back synchronously.
+            request.start(continuation)
             manager.requestLocation()
         }
     }
 }
 
-private final class LocationRequestDelegate: NSObject, CLLocationManagerDelegate {
+/// Owns exactly one in-flight `requestLocation()`: the continuation, the
+/// deadline that guarantees it gets resumed, and the one lock that makes
+/// "resume exactly once" true whichever of the three possible outcomes --
+/// fix, CoreLocation error, timeout -- arrives first.
+private final class LocationRequest: NSObject, CLLocationManagerDelegate {
+    private let lock = NSLock()
     private var continuation: CheckedContinuation<Location, Error>?
+    private var timeoutTask: Task<Void, Never>?
+    private var isFinished = false
 
-    init(continuation: CheckedContinuation<Location, Error>) {
+    private let manager: LocationManaging
+    private let timeout: TimeInterval
+
+    init(manager: LocationManaging, timeout: TimeInterval) {
+        self.manager = manager
+        self.timeout = timeout
+        super.init()
+    }
+
+    func start(_ continuation: CheckedContinuation<Location, Error>) {
+        // `[weak self]` matters: the task retains what it captures, and
+        // `self` retains the task -- a strong capture would keep both
+        // alive past the request. The provider's `activeRequest` is what
+        // holds `self` up for the request's real lifetime.
+        let task = Task { [weak self, timeout] in
+            try? await Task.sleep(nanoseconds: UInt64(max(0, timeout) * 1_000_000_000))
+            guard !Task.isCancelled else { return }
+            self?.timeOut()
+        }
+        // Both under one lock, so a zero/near-zero deadline that fires
+        // before this returns still sees a consistent request to finish.
+        lock.lock()
         self.continuation = continuation
+        timeoutTask = task
+        lock.unlock()
+    }
+
+    private func timeOut() {
+        guard finish(with: .failure(.timedOut(timeout))) else { return }
+        // Only if this call actually won the race -- `stopUpdatingLocation()`
+        // is what cancels a pending one-shot `requestLocation()`, and
+        // there's no reason to call it against a request that already
+        // completed. Hopped to the main queue because `CLLocationManager`
+        // expects to be driven from a thread with a live run loop, and a
+        // detached task's thread isn't one.
+        let manager = self.manager
+        DispatchQueue.main.async { manager.stopUpdatingLocation() }
+    }
+
+    /// The single exit for every outcome. Returns whether this call is the
+    /// one that resumed the caller, so a loser (a fix that lands just after
+    /// the deadline, say) can tell it lost rather than double-resuming --
+    /// which traps on a `CheckedContinuation`.
+    @discardableResult
+    private func finish(with result: Result<Location, LocationResolverError>) -> Bool {
+        lock.lock()
+        guard !isFinished, let continuation else {
+            lock.unlock()
+            return false
+        }
+        isFinished = true
+        self.continuation = nil
+        let task = timeoutTask
+        timeoutTask = nil
+        lock.unlock()
+
+        task?.cancel()
+        continuation.resume(with: result.mapError { $0 as Error })
+        return true
     }
 
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        // An empty `locations` leaves the request pending on purpose --
+        // there's nothing to report yet and another callback may follow.
+        // Before bluegull-aqi-10h.22 that was another silent path to a
+        // permanent hang; now the deadline backstops it.
         guard let coordinate = locations.last?.coordinate else { return }
-        continuation?.resume(returning: Location(latitude: coordinate.latitude, longitude: coordinate.longitude))
-        continuation = nil
+        finish(with: .success(Location(latitude: coordinate.latitude, longitude: coordinate.longitude)))
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        continuation?.resume(throwing: LocationResolverError.locationUnavailable(error.localizedDescription))
-        continuation = nil
+        finish(with: .failure(.locationUnavailable(error.localizedDescription)))
     }
 }
 
