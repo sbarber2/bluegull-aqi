@@ -96,6 +96,37 @@ A `PROCESS_START` + `ACTIVITY_RUN` pair after the reboot timestamp, in
 `mode=checkin`, with the container never launched, is the answer the epic
 needs. Nothing at all is the answer that ends it.
 
+## Results so far (2026-08-30, 5 wake cycles / 23 min)
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | Does `SMAppService.agent` accept a plist with `LaunchEvents`? | **Yes** — `launchctl print` shows the criteria stored verbatim, channel `watching = 1` |
+| 2 | Does it wake with the container app quit? | **Yes** — 5/5 wakes, container never running, agent had never previously run |
+| 3 | Does it survive a reboot? | **Not yet run** — needs a human |
+| 4 | Does it exit between wakes? | **No** — one pid served all five wakes |
+
+Wake spacing for the `checkin` variant against a 300s `Interval`: first fire at
+152s (an `Interval` with no explicit `Delay` implies a delay of *half* the
+interval — documented in `xpc/activity.h`), then 307s, 346s, 271s, 275s. The
+spread is the `GracePeriod=60` slack.
+
+Question 4 is the one that costs Option 3 something. With
+`EnablePressuredExit`, `EnableTransactions`, `ProcessType=Adaptive`, correct
+`xpc_transaction_begin`/`end` bracketing and `xpc_activity_set_state(DONE)` —
+everything the epic's design specifies — the agent still stayed resident, and
+never received SIGTERM. Pressured exit makes a process *eligible* for
+termination when the system wants memory; it does not reap an idle job.
+Measured cost of staying: **2.9 MB `phys_footprint`, 0.0% CPU**.
+
+So the epic's "on-demand lifecycle, exits when idle" is half true. The
+system-scheduled wakeups are real and are not available to Option 2 at all.
+The exiting is not. The honest comparison is a 2.9 MB resident helper the OS
+schedules versus a resident menu bar app that schedules itself — both
+permanently resident, both one row in Login Items & Extensions.
+
+Coalescing is real but not guaranteed: wakes 1–4 fired within milliseconds
+across the two independent jobs; wake 5 separated by 16 seconds.
+
 ## Cleaning up
 
 ```bash
