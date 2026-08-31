@@ -96,14 +96,62 @@ A `PROCESS_START` + `ACTIVITY_RUN` pair after the reboot timestamp, in
 `mode=checkin`, with the container never launched, is the answer the epic
 needs. Nothing at all is the answer that ends it.
 
-## Results so far (2026-08-30, 5 wake cycles / 23 min)
+## Results — COMPLETE (2026-08-30/31, 29 hours plus a reboot)
 
 | # | Question | Answer |
 |---|---|---|
-| 1 | Does `SMAppService.agent` accept a plist with `LaunchEvents`? | **Yes** — `launchctl print` shows the criteria stored verbatim, channel `watching = 1` |
-| 2 | Does it wake with the container app quit? | **Yes** — 5/5 wakes, container never running, agent had never previously run |
-| 3 | Does it survive a reboot? | **Not yet run** — needs a human |
-| 4 | Does it exit between wakes? | **No** — one pid served all five wakes |
+| 1 | Does `SMAppService.agent` accept a plist with `LaunchEvents`? | **Yes** — criteria stored verbatim, channel `watching = 1` |
+| 2 | Does it wake with the container app quit? | **Yes** — 247 wakes over 29 hours |
+| 3 | Does it survive a reboot with the app never launched? | **Yes** — cold start 5m21s after boot |
+| 4 | Does it exit between wakes? | **Not per-wake** — resident ~19.5h at 2.9 MB, then jetsam idle-exit, then re-spawned |
+
+### Question 3, the decisive run
+
+```
+17:14:45  system boot
+17:16:05  pid=1852 starts  <- REGISTER variant, RunAtLoad, at login. The control.
+17:20:06  pid=2443 ppid=1  <- CHECKIN variant. No RunAtLoad, no KeepAlive, app not running.
+17:20:06  ACTIVITY_RUN pid=2443 wake=1 secs_since_process_start=0
+```
+
+`secs_since_process_start=0` means launchd created that process *to service the
+activity*. The control discriminates cleanly: the register variant's own
+`wake=1` logged `secs_since_process_start=233`, because `RunAtLoad` had already
+put it there at login. Same mechanism, opposite process histories.
+
+Post-reboot wake spacing: 163/188/195/367s against a 300s nominal `Interval` —
+tighter than the pre-reboot run, apparently catching up after boot, then
+settling. Cadence is a target the OS honours loosely.
+
+### Question 4, corrected by a full day of data
+
+A 23-minute window said "never exits". Over 29 hours it does: pid 8014 served
+224 consecutive wakes across 19.5 hours, then
+
+```
+last exit reason = JETSAM_REASON_MEMORY_IDLE_EXIT
+```
+
+and launchd re-spawned it 4½ minutes later on the next activity. So
+`EnablePressuredExit` works — just not per-wake. The real lifecycle is
+**resident for hours at 2.9 MB, reaped when the system wants idle memory back,
+re-spawned on schedule**. The epic's "exits when idle" and my own first reading
+were both wrong.
+
+The kill is **SIGKILL, not SIGTERM** — `launchctl list` showed status `-9` and
+no `PROCESS_EXIT` line was ever written despite a SIGTERM handler being
+installed. A real helper cannot rely on a clean-shutdown hook; every App Group
+cache write must be atomic and safe to interrupt.
+
+### Measurement gotcha
+
+For ~20 minutes after a reboot, `log show --last 30m` returned **zero lines for
+every subsystem**, including a no-predicate sanity check, while `log show
+--start "YYYY-MM-DD HH:MM:SS"` over the same window returned everything. The
+relative-time form fails silently rather than erroring. This nearly produced a
+false negative on the most important measurement here — `launchctl` said the
+job was running with `runs = 1` while the log looked empty. Use `--start` with
+an absolute time, and cross-check `ps -o lstart` and `launchctl print`.
 
 Wake spacing for the `checkin` variant against a 300s `Interval`: first fire at
 152s (an `Interval` with no explicit `Delay` implies a delay of *half* the
