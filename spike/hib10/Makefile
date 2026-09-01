@@ -25,6 +25,9 @@ build:
 		-destination 'platform=macOS' -derivedDataPath $(BUILD) \
 		CODE_SIGNING_ALLOWED=NO | tail -3
 	codesign --force --options runtime --timestamp \
+		--entitlements LocProbe/LocProbe.entitlements \
+		--sign "$(IDENTITY)" "$(PRODUCT)/Contents/Library/LoginItems/Hib10LocProbe.app"
+	codesign --force --options runtime --timestamp \
 		--entitlements Agent/Agent.entitlements \
 		--sign "$(IDENTITY)" "$(PRODUCT)/Contents/MacOS/hib10-agent"
 	codesign --force --options runtime --timestamp \
@@ -32,8 +35,11 @@ build:
 		--sign "$(IDENTITY)" "$(PRODUCT)"
 	@echo "--- agent entitlements (must include app-sandbox) ---"
 	@codesign -d --entitlements :- "$(PRODUCT)/Contents/MacOS/hib10-agent" 2>/dev/null | plutil -p -
+	@echo "--- probe entitlements (must include app-sandbox AND location) ---"
+	@codesign -d --entitlements :- "$(PRODUCT)/Contents/Library/LoginItems/Hib10LocProbe.app" 2>/dev/null | plutil -p -
 	@echo "--- agent signing identifier (must differ from the container's) ---"
 	@codesign -dv "$(PRODUCT)/Contents/MacOS/hib10-agent" 2>&1 | grep '^Identifier'
+	@codesign -dv "$(PRODUCT)/Contents/Library/LoginItems/Hib10LocProbe.app" 2>&1 | grep '^Identifier'
 	@codesign -dv "$(PRODUCT)" 2>&1 | grep '^Identifier'
 	@codesign --verify --deep --strict --verbose=2 "$(PRODUCT)" 2>&1 | tail -2
 

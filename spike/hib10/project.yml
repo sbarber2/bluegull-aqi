@@ -49,6 +49,15 @@ targets:
         codeSignOnCopy: true
         copy:
           destination: executables
+      # Nested .app, because the probe must be a real bundle (see its target
+      # comment). LoginItems is the conventional home for a nested helper app
+      # and codesign seals it as nested code.
+      - target: Hib10LocProbe
+        embed: true
+        codeSignOnCopy: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Library/LoginItems
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: solutions.bluegull.hib10.container
@@ -91,11 +100,46 @@ targets:
         # Mac App Store, and an unsandboxed spike would prove the wrong thing.
         com.apple.security.app-sandbox: true
 
+  # hib.10 question 5. An LSUIElement .app, NOT a `tool` like Hib10Agent --
+  # CoreLocation needs a real Info.plist carrying the usage description, and
+  # this reuses the exact bundle shape the 2026-08-12 spike proved works when
+  # user-launched, so the only variable left is who starts the process.
+  #
+  # THE BUNDLE ID IS SINGLE-USE. Any locationd grant it earns cannot be removed
+  # (tccutil fails -10814, see hib.2). Bump the numeric suffix for a genuine
+  # re-run; there is no other reset.
+  Hib10LocProbe:
+    type: application
+    platform: macOS
+    sources:
+      - path: LocProbe/main.swift
+    settings:
+      base:
+        PRODUCT_NAME: Hib10LocProbe
+        PRODUCT_BUNDLE_IDENTIFIER: solutions.bluegull.hib10.locprobe1
+    info:
+      path: LocProbe/Info.plist
+      properties:
+        LSUIElement: true
+        CFBundleDisplayName: BlueGull AQI Location Probe
+        # What the permission prompt will quote back at the user. Worth
+        # reading as a first-run string, because under hib.6 this IS the
+        # first-run string -- and the name shown beside it is the helper's,
+        # not the app's, which is one of the things being measured.
+        NSLocationWhenInUseUsageDescription: >-
+          BlueGull AQI uses your location to show the air quality for where you are.
+    entitlements:
+      path: LocProbe/LocProbe.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.personal-information.location: true
+
 schemes:
   Hib10Container:
     build:
       targets:
         Hib10Container: all
         Hib10Agent: all
+        Hib10LocProbe: all
     run:
       config: Debug

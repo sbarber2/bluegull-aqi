@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  hib.10 question 5. Starts the location probe HEADLESSLY, via launchd, on a
+  short activity -- never by hand. "Who started the process" is the single
+  variable this experiment changes, so RunAtLoad is absent and the only path
+  to execution is the activity below.
+
+  Interval is 60s (XPC_ACTIVITY_INTERVAL_1_MIN, the shortest public constant)
+  rather than the 300s the other two agents use: an Interval with no explicit
+  Delay implies a delay of half the interval, so this fires ~30s after
+  registration instead of ~150s. Turnaround matters here because a human has
+  to be watching the screen when it happens.
+
+  BundleProgram reaches into a nested .app rather than Contents/MacOS: the
+  probe must be a real bundle with a real Info.plist to carry
+  NSLocationWhenInUseUsageDescription. See LocProbe/main.swift for why that
+  shape is not negotiable.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>solutions.bluegull.hib10.locprobe</string>
+
+	<key>BundleProgram</key>
+	<string>Contents/Library/LoginItems/Hib10LocProbe.app/Contents/MacOS/Hib10LocProbe</string>
+
+	<key>EnablePressuredExit</key>
+	<true/>
+	<key>EnableTransactions</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Adaptive</string>
+
+	<key>LaunchEvents</key>
+	<dict>
+		<key>com.apple.xpc.activity</key>
+		<dict>
+			<key>solutions.bluegull.hib10.locprobe.wake</key>
+			<dict>
+				<key>Interval</key>
+				<integer>60</integer>
+				<key>GracePeriod</key>
+				<integer>30</integer>
+				<key>Repeating</key>
+				<true/>
+				<key>AllowBattery</key>
+				<true/>
+				<key>Priority</key>
+				<string>Utility</string>
+			</dict>
+		</dict>
+	</dict>
+</dict>
+</plist>

@@ -20,6 +20,7 @@ let log = Logger(subsystem: "solutions.bluegull.hib10", category: "container")
 enum Variant: String, CaseIterable, Identifiable {
     case checkin = "solutions.bluegull.hib10.checkin"
     case register = "solutions.bluegull.hib10.register"
+    case locprobe = "solutions.bluegull.hib10.locprobe"
 
     var id: String { rawValue }
     var plistName: String { "\(rawValue).plist" }
@@ -28,6 +29,7 @@ enum Variant: String, CaseIterable, Identifiable {
         switch self {
         case .checkin: "B — activity declared in the plist (LaunchEvents + CHECK_IN)"
         case .register: "A — activity registered in code (hib.5's proposal)"
+        case .locprobe: "Q5 — headless first-run location prompt (ONE SHOT)"
         }
     }
 
@@ -35,6 +37,7 @@ enum Variant: String, CaseIterable, Identifiable {
         switch self {
         case .checkin: "No RunAtLoad, no KeepAlive. If this wakes, the epic's design is real."
         case .register: "RunAtLoad, to give the code somewhere to run once. Watch for a SECOND pid."
+        case .locprobe: "Fires ~30s after registering. WATCH THE SCREEN. Burns the bundle id either way."
         }
     }
 
@@ -50,10 +53,19 @@ enum Variant: String, CaseIterable, Identifiable {
 func runHeadlessActionIfRequested() {
     guard let action = ProcessInfo.processInfo.environment["HIB10_ACTION"] else { return }
 
-    for variant in Variant.allCases {
+    // The probe is excluded from the blanket action on purpose: it is
+    // single-use, so it must never be registered as a side effect of
+    // registering the other two. HIB10_ACTION=register-probe asks for it
+    // explicitly, by name.
+    let targets: [Variant] = action.hasSuffix("-probe")
+        ? [.locprobe]
+        : Variant.allCases.filter { $0 != .locprobe }
+    let verb = action.replacingOccurrences(of: "-probe", with: "")
+
+    for variant in targets {
         let service = variant.service
         do {
-            switch action {
+            switch verb {
             case "register": try service.register()
             case "unregister": try service.unregister()
             case "status": break
@@ -61,12 +73,12 @@ func runHeadlessActionIfRequested() {
                 FileHandle.standardError.write(Data("unknown HIB10_ACTION \(action)\n".utf8))
                 exit(2)
             }
-            print("\(action) \(variant.rawValue): OK -> status=\(describe(service.status))")
-            log.notice("\(action, privacy: .public) \(variant.rawValue, privacy: .public): OK status=\(describe(service.status), privacy: .public)")
+            print("\(verb) \(variant.rawValue): OK -> status=\(describe(service.status))")
+            log.notice("\(verb, privacy: .public) \(variant.rawValue, privacy: .public): OK status=\(describe(service.status), privacy: .public)")
         } catch {
             let ns = error as NSError
-            print("\(action) \(variant.rawValue): FAILED \(ns.domain) \(ns.code) — \(ns.localizedDescription) -> status=\(describe(service.status))")
-            log.error("\(action, privacy: .public) \(variant.rawValue, privacy: .public): FAILED \(ns.domain, privacy: .public) \(ns.code, privacy: .public) \(ns.localizedDescription, privacy: .public)")
+            print("\(verb) \(variant.rawValue): FAILED \(ns.domain) \(ns.code) — \(ns.localizedDescription) -> status=\(describe(service.status))")
+            log.error("\(verb, privacy: .public) \(variant.rawValue, privacy: .public): FAILED \(ns.domain, privacy: .public) \(ns.code, privacy: .public) \(ns.localizedDescription, privacy: .public)")
         }
     }
     exit(0)
