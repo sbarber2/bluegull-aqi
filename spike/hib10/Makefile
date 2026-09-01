@@ -55,14 +55,29 @@ install: build
 	@echo "Installed to $(INSTALLED)"
 	@echo "Now: open '$(INSTALLED)' and use the Register buttons."
 
-# Leaves no trace: unregister via the app first if it is still installed,
-# then remove the bundle. Any leftover Login Items row is stale UI, not a
-# running agent, and clears on the next login.
+# Leaves no trace. Order matters: SMAppService.unregister() must run FROM the
+# installed bundle, because that is what removes the Background Task Management
+# record behind the Login Items row -- deleting the .app first would strand it.
+# `launchctl bootout` afterwards only stops a still-running process; on its own
+# it does not unregister anything.
+#
+# Covers all four agents. The earlier version of this target listed only
+# checkin and register, because machsvc and locprobe were added later -- an
+# uninstall that silently leaves agents behind is worse than no uninstall.
 uninstall:
-	-launchctl bootout gui/$$(id -u)/$(SUBSYSTEM).checkin 2>/dev/null
-	-launchctl bootout gui/$$(id -u)/$(SUBSYSTEM).register 2>/dev/null
+	-@if [ -x "$(INSTALLED)/Contents/MacOS/$(APP_NAME)" ]; then \
+		HIB10_ACTION=unregister "$(INSTALLED)/Contents/MacOS/$(APP_NAME)"; \
+		HIB10_ACTION=unregister-machsvc "$(INSTALLED)/Contents/MacOS/$(APP_NAME)"; \
+		HIB10_ACTION=unregister-probe "$(INSTALLED)/Contents/MacOS/$(APP_NAME)"; \
+	else echo "(bundle already gone -- booting out any strays)"; fi
+	-@for j in checkin register machsvc locprobe; do \
+		launchctl bootout gui/$$(id -u)/$(SUBSYSTEM).$$j 2>/dev/null; done
 	rm -rf "$(INSTALLED)"
-	@echo "Removed. Confirm System Settings > General > Login Items & Extensions has no hib.10 row."
+	@echo "--- remaining hib10 jobs (want: none) ---"
+	@launchctl list | grep -i hib10 || echo "none"
+	@echo "--- remaining hib10 processes (want: none) ---"
+	@pgrep -fl "hib10-agent|Hib10" || echo "none"
+	@echo "Confirm System Settings > General > Login Items & Extensions has no hib.10 row."
 
 # .notice level, so this survives a reboot -- the measurement that matters
 # most here is one that has to be read back after the machine restarts.
