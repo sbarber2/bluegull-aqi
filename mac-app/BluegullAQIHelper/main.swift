@@ -256,9 +256,17 @@ termination.setEventHandler {
 termination.resume()
 signal(SIGTERM, SIG_IGN)
 
+// `appGroup` is reported at startup, not left to be inferred from a missing
+// refresh later. A helper that cannot open the shared suite is indis-
+// tinguishable from a helper that is never woken -- both are silence -- and
+// the difference matters: the first is a signing/entitlement fault (the
+// app-group entitlement stripped at packaging time, which produces a green
+// build and a working-looking process), the second is a launchd scheduling
+// fault. bluegull-aqi-hib.9 reads this line first.
 log.notice("""
 PROCESS_START pid=\(pid, privacy: .public) ppid=\(getppid(), privacy: .public) \
 bundle=\(Bundle.main.bundleIdentifier ?? "(none)", privacy: .public) \
+appGroup=\(job == nil ? "UNAVAILABLE" : "ok", privacy: .public) \
 at=\(stamp(launchedAt), privacy: .public)
 """)
 
