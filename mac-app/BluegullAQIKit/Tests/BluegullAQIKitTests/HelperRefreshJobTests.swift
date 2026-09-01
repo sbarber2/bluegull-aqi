@@ -139,6 +139,43 @@ final class HelperRefreshJobTests: XCTestCase {
         XCTAssertEqual(cache.getCurrentLocation(), cached, "the fresh entry must be left alone")
     }
 
+    /// bluegull-aqi-hib.6's first run must fetch even when the slot looks
+    /// fine. Regression for a real first live run: the user granted
+    /// permission and the helper did nothing at all, because another
+    /// process had filled the slot minutes earlier -- so nothing proved the
+    /// helper's own path worked, and the user got no visible result for the
+    /// permission they had just given.
+    func testForcedRunFetchesEvenWhenTheSlotIsStillFresh() async {
+        respondWithSampleReading()
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        let stale = Self.reading(at: Location(latitude: 1, longitude: 1))
+        cache.putCurrentLocation(stale)
+        XCTAssertEqual(cache.currentLocationFreshness(), .fresh, "precondition")
+
+        let outcome = await makeJob(locationResult: .success(location), cache: cache).run(force: true)
+
+        guard case .refreshed = outcome else {
+            return XCTFail("Expected .refreshed, got \(outcome)")
+        }
+        XCTAssertNotEqual(cache.getCurrentLocation(), stale, "the forced fetch must replace what was there")
+    }
+
+    /// ...and forcing must not become the default by accident: every
+    /// scheduled wake still skips, which is what keeps a sub-TTL wake
+    /// interval from costing extra requests.
+    func testForcingIsOptInAndScheduledWakesStillSkip() async {
+        MockURLProtocol.requestHandler = { _ in
+            XCTFail("An unforced run with a fresh slot must not fetch")
+            throw AirNowError.requestFailed("unreachable")
+        }
+        let cache = AppGroupCache(store: InMemorySharedCacheStore())
+        cache.putCurrentLocation(Self.reading(at: location))
+
+        let outcome = await makeJob(locationResult: .success(location), cache: cache).run()
+
+        XCTAssertEqual(outcome, .skippedStillFresh)
+    }
+
     /// Past the soft TTL is exactly when a replacement is wanted
     /// (bluegull-aqi-dc2.5) -- the skip above must not swallow that.
     func testWakeWithASoftExpiredSlotDoesRefresh() async {

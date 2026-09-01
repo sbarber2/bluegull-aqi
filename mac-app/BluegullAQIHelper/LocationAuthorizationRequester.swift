@@ -22,7 +22,7 @@ import os
 /// refusal is permanent as far as this app is concerned. That asymmetry is
 /// why the app gates this behind its own re-askable explanation rather than
 /// calling it on launch.
-final class LocationAuthorizationRequester: NSObject, CLLocationManagerDelegate {
+final class LocationAuthorizationRequester: NSObject, CLLocationManagerDelegate, @unchecked Sendable {
     /// How long to hold the launchd transaction open waiting for an answer.
     ///
     /// This is in direct tension with pressured exit everywhere else in
@@ -35,7 +35,11 @@ final class LocationAuthorizationRequester: NSObject, CLLocationManagerDelegate 
     /// pin a background process open indefinitely.
     static let decisionTimeout: TimeInterval = 120
 
-    private let manager = CLLocationManager()
+    /// Created on the MAIN queue in `requestAuthorization()`, never before
+    /// -- see that method for why that is load-bearing. Optional only
+    /// because it cannot exist until that hop happens; written once, then
+    /// only read.
+    private var manager: CLLocationManager?
     private let log: Logger
     private let timeout: TimeInterval
 
@@ -53,30 +57,44 @@ final class LocationAuthorizationRequester: NSObject, CLLocationManagerDelegate 
     /// Returns the settled authorization. Never throws and never hangs:
     /// every path out resolves, because the caller has a transaction to end
     /// and an XPC reply to send whatever the user did.
+    ///
+    /// EVERYTHING CORELOCATION TOUCHES HAPPENS ON THE MAIN QUEUE, and that
+    /// is load-bearing rather than tidy. `CLLocationManager` delivers its
+    /// delegate callbacks on the run loop of the thread that CREATED it,
+    /// and this is reached from a `Task` spun off the XPC handler -- a
+    /// dispatch thread with no run loop. MEASURED on the first live run,
+    /// 2026-09-01: Steve approved the prompt and no callback ever arrived,
+    /// so the 120s deadline elapsed and only its fallback read of
+    /// `authorizationStatus` reported the grant. It "worked" 128 seconds
+    /// late, which in the UI is a two-minute spinner in front of a user who
+    /// already answered. `LocationResolver` documents this same hazard on
+    /// its own `stopUpdatingLocation` hop; this file had to learn it again.
+    ///
+    /// `requestWhenInUseAuthorization()` is called UNCONDITIONALLY rather
+    /// than behind a status check. It is a documented no-op once the user
+    /// has answered, and assigning the delegate provokes a callback
+    /// carrying the real status either way -- so an already-decided process
+    /// resolves in milliseconds on that callback. The status check this
+    /// replaced read `authorizationStatus` synchronously right after
+    /// constructing the manager, which is the same unpopulated-
+    /// `.notDetermined` race bluegull-aqi-hib.4 fixed on the resolution
+    /// side: it would have sent an already-authorized helper down the
+    /// asking path to wait out the whole deadline.
     func requestAuthorization() async -> LocationHelperAuthorization {
-        manager.delegate = self
-
-        // Assigning the delegate provokes CoreLocation's first
-        // authorization callback, so this reads a settled value rather than
-        // the momentarily-unpopulated `.notDetermined` that
-        // bluegull-aqi-hib.4 fixed on the resolution side. Waiting for that
-        // callback here would be the more symmetric thing to do, but this
-        // path has a 120s budget anyway -- the check below only exists to
-        // avoid asking when there is nothing to ask.
-        let existing = Self.map(manager.authorizationStatus)
-        if existing != .notDetermined {
-            // Already answered, in either direction. Calling
-            // `requestWhenInUseAuthorization` now would be a silent no-op,
-            // which reads to a caller as "the user never responded."
-            log.notice("AUTH_ALREADY_DECIDED status=\(existing.rawValue, privacy: .public)")
-            return existing
+        await MainActor.run {
+            let manager = CLLocationManager()
+            self.manager = manager
+            // Assignment is itself the trigger for the first callback.
+            manager.delegate = self
+            self.log.notice("AUTH_REQUESTING at=\(stamp(), privacy: .public) -- prompt should appear now")
+            manager.requestWhenInUseAuthorization()
         }
-
-        log.notice("AUTH_REQUESTING at=\(stamp(), privacy: .public) -- prompt should appear now")
-        manager.requestWhenInUseAuthorization()
 
         return await withCheckedContinuation { continuation in
             lock.lock()
+            // The callback can already have landed -- the hop above has
+            // run by now. `settled` records an answer whether or not
+            // anyone is waiting on it yet, which is what makes that safe.
             if let settled {
                 lock.unlock()
                 continuation.resume(returning: settled)
@@ -92,7 +110,8 @@ final class LocationAuthorizationRequester: NSObject, CLLocationManagerDelegate 
                 // `.notDetermined`, and the user can still answer it later.
                 // Calling it a refusal here would make the app show the
                 // permanent, unrecoverable copy for a recoverable state.
-                self.finish(Self.map(self.manager.authorizationStatus))
+                let status = await MainActor.run { self.manager?.authorizationStatus ?? .notDetermined }
+                self.finish(Self.map(status))
             }
             lock.unlock()
         }
@@ -147,6 +166,7 @@ final class LocationAuthorizationRequester: NSObject, CLLocationManagerDelegate 
     /// The helper's current grant without asking for one -- what every
     /// ordinary wake records, so a grant revoked in System Settings shows up
     /// on the next wake instead of never.
+    @MainActor
     static func currentAuthorization() -> LocationHelperAuthorization {
         map(CLLocationManager().authorizationStatus)
     }

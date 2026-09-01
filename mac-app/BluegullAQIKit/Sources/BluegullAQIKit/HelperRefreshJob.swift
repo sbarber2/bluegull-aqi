@@ -93,7 +93,17 @@ public struct HelperRefreshJob: Sendable {
     /// One wake's worth of work. Never throws: every failure is a value,
     /// because the caller has a launchd transaction to end and an activity
     /// to mark done regardless of how this turned out.
-    public func run(now: Date = Date()) async -> Outcome {
+    ///
+    /// `force` skips the still-fresh check, for the one caller that needs
+    /// to: bluegull-aqi-hib.6's first run. MEASURED 2026-09-01 on the first
+    /// live run -- the user granted permission and the helper did nothing
+    /// at all, reporting `.skippedStillFresh`, because another process had
+    /// filled the slot minutes earlier. Correct for a 3am wake and wrong
+    /// here twice over: the user just granted a permission and is owed a
+    /// visible result, and first run is the one moment worth PROVING the
+    /// helper's own resolve-fetch-write path works end to end rather than
+    /// inheriting someone else's data and never exercising it.
+    public func run(now: Date = Date(), force: Bool = false) async -> Outcome {
         // Checked BEFORE resolving GPS, not after: a wake that finds fresh
         // data should cost nothing at all, and a GPS fix is the expensive
         // half of this job in both power and time.
@@ -105,7 +115,7 @@ public struct HelperRefreshJob: Sendable {
         // what stops that extra frequency from turning into extra requests.
         // `.stale` deliberately DOES fetch -- past the soft TTL is exactly
         // when a replacement is wanted (bluegull-aqi-dc2.5).
-        if cache.currentLocationFreshness(now: now) == .fresh {
+        if !force, cache.currentLocationFreshness(now: now) == .fresh {
             return .skippedStillFresh
         }
 

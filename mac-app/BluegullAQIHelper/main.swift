@@ -72,13 +72,13 @@ let statusStore = UserDefaultsCacheStore().map(LocationHelperStatusStore.init(st
 /// so a wake that discovers the revocation is the only way the app ever
 /// learns about it.
 @discardableResult
-func runRefresh(reason: String) async -> String {
+func runRefresh(reason: String, force: Bool = false) async -> String {
     guard let job else {
         log.error("REFRESH_SKIPPED reason=\(reason, privacy: .public) -- App Group suite unavailable")
         return "no-app-group"
     }
     let started = Date()
-    let outcome = await job.run()
+    let outcome = await job.run(force: force)
     log.notice("""
     REFRESH pid=\(pid, privacy: .public) reason=\(reason, privacy: .public) \
     outcome=\(outcome.label, privacy: .public) \
@@ -86,7 +86,7 @@ func runRefresh(reason: String) async -> String {
     at=\(stamp(), privacy: .public)
     """)
     statusStore?.record(
-        authorization: LocationAuthorizationRequester.currentAuthorization(),
+        authorization: await LocationAuthorizationRequester.currentAuthorization(),
         lastOutcome: outcome.label
     )
     return outcome.label
@@ -109,7 +109,10 @@ func requestAuthorizationThenRefresh() async -> (authorization: LocationHelperAu
     // a thing whose entire purpose is showing a number.
     var outcome: String?
     if authorization == .authorized {
-        outcome = await runRefresh(reason: "first-run")
+        // force: the point of this fetch is to prove the helper's own
+        // path works and to show the user something for the permission
+        // they just granted -- see HelperRefreshJob.run(now:force:).
+        outcome = await runRefresh(reason: "first-run", force: true)
     } else {
         statusStore?.record(authorization: authorization, lastOutcome: nil)
     }
@@ -217,7 +220,7 @@ xpc_connection_set_event_handler(machServiceListener) { peer in
             xpc_transaction_begin()
             Task {
                 let outcome = await runRefresh(reason: "on-demand")
-                send(authorization: LocationAuthorizationRequester.currentAuthorization(), outcome: outcome)
+                send(authorization: await LocationAuthorizationRequester.currentAuthorization(), outcome: outcome)
                 xpc_transaction_end()
             }
 

@@ -160,10 +160,18 @@ enum LocationHelperController {
                 // XPC_ERROR_CONNECTION_INVALID is what a blocked or unknown
                 // name produces -- i.e. the agent is not registered, or the
                 // sandbox refused the lookup.
-                if xpc_get_type(event) == XPC_TYPE_ERROR {
-                    log.error("HELPER_UNREACHABLE action=\(action, privacy: .public) -- connection error on \(LocationHelperIdentity.machServiceName, privacy: .public)")
-                    finish(nil)
-                }
+                guard xpc_get_type(event) == XPC_TYPE_ERROR else { return }
+                // `finish` cancels the connection, and cancellation is
+                // delivered here as an XPC error -- so every SUCCESSFUL
+                // poke used to log a scary "unreachable" line right after
+                // its own reply. Confirmed in the first live run's log,
+                // 2026-09-01. Harmless to behaviour (the resume guard
+                // already made the reply win) but corrosive to the log,
+                // which is the only diagnostic bluegull-aqi-hib.7 and
+                // hib.9 have for this process.
+                guard !resumed.withLock({ $0 }) else { return }
+                log.error("HELPER_UNREACHABLE action=\(action, privacy: .public) -- connection error on \(LocationHelperIdentity.machServiceName, privacy: .public)")
+                finish(nil)
             }
             xpc_connection_resume(connection)
 
