@@ -76,6 +76,13 @@ targets:
       path: Container/Container.entitlements
       properties:
         com.apple.security.app-sandbox: true
+        # hib.11: a sandboxed process may look up a global mach name that
+        # begins with one of its application-group values. Without this the
+        # app-group-prefixed name could not work regardless of anything else,
+        # and the experiment would prove nothing. Uses the REAL group, since
+        # that is what a shipping helper would share with the app anyway.
+        com.apple.security.application-groups:
+          - group.solutions.bluegull.aqi
 
   Hib10Agent:
     type: tool
@@ -99,6 +106,9 @@ targets:
         # Sandboxed on purpose: the shipping helper would have to be, for the
         # Mac App Store, and an unsandboxed spike would prove the wrong thing.
         com.apple.security.app-sandbox: true
+        # hib.11 -- see the container's own note. Both ends need it.
+        com.apple.security.application-groups:
+          - group.solutions.bluegull.aqi
 
   # hib.10 question 5. An LSUIElement .app, NOT a `tool` like Hib10Agent --
   # CoreLocation needs a real Info.plist carrying the usage description, and

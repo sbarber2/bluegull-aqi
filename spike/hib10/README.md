@@ -143,6 +143,35 @@ no `PROCESS_EXIT` line was ever written despite a SIGTERM handler being
 installed. A real helper cannot rely on a clean-shutdown hook; every App Group
 cache write must be atomic and safe to interrupt.
 
+### hib.11 — can the app start the agent on demand?
+
+**Yes, through an app-group-prefixed mach service name.** From a job declaring
+no schedule at all — no `RunAtLoad`, no `KeepAlive`, no `LaunchEvents`:
+
+```
+before:  state = not running, runs = 0
+ping group.solutions.bluegull.aqi.hib10: REPLY from pid 63305
+after:   state = running, runs = 1
+```
+
+Start-to-connection-accepted was ~3ms, so the user perceives no gap between
+agreeing and seeing the system prompt.
+
+The negative control matters as much: `G5DWPBWHQ5.hib10.svc` — the
+team-identifier prefix — returned **Connection invalid** in the same run,
+against the same agent, which *was* listening on that name. So the sandbox is
+genuinely enforcing a rule and an application-group entitlement value is what
+satisfies it. Both ends carry `group.solutions.bluegull.aqi`, the group the
+shipping app and widget already share, so the production helper needs no new
+entitlement and `fw4.8`'s review surface does not grow.
+
+One test-code bug worth knowing, because it produced a convincing false
+negative first time round: `xpc_connection_send_message_with_reply` was handed
+`DispatchQueue.main` while the caller blocked that same thread on a
+`DispatchGroup.wait()`. The reply could not land until the timeout, and it read
+as "no reply" from a mechanism that had worked. Don't wait synchronously on
+main.
+
 ### Measurement gotcha
 
 For ~20 minutes after a reboot, `log show --last 30m` returned **zero lines for

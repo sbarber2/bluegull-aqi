@@ -100,7 +100,70 @@ let handler: xpc_activity_handler_t = { activity in
     }
 }
 
+// hib.11: can a SANDBOXED app demand-start this SANDBOXED agent through a
+// mach service? Two candidate names are declared in the plist and listened
+// for here, because the sandbox rule is the whole question and the two
+// differ in how acceptable they are downstream:
+//
+//   group.solutions.bluegull.aqi.hib10  -- app-group prefix. A sandboxed
+//       process may look up a global name beginning with one of its own
+//       application-group entitlement values. This is the route that is
+//       clean for App Store review, and the one we want to work.
+//   G5DWPBWHQ5.hib10.svc                -- team-identifier prefix. The
+//       fallback if the app-group rule does not apply on macOS.
+//
+// Listening on BOTH in one registration means a single experiment answers
+// which prefixes are reachable, instead of two build-register-test cycles.
+// The agent must create a listener for every name declared in MachServices,
+// or launchd holds the pending request against a job that never checks in.
+let machServiceNames = [
+    "group.solutions.bluegull.aqi.hib10",
+    "G5DWPBWHQ5.hib10.svc",
+]
+
+var listeners: [xpc_connection_t] = []
+
+func startMachServiceListeners() {
+    for name in machServiceNames {
+        let listener = xpc_connection_create_mach_service(
+            name, nil, UInt64(XPC_CONNECTION_MACH_SERVICE_LISTENER)
+        )
+        xpc_connection_set_event_handler(listener) { peer in
+            // A non-connection event here is an error object -- most
+            // usefully XPC_ERROR_CONNECTION_INVALID, which is what arrives
+            // if launchd never handed us the name.
+            guard xpc_get_type(peer) == XPC_TYPE_CONNECTION else {
+                log.error("LISTENER_EVENT name=\(name, privacy: .public) non-connection event (likely error)")
+                return
+            }
+            log.notice("""
+            MACH_CONNECTION_ACCEPTED name=\(name, privacy: .public) \
+            pid=\(pid, privacy: .public) at=\(stamp(), privacy: .public) \
+            -- a sandboxed app reached a sandboxed agent through this name
+            """)
+            xpc_connection_set_event_handler(peer) { message in
+                guard xpc_get_type(message) == XPC_TYPE_DICTIONARY else { return }
+                log.notice("MACH_MESSAGE name=\(name, privacy: .public) received at=\(stamp(), privacy: .public)")
+                if let reply = xpc_dictionary_create_reply(message) {
+                    xpc_dictionary_set_string(reply, "served_by", name)
+                    xpc_dictionary_set_int64(reply, "pid", Int64(pid))
+                    xpc_connection_send_message(peer, reply)
+                }
+            }
+            xpc_connection_resume(peer)
+        }
+        xpc_connection_resume(listener)
+        listeners.append(listener)
+        log.notice("LISTENING name=\(name, privacy: .public) pid=\(pid, privacy: .public)")
+    }
+}
+
 switch mode {
+case "machsvc":
+    // No activity at all in this mode. If this process runs, launchd started
+    // it because something connected -- which is exactly the claim under test.
+    startMachServiceListeners()
+
 case "register":
     // hib.5's literal proposal: criteria in code. Note RequireNetworkConnectivity,
     // which hib.5 copies from weatherd, is NOT a public XPC activity constant --

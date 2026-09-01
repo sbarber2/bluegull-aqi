@@ -21,6 +21,7 @@ enum Variant: String, CaseIterable, Identifiable {
     case checkin = "solutions.bluegull.hib10.checkin"
     case register = "solutions.bluegull.hib10.register"
     case locprobe = "solutions.bluegull.hib10.locprobe"
+    case machsvc = "solutions.bluegull.hib10.machsvc"
 
     var id: String { rawValue }
     var plistName: String { "\(rawValue).plist" }
@@ -30,6 +31,7 @@ enum Variant: String, CaseIterable, Identifiable {
         case .checkin: "B — activity declared in the plist (LaunchEvents + CHECK_IN)"
         case .register: "A — activity registered in code (hib.5's proposal)"
         case .locprobe: "Q5 — headless first-run location prompt (ONE SHOT)"
+        case .machsvc: "hib.11 — can this app start the agent on demand?"
         }
     }
 
@@ -38,6 +40,7 @@ enum Variant: String, CaseIterable, Identifiable {
         case .checkin: "No RunAtLoad, no KeepAlive. If this wakes, the epic's design is real."
         case .register: "RunAtLoad, to give the code somewhere to run once. Watch for a SECOND pid."
         case .locprobe: "Fires ~30s after registering. WATCH THE SCREEN. Burns the bundle id either way."
+        case .machsvc: "No RunAtLoad, no KeepAlive, no activity. If it runs, a connection started it."
         }
     }
 
@@ -57,15 +60,23 @@ func runHeadlessActionIfRequested() {
     // single-use, so it must never be registered as a side effect of
     // registering the other two. HIB10_ACTION=register-probe asks for it
     // explicitly, by name.
-    let targets: [Variant] = action.hasSuffix("-probe")
-        ? [.locprobe]
-        : Variant.allCases.filter { $0 != .locprobe }
-    let verb = action.replacingOccurrences(of: "-probe", with: "")
+    let targets: [Variant]
+    switch true {
+    case action.hasSuffix("-probe"): targets = [.locprobe]
+    case action.hasSuffix("-machsvc"): targets = [.machsvc]
+    default: targets = Variant.allCases.filter { $0 != .locprobe && $0 != .machsvc }
+    }
+    let verb = action
+        .replacingOccurrences(of: "-probe", with: "")
+        .replacingOccurrences(of: "-machsvc", with: "")
 
     for variant in targets {
         let service = variant.service
         do {
             switch verb {
+            case "ping":
+                pingMachServices()
+                exit(0)
             case "register": try service.register()
             case "unregister": try service.unregister()
             case "status": break
@@ -82,6 +93,58 @@ func runHeadlessActionIfRequested() {
         }
     }
     exit(0)
+}
+
+/// hib.11. Tries each candidate mach service name in turn and reports what
+/// happened. A refusal here is as informative as a success -- if the sandbox
+/// blocks the app-group-prefixed name, hib.6's first-run design has to be
+/// reworked before it is built, which is the point of asking now.
+func pingMachServices() {
+    let names = [
+        "group.solutions.bluegull.aqi.hib10",   // app-group prefix: clean for review
+        "G5DWPBWHQ5.hib10.svc",                 // team-id prefix: the fallback
+    ]
+
+    for name in names {
+        let group = DispatchGroup()
+        group.enter()
+        var outcome = "no reply"
+
+        let conn = xpc_connection_create_mach_service(name, nil, 0)
+        xpc_connection_set_event_handler(conn) { event in
+            // Errors arrive on this handler too. XPC_ERROR_CONNECTION_INVALID
+            // is what a blocked or unknown name produces, and is the result
+            // that would sink the design.
+            if xpc_get_type(event) == XPC_TYPE_ERROR {
+                let desc = xpc_copy_description(event)
+                outcome = "ERROR \(String(cString: desc))"
+                free(desc)
+            }
+        }
+        xpc_connection_resume(conn)
+
+        let msg = xpc_dictionary_create(nil, nil, 0)
+        xpc_dictionary_set_string(msg, "ping", "hib.11")
+        // NOT DispatchQueue.main: this runs from init(), before NSApplication
+        // starts, and the group.wait() below blocks the calling thread -- which
+        // is main. Dispatching the reply to main too would deadlock until the
+        // timeout and read as "no reply" from a mechanism that worked fine.
+        xpc_connection_send_message_with_reply(conn, msg, DispatchQueue.global()) { reply in
+            if xpc_get_type(reply) == XPC_TYPE_DICTIONARY {
+                let served = xpc_dictionary_get_string(reply, "served_by").map { String(cString: $0) } ?? "?"
+                outcome = "REPLY from pid \(xpc_dictionary_get_int64(reply, "pid")) via \(served)"
+            } else {
+                let desc = xpc_copy_description(reply)
+                outcome = "ERROR \(String(cString: desc))"
+                free(desc)
+            }
+            group.leave()
+        }
+
+        _ = group.wait(timeout: .now() + 10)
+        print("ping \(name): \(outcome)")
+        log.notice("PING name=\(name, privacy: .public) outcome=\(outcome, privacy: .public)")
+    }
 }
 
 func describe(_ status: SMAppService.Status) -> String {

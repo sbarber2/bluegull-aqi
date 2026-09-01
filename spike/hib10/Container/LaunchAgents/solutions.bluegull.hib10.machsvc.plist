@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  bluegull-aqi-hib.11. Can a sandboxed app start this sandboxed agent ON
+  DEMAND, at a moment of the app's choosing?
+
+  hib.6's first-run design needs that: the location prompt has to land while
+  the user is still looking at the thing that just asked for it. Registration
+  alone does not start a job (hib.10 measured runs=0 after register()), and
+  waiting for an activity to fire is the uncontrolled timing that design
+  rejects.
+
+  DELIBERATELY NO RunAtLoad, NO KeepAlive, AND NO LaunchEvents -- unlike the
+  other three plists here, this job has no schedule of any kind. If this
+  agent ever runs, the only thing that could have started it is a connection
+  to one of the names below. That is the experiment.
+
+  Two names, because the sandbox lookup rule is the actual question:
+  the app-group prefix is the route that is clean for App Store review, and
+  the team-identifier prefix is the fallback. Declaring both answers which
+  are reachable in one registration.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>solutions.bluegull.hib10.machsvc</string>
+
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/hib10-agent</string>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HIB10_MODE</key>
+		<string>machsvc</string>
+	</dict>
+
+	<key>MachServices</key>
+	<dict>
+		<key>group.solutions.bluegull.aqi.hib10</key>
+		<true/>
+		<key>G5DWPBWHQ5.hib10.svc</key>
+		<true/>
+	</dict>
+
+	<key>EnablePressuredExit</key>
+	<true/>
+	<key>EnableTransactions</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Adaptive</string>
+</dict>
+</plist>
