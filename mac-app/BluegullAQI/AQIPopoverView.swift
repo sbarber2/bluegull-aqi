@@ -49,6 +49,14 @@ struct AQIPopoverView: View {
     // next scheduled refresh, up to an hour away.
     let onLocationChange: () -> Void
 
+    // bluegull-aqi-hib.6: true while the background updater is off, so
+    // Current Location can't refresh. Shown as a working affordance rather
+    // than an error, because nothing is broken -- the user either hasn't
+    // been asked yet or said "Not now", and both are recoverable. This is
+    // the branch the whole re-askable pre-prompt exists to make possible:
+    // declining costs nothing precisely because this offer never goes away.
+    var needsLocationSetup = false
+
     // bluegull-aqi-e70.27: injectable so render tests can substitute a
     // fake-backed resolver instead of `ResolvedPlaceNameCaption`'s own
     // default hitting real CLGeocoder -- same reasoning as every other
@@ -102,6 +110,15 @@ struct AQIPopoverView: View {
             }
             if let reading, resolvedLocationOption == .currentLocation {
                 ResolvedPlaceNameCaption(location: reading.location, resolver: locationResolver)
+            }
+
+            // Only for the current-location case: pinned locations work with
+            // no location grant at all (CLGeocoder needs network, not
+            // location authorization), so showing this while a pin is
+            // selected would be telling the user something is wrong with a
+            // thing that is working fine.
+            if needsLocationSetup, resolvedLocationOption == .currentLocation {
+                locationSetupPrompt
             }
 
             if let reading,
@@ -192,6 +209,26 @@ struct AQIPopoverView: View {
         // plus the attribution paragraph), and only the very top row
         // (location picker, resolved place) ever needs the lighter top.
         .background(AppBrand.backgroundGradient())
+    }
+
+    private var locationSetupPrompt: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("Background updates are off", systemImage: "location.slash")
+                .font(.caption)
+                .foregroundStyle(.orange)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Turn On Background Updates") {
+                // Same explicit activation the Settings button needs -- an
+                // LSUIElement app isn't brought forward just by a window
+                // being created.
+                NSApp.activate(ignoringOtherApps: true)
+                openWindow(id: "location-setup")
+            }
+            .buttonStyle(.plain)
+            .font(.caption.bold())
+            .foregroundStyle(.white)
+            .accessibilityIdentifier("turnOnBackgroundUpdatesButton")
+        }
     }
 
     private func staleWarningBanner(_ message: String) -> some View {

@@ -76,7 +76,6 @@ final class AQIRefreshController {
         return cache.freshness(for: latestReading.location.rounded, now: Date())
     }
 
-    private let locationResolver: LocationResolver
     private let pinnedLocationsStore: PinnedLocationsStore
     private let coordinator: AQIFetchCoordinator
     private let cache: AppGroupCache
@@ -105,13 +104,17 @@ final class AQIRefreshController {
     /// menu bar label showed no AQI value at all until after a first click,
     /// found by Steve in a real run. `false` exists for callers (tests,
     /// previews) that want construction without the side effect.
+    /// No `locationResolver` parameter any more (bluegull-aqi-hib.6): this
+    /// type used to hold one purely to call `currentLocation()`, and under
+    /// Option 1 the app resolves no GPS at all. Removing the dependency
+    /// rather than leaving it unused is the point -- it makes "the app never
+    /// asks CoreLocation for a fix" structurally true instead of true only
+    /// as long as nobody adds a call back.
     init?(
-        locationResolver: LocationResolver = LocationResolver(),
         store: SharedCacheStore? = UserDefaultsCacheStore(),
         startOnInit: Bool = true
     ) {
         guard let store else { return nil }
-        self.locationResolver = locationResolver
         pinnedLocationsStore = PinnedLocationsStore(store: store)
         cache = AppGroupCache(store: store)
         coordinator = AQIFetchCoordinator(cache: cache)
@@ -168,35 +171,18 @@ final class AQIRefreshController {
         let menuBarSelection = currentLocationSelection()
         menuBarLocationMirror.save(persistenceID: menuBarSelection.persistenceID)
 
-        // Resolves live GPS at most once per call, regardless of how many
-        // of the two blocks below need it.
-        var resolvedCurrentLocation: Location?
-        func resolveCurrentLocation() async -> Location? {
-            if let resolvedCurrentLocation { return resolvedCurrentLocation }
-            let resolved = try? await locationResolver.currentLocation()
-            resolvedCurrentLocation = resolved
-            return resolved
-        }
-
         do {
-            let location: Location
+            let reading: AQIReading
             if let pinned = menuBarSelection.pinnedLocation {
-                location = pinned
-            } else if let current = await resolveCurrentLocation() {
-                location = current
+                reading = try await coordinator.fetch(location: pinned, mode: mode)
             } else {
-                throw LocationResolverError.locationUnavailable("current location unavailable")
+                // bluegull-aqi-hib.6: the app no longer resolves GPS or
+                // fetches for the current-location case. It reads what the
+                // helper wrote, and asks the helper to go again if that is
+                // stale. One grant, one fetcher.
+                reading = try await currentLocationReading()
             }
-            let reading = try await coordinator.fetch(location: location, mode: mode)
             latestReading = reading
-            // nil selection means the menu bar itself is showing live GPS
-            // -- mirror that into the dedicated current-location slot
-            // (bluegull-aqi-mtm.20) so a widget configured for "Current
-            // Location" can read it directly instead of guessing via
-            // mostRecentEntry().
-            if menuBarSelection.pinnedLocation == nil {
-                cache.putCurrentLocation(reading)
-            }
             lastFetchedAt = cache.lastSuccessfulFetchDate()
             lastError = nil
             consecutiveFailureCount = 0
@@ -221,34 +207,52 @@ final class AQIRefreshController {
             // success branch above, just reached from the other outcome.
             WidgetCenter.shared.reloadTimelines(ofKind: BluegullWidgetKind.aqi)
         } catch {
-            // LocationResolverError or anything else -- no location to
-            // fetch for. Leave latestReading as whatever was last cached;
-            // don't clear a still-valid reading just because this attempt
-            // couldn't resolve a location.
+            // No location to fetch for -- the helper has no grant, or
+            // couldn't be reached. Leave latestReading as whatever was last
+            // cached; don't clear a still-valid reading just because this
+            // attempt found nothing. The popover explains the recoverable
+            // version of this itself (bluegull-aqi-hib.6's
+            // `needsLocationSetup`), so there is nothing to put in
+            // `lastError`, which is for *fetch* failures.
             lastError = nil
         }
 
-        // bluegull-aqi-e10: a desktop widget can be configured to "Current
-        // Location" independent of what the menu bar itself shows. When the
-        // menu bar is pinned to a named location, the block above never
-        // touches the current-location cache slot at all -- nothing else
-        // does either, since the widget extension can't resolve GPS itself
-        // (no location entitlement) and the old mechanism that used to poll
-        // every placed widget's own configuration was removed in
-        // bluegull-aqi-mtm.24 once pinned widgets could self-fetch. Without
-        // this, a widget on Current Location would show Data Unavailable
-        // forever, not just until the next refresh -- a deterministic
-        // outcome of the menu bar's own unrelated selection, not
-        // intermittent flakiness. Independent of the block above: runs
-        // regardless of whether the menu bar's own fetch succeeded, and is
-        // a no-op (already resolved) when the menu bar itself is on Current
-        // Location, since that case is already covered above.
-        if menuBarSelection.pinnedLocation != nil,
-           let current = await resolveCurrentLocation(),
-           let reading = try? await coordinator.fetch(location: current, mode: mode) {
-            cache.putCurrentLocation(reading)
-            WidgetCenter.shared.reloadTimelines(ofKind: BluegullWidgetKind.aqi)
+        // bluegull-aqi-e10's "keep the Current Location slot warm while the
+        // menu bar is pinned elsewhere" block USED to live here, and is gone
+        // under bluegull-aqi-hib.6. It existed because nothing else could
+        // fill that slot: the widget extension can't resolve GPS, and this
+        // controller only touched the slot when the menu bar itself happened
+        // to be on Current Location. The helper now owns the slot outright
+        // and refreshes it on its own schedule regardless of what the menu
+        // bar shows, which is the same guarantee by a better route -- and
+        // keeping the old block would mean the app fetching for the
+        // current-location case, which is exactly what hib.6 forbids.
+    }
+
+    /// The current-location reading, read rather than resolved
+    /// (bluegull-aqi-hib.6).
+    ///
+    /// The helper agent is the only process that resolves GPS, so the app's
+    /// role here is to read the slot the helper writes and, if what it finds
+    /// is not current, ask the helper to go again. Poking is cheap on both
+    /// sides: launchd starts the helper on the connection, and the helper's
+    /// own job returns `.skippedStillFresh` without resolving GPS or
+    /// fetching if the slot turns out to be fine after all.
+    ///
+    /// Throws when there is still nothing afterwards -- no grant yet, the
+    /// agent switched off in System Settings, or the helper simply
+    /// unreachable. All three are states the popover offers to fix rather
+    /// than fetch failures, which is why this throws a location error rather
+    /// than an `AQIFetchError`.
+    private func currentLocationReading() async throws -> AQIReading {
+        if cache.currentLocationFreshness() == .fresh, let fresh = cache.getCurrentLocation() {
+            return fresh
         }
+        _ = await LocationHelperController.refreshNow()
+        guard let reading = cache.getCurrentLocation() else {
+            throw LocationResolverError.locationUnavailable("no current-location reading available")
+        }
+        return reading
     }
 
     /// On-demand fetch for a single location, for a consumer that notices
@@ -258,19 +262,20 @@ final class AQIRefreshController {
     /// extension itself. A no-op if `location` (or live GPS, for nil)
     /// already has a valid cached entry.
     func fetchIfNeeded(for location: Location?) async {
-        let resolvedLocation: Location?
-        if let location {
-            resolvedLocation = location
-        } else {
-            resolvedLocation = try? await locationResolver.currentLocation()
+        // nil means "current location", which this process no longer
+        // resolves (bluegull-aqi-hib.6) -- the helper does, and
+        // `currentLocationReading()` is the one path to it. Before hib.6
+        // this branch called `locationResolver.currentLocation()` directly,
+        // which is a second CoreLocation user in the app and so a second
+        // permission prompt waiting to happen.
+        guard let location else {
+            _ = try? await currentLocationReading()
+            return
         }
         // `.rounded` -- AppGroupCache is keyed by rounded coords
         // (bluegull-aqi-10h.11/nmn).
-        guard let resolvedLocation, cache.get(for: resolvedLocation.rounded) == nil else { return }
-        guard let reading = try? await coordinator.fetch(location: resolvedLocation, mode: currentMode()) else { return }
-        if location == nil {
-            cache.putCurrentLocation(reading)
-        }
+        guard cache.get(for: location.rounded) == nil else { return }
+        _ = try? await coordinator.fetch(location: location, mode: currentMode())
     }
 
     private func currentLocationSelection() -> LocationOption {

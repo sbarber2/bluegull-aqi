@@ -57,9 +57,21 @@ func stamp(_ date: Date = Date()) -> String {
 /// helper that is never woken at all.
 let job = HelperRefreshJob()
 
+/// Where the app finds out what happened here (bluegull-aqi-hib.6). It has
+/// no other way: a location grant belongs to a bundle identifier and no API
+/// lets one process read another bundle's TCC state, and under hib.6's
+/// Option 1 the app holds no grant of its own to consult either.
+let statusStore = UserDefaultsCacheStore().map(LocationHelperStatusStore.init(store:))
+
 /// Runs one refresh and reports what happened. `reason` distinguishes the
-/// two ways in (scheduled activity vs the app poking us) in the log, which
-/// is the only way to tell them apart after the fact.
+/// ways in (scheduled activity vs the app poking us) in the log, which is
+/// the only way to tell them apart after the fact.
+///
+/// Records the helper's authorization on EVERY run, not just the first:
+/// there is no notification when a user revokes a grant in System Settings,
+/// so a wake that discovers the revocation is the only way the app ever
+/// learns about it.
+@discardableResult
 func runRefresh(reason: String) async -> String {
     guard let job else {
         log.error("REFRESH_SKIPPED reason=\(reason, privacy: .public) -- App Group suite unavailable")
@@ -73,7 +85,41 @@ func runRefresh(reason: String) async -> String {
     secs=\(String(format: "%.1f", Date().timeIntervalSince(started)), privacy: .public) \
     at=\(stamp(), privacy: .public)
     """)
+    statusStore?.record(
+        authorization: LocationAuthorizationRequester.currentAuthorization(),
+        lastOutcome: outcome.label
+    )
     return outcome.label
+}
+
+/// bluegull-aqi-hib.6's first run. The only path on which this process asks
+/// for a location grant.
+///
+/// The caller has already opened a transaction, and it stays open across the
+/// whole of this -- including the unbounded wait for a human to read a
+/// dialog. That is in direct tension with pressured exit everywhere else in
+/// this process and is deliberate: the hib.10 probe held no transaction and
+/// survived only because the answer arrived in 5.4 seconds.
+func requestAuthorizationThenRefresh() async -> (authorization: LocationHelperAuthorization, outcome: String?) {
+    let requester = LocationAuthorizationRequester(log: log)
+    let authorization = await requester.requestAuthorization()
+
+    // Fetch immediately on a grant rather than leaving the user with an
+    // empty menu bar until the next scheduled wake -- they just said yes to
+    // a thing whose entire purpose is showing a number.
+    var outcome: String?
+    if authorization == .authorized {
+        outcome = await runRefresh(reason: "first-run")
+    } else {
+        statusStore?.record(authorization: authorization, lastOutcome: nil)
+    }
+
+    log.notice("""
+    FIRST_RUN pid=\(pid, privacy: .public) \
+    authorization=\(authorization.rawValue, privacy: .public) \
+    outcome=\(outcome ?? "(none)", privacy: .public) at=\(stamp(), privacy: .public)
+    """)
+    return (authorization, outcome)
 }
 
 // MARK: - Scheduled wakes
@@ -101,7 +147,7 @@ let activityHandler: xpc_activity_handler_t = { activity in
         // before any of this was built.
         xpc_transaction_begin()
         Task {
-            _ = await runRefresh(reason: "activity")
+            await runRefresh(reason: "activity")
             xpc_transaction_end()
             // Marks this occurrence complete so launchd schedules the next
             // one. Deliberately after the work, not before: DONE before the
@@ -151,23 +197,42 @@ xpc_connection_set_event_handler(machServiceListener) { peer in
         guard xpc_get_type(message) == XPC_TYPE_DICTIONARY else { return }
         let action = xpc_dictionary_get_string(message, LocationHelperIdentity.xpcActionKey)
             .map { String(cString: $0) } ?? ""
-        guard action == LocationHelperIdentity.xpcRefreshAction else {
-            log.error("UNKNOWN_ACTION action=\(action, privacy: .public)")
-            return
-        }
         let reply = xpc_dictionary_create_reply(message)
-        // Same bracketing as the activity path, and needed for the same
-        // reason: without it launchd may consider this process idle while a
-        // refresh the app is waiting on is still in flight.
-        xpc_transaction_begin()
-        Task {
-            let outcome = await runRefresh(reason: "on-demand")
-            if let reply {
+
+        func send(authorization: LocationHelperAuthorization, outcome: String?) {
+            guard let reply else { return }
+            xpc_dictionary_set_string(reply, LocationHelperIdentity.xpcAuthorizationKey, authorization.rawValue)
+            if let outcome {
                 xpc_dictionary_set_string(reply, LocationHelperIdentity.xpcOutcomeKey, outcome)
-                xpc_dictionary_set_int64(reply, LocationHelperIdentity.xpcPidKey, Int64(pid))
-                xpc_connection_send_message(peer, reply)
             }
-            xpc_transaction_end()
+            xpc_dictionary_set_int64(reply, LocationHelperIdentity.xpcPidKey, Int64(pid))
+            xpc_connection_send_message(peer, reply)
+        }
+
+        switch action {
+        case LocationHelperIdentity.xpcRefreshAction:
+            // Same bracketing as the activity path, and needed for the same
+            // reason: without it launchd may consider this process idle
+            // while a refresh the app is waiting on is still in flight.
+            xpc_transaction_begin()
+            Task {
+                let outcome = await runRefresh(reason: "on-demand")
+                send(authorization: LocationAuthorizationRequester.currentAuthorization(), outcome: outcome)
+                xpc_transaction_end()
+            }
+
+        case LocationHelperIdentity.xpcRequestAuthorizationAction:
+            // The transaction spans a human decision here, not just a fetch
+            // -- see requestAuthorizationThenRefresh().
+            xpc_transaction_begin()
+            Task {
+                let result = await requestAuthorizationThenRefresh()
+                send(authorization: result.authorization, outcome: result.outcome)
+                xpc_transaction_end()
+            }
+
+        default:
+            log.error("UNKNOWN_ACTION action=\(action, privacy: .public)")
         }
     }
     xpc_connection_resume(peer)

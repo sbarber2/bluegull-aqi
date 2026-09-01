@@ -78,14 +78,27 @@ public enum LocationHelperIdentity {
 
     // MARK: - XPC message keys
 
-    /// The one request the mach service accepts. Kept as a constant pair
-    /// rather than bare literals at both ends for the same drift reason as
-    /// the names above.
+    /// The requests the mach service accepts. Kept as constants rather than
+    /// bare literals at both ends for the same drift reason as the names
+    /// above.
     public static let xpcActionKey = "action"
+    /// Resolve, fetch, write the cache. Never prompts -- if there is no
+    /// grant it reports that and stops.
     public static let xpcRefreshAction = "refresh"
+    /// bluegull-aqi-hib.6's first run, and the ONLY path on which the helper
+    /// calls `requestWhenInUseAuthorization`. Deliberately a separate action
+    /// rather than a flag on `refresh`: the system prompt is one-shot and
+    /// unrecoverable once answered, so the ability to trigger it should be
+    /// something a caller has to name, never something a routine refresh
+    /// could do by accident.
+    public static let xpcRequestAuthorizationAction = "request-authorization"
     /// Reply keys -- `outcome` carries `HelperRefreshJob.Outcome.label`, so
     /// the app learns what actually happened rather than only that the
     /// helper was reachable.
     public static let xpcOutcomeKey = "outcome"
     public static let xpcPidKey = "pid"
+    /// `LocationHelperAuthorization.rawValue` as the helper saw it when it
+    /// finished. Also written to `LocationHelperStatusStore`, which is what
+    /// a caller that wasn't waiting reads instead.
+    public static let xpcAuthorizationKey = "authorization"
 }

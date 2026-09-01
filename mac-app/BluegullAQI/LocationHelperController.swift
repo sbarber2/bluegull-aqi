@@ -92,10 +92,43 @@ enum LocationHelperController {
         }
     }
 
+    /// What the helper reported back.
+    struct Response {
+        /// The helper's own location grant as it saw it -- the app cannot
+        /// read this any other way (see `LocationHelperStatusStore`).
+        let authorization: LocationHelperAuthorization
+        /// `HelperRefreshJob.Outcome.label`, or nil if the helper didn't run
+        /// a refresh (e.g. it was refused authorization).
+        let outcome: String?
+    }
+
     /// Starts the helper now and asks it to refresh, rather than waiting for
-    /// its activity to fire (bluegull-aqi-hib.11). Returns the helper's own
-    /// `HelperRefreshJob.Outcome.label`, or nil if it could not be reached.
+    /// its activity to fire (bluegull-aqi-hib.11). nil if it could not be
+    /// reached at all -- which is a genuinely different state from any
+    /// answer it could give, and the one bluegull-aqi-hib.7 has to explain.
+    static func refreshNow(timeout: TimeInterval = 30) async -> Response? {
+        await send(action: LocationHelperIdentity.xpcRefreshAction, timeout: timeout)
+    }
+
+    /// bluegull-aqi-hib.6's first run: starts the helper and has it ask for
+    /// the location grant, then fetch if it gets one.
     ///
+    /// The long default deadline is the point -- the helper holds a launchd
+    /// transaction across the user reading a system dialog, and this call is
+    /// what the app's "waiting for permission" state is waiting on. Slightly
+    /// longer than the helper's own 120s decision timeout so the helper's
+    /// answer wins the race and the app reports what actually happened
+    /// rather than a timeout of its own.
+    ///
+    /// THIS IS THE ONE CALL THAT CAN CONSUME THE SYSTEM PROMPT. It is
+    /// one-shot and unrecoverable: CoreLocation refuses to re-prompt once
+    /// answered and the locationd record cannot be cleared. Only the
+    /// first-run flow should reach it, and only after the user has said yes
+    /// to our own re-askable explanation.
+    static func requestAuthorization(timeout: TimeInterval = 135) async -> Response? {
+        await send(action: LocationHelperIdentity.xpcRequestAuthorizationAction, timeout: timeout)
+    }
+
     /// Reaching a sandboxed agent from a sandboxed app at all depends on the
     /// service name being prefixed with a shared App Group identifier --
     /// `LocationHelperIdentity.machServiceName` -- which is the route that
@@ -103,7 +136,7 @@ enum LocationHelperController {
     /// surface. A `com.apple.security.temporary-exception.mach-lookup.
     /// global-name` would be the alternative and is a poor thing to carry
     /// into review.
-    static func refreshNow(timeout: TimeInterval = 30) async -> String? {
+    private static func send(action: String, timeout: TimeInterval) async -> Response? {
         await withCheckedContinuation { continuation in
             let connection = xpc_connection_create_mach_service(
                 LocationHelperIdentity.machServiceName, nil, 0
@@ -113,14 +146,14 @@ enum LocationHelperController {
             // connection that goes invalid can also surface on the event
             // handler, so the flag is what makes "once" true.
             let resumed = OSAllocatedUnfairLock(initialState: false)
-            func finish(_ label: String?) {
+            func finish(_ response: Response?) {
                 let alreadyResumed = resumed.withLock { done -> Bool in
                     defer { done = true }
                     return done
                 }
                 guard !alreadyResumed else { return }
                 xpc_connection_cancel(connection)
-                continuation.resume(returning: label)
+                continuation.resume(returning: response)
             }
 
             xpc_connection_set_event_handler(connection) { event in
@@ -128,18 +161,14 @@ enum LocationHelperController {
                 // name produces -- i.e. the agent is not registered, or the
                 // sandbox refused the lookup.
                 if xpc_get_type(event) == XPC_TYPE_ERROR {
-                    log.error("HELPER_POKE_FAILED -- connection error on \(LocationHelperIdentity.machServiceName, privacy: .public)")
+                    log.error("HELPER_UNREACHABLE action=\(action, privacy: .public) -- connection error on \(LocationHelperIdentity.machServiceName, privacy: .public)")
                     finish(nil)
                 }
             }
             xpc_connection_resume(connection)
 
             let message = xpc_dictionary_create(nil, nil, 0)
-            xpc_dictionary_set_string(
-                message,
-                LocationHelperIdentity.xpcActionKey,
-                LocationHelperIdentity.xpcRefreshAction
-            )
+            xpc_dictionary_set_string(message, LocationHelperIdentity.xpcActionKey, action)
             // NOT the main queue: a caller awaiting this may well be on it,
             // and dispatching the reply there too deadlocks until the
             // timeout and reads as "the helper never answered" from a
@@ -152,17 +181,29 @@ enum LocationHelperController {
                 }
                 let outcome = xpc_dictionary_get_string(reply, LocationHelperIdentity.xpcOutcomeKey)
                     .map { String(cString: $0) }
+                let authorization = xpc_dictionary_get_string(reply, LocationHelperIdentity.xpcAuthorizationKey)
+                    .map { String(cString: $0) }
+                    .flatMap(LocationHelperAuthorization.init(rawValue:))
+                    // A reply we can't parse an authorization out of is a
+                    // protocol mismatch between app and helper -- almost
+                    // certainly a stale agent that wasn't re-registered
+                    // after an update. Reported as undetermined rather than
+                    // as a refusal, because refusal copy is permanent and
+                    // this state is fixable.
+                    ?? .notDetermined
                 log.notice("""
-                HELPER_POKED outcome=\(outcome ?? "(none)", privacy: .public) \
+                HELPER_REPLIED action=\(action, privacy: .public) \
+                authorization=\(authorization.rawValue, privacy: .public) \
+                outcome=\(outcome ?? "(none)", privacy: .public) \
                 helper_pid=\(xpc_dictionary_get_int64(reply, LocationHelperIdentity.xpcPidKey), privacy: .public)
                 """)
-                finish(outcome)
+                finish(Response(authorization: authorization, outcome: outcome))
             }
 
-            // The helper may be doing a real GPS fix and a network fetch, so
-            // this deadline is generous -- but it must exist, or a helper
-            // that never answers suspends the caller forever, the same
-            // defect as bluegull-aqi-10h.22.
+            // The helper may be doing a real GPS fix and a network fetch --
+            // or waiting on a human -- so this deadline is generous. But it
+            // must exist, or a helper that never answers suspends the caller
+            // forever, the same defect as bluegull-aqi-10h.22.
             DispatchQueue.global().asyncAfter(deadline: .now() + timeout) { finish(nil) }
         }
     }

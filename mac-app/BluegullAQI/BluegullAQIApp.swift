@@ -32,13 +32,22 @@ struct BluegullAQIApp: App {
     // popover with" as nil, so this reuses that instead of a separate flag.
     @State private var refreshController = isRunningTests ? nil : AQIRefreshController()
 
-    // Requesting on launch is a minimal, real trigger point -- `@State`'s
-    // initial value is created exactly once per app launch, so this fires
-    // the request (if needed) once, not on every scene rebuild.
-    // `requestOnInit: !isRunningTests` -- see `isRunningTests`'s own doc
-    // comment; `LocationPermissionRequester` already supports this exact
-    // no-op mode for previews, tests just needed to actually opt into it.
-    @State private var locationPermission = LocationPermissionRequester(requestOnInit: !isRunningTests)
+    // bluegull-aqi-hib.6: drives the first-run flow. This REPLACED
+    // `LocationPermissionRequester(requestOnInit:)`, which used to trigger
+    // the system location dialog straight from this line on every launch.
+    // Under hib.6's Option 1 the app never resolves GPS at all -- the helper
+    // agent is the sole location owner -- so the app must never ask, and
+    // leaving that requester in place was the single easiest way to ship two
+    // permission prompts by accident. Constructing this coordinator has no
+    // side effects; nothing here can reach the system prompt until the user
+    // says yes to our own explanation first.
+    @State private var locationSetup = LocationSetupCoordinator()
+
+    // Opens the first-run window from the menu bar label's own `.task`
+    // below. `openWindow` is available to an `App` the same way it is to a
+    // `View`; the alternative (an AppKit `NSApp.sendAction`) would have to
+    // name the window by title rather than by scene id.
+    @Environment(\.openWindow) private var openWindow
 
     // Set from the incoming widgetURL when the widget's tap target opens
     // the detail window (bluegull-aqi-mtm.14) -- nil until then, which
@@ -106,7 +115,11 @@ struct BluegullAQIApp: App {
                 reading: refreshController?.latestReading,
                 lastError: refreshController?.lastError,
                 lastFetchedAt: refreshController?.lastFetchedAt,
-                onLocationChange: { Task { await refreshController?.refreshNow() } }
+                onLocationChange: { Task { await refreshController?.refreshNow() } },
+                // bluegull-aqi-hib.6: "Not now" must be free AND reversible,
+                // so the offer stays available here for as long as the
+                // helper is off, however many times it has been declined.
+                needsLocationSetup: !Self.isRunningTests && LocationSetupCoordinator.shouldOfferSetupInPopover
             )
         } label: {
             // .task/.onChange live here, not on AQIPopoverView above --
@@ -126,12 +139,29 @@ struct BluegullAQIApp: App {
                 lastError: refreshController?.lastError
             )
                 .task { refreshController?.start() }
-                // Fetch immediately once permission is actually granted,
-                // rather than waiting for the scheduled loop's first
-                // (possibly-too-early) attempt to eventually get retried
-                // up to an hour later.
-                .onChange(of: locationPermission.authorizationStatus) {
-                    Task { await refreshController?.refreshNow() }
+                // bluegull-aqi-hib.6 step 1: the closest moment to install
+                // at which the user is actually looking at BlueGull.
+                //
+                // This label is the right place for it because it is ALWAYS
+                // rendered -- it IS the menu bar item -- unlike the popover
+                // content, which SwiftUI only builds the first time the user
+                // clicks. That distinction already cost this app a real bug
+                // once (the fetch loop used to start from the popover's own
+                // .task and so never ran until a first click), so the same
+                // property is being reused deliberately rather than
+                // rediscovered.
+                //
+                // Guarded on `isRunningTests` for the same reason everything
+                // else here is: this struct's initializers really do run
+                // under `make test-swift`, and a test run must not register
+                // a background agent or open a window.
+                .task {
+                    guard !Self.isRunningTests, locationSetup.shouldOfferSetupOnLaunch else { return }
+                    // LSUIElement apps aren't reliably brought forward just
+                    // by creating a window -- same explicit activation the
+                    // popover's own Settings button already needs.
+                    NSApp.activate(ignoringOtherApps: true)
+                    openWindow(id: "location-setup")
                 }
         }
         .menuBarExtraStyle(.window)
@@ -174,6 +204,21 @@ struct BluegullAQIApp: App {
         // SettingsView's content; deliberately no additional .fixedSize()
         // there too (see that file's own doc comment on the layout-
         // recursion bug that combination caused).
+        // bluegull-aqi-hib.6's first-run explanation. A real Window, not the
+        // popover the design originally drafted: `MenuBarExtra` has no API
+        // to present its window programmatically (checked against the SDK,
+        // not assumed), and a `.window`-style popover dismisses itself when
+        // it loses key status -- which the system location prompt causes --
+        // so the explanation would vanish underneath the dialog it
+        // triggered. Same reasoning that already makes Settings a window
+        // rather than a sheet over the popover.
+        Window("Background Updates", id: "location-setup") {
+            LocationSetupWindowContent(coordinator: locationSetup)
+                .preferredColorScheme(.dark)
+        }
+        .windowResizability(.contentSize)
+        .defaultPosition(.center)
+
         Window("Settings", id: "settings") {
             // bluegull-aqi-a22 originally left this OUT (unlike the
             // detail window's own, bluegull-aqi-e70.52) -- confirmed live

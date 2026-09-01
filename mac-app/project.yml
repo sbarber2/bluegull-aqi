@@ -108,8 +108,11 @@ targets:
         # "BluegullAQI", no space) so the test target's auto-derived TEST_HOST
         # path still matches the actual built binary.
         CFBundleDisplayName: BlueGull AQI
-        NSLocationWhenInUseUsageDescription: >-
-          BlueGull AQI uses your location to show the air quality for where you are.
+        # NO NSLocationWhenInUseUsageDescription here either -- the string
+        # the user reads now lives in the HELPER's Info.plist, because the
+        # helper is the process that asks (bluegull-aqi-hib.6). A usage
+        # description on a bundle that never requests authorization is dead
+        # weight that makes it look like the app still might.
         # Widget tap-to-expand deep link (bluegull-aqi-mtm.14) -- matches
         # WidgetDeepLink.scheme/.host in BluegullAQIKit.
         CFBundleURLTypes:
@@ -129,8 +132,20 @@ targets:
         com.apple.security.app-sandbox: true
         # Outbound requests to AirNow (Direct mode) and the BlueGull backend (Service mode).
         com.apple.security.network.client: true
-        # CoreLocation (current-location mode).
-        com.apple.security.personal-information.location: true
+        # NO com.apple.security.personal-information.location, deliberately
+        # (bluegull-aqi-hib.6, Steve's Option 1 decision). The helper agent
+        # is the sole location owner; the app reads the shared cache the
+        # helper writes, exactly as the widget already does. Removing the
+        # entitlement rather than merely not using it is what makes "exactly
+        # one location prompt across a clean install" structurally true --
+        # with it present, any future call site could quietly re-introduce
+        # the second prompt and nothing would fail.
+        #
+        # CLGeocoder is unaffected and still works: address lookup and
+        # reverse geocoding need network access, not location authorization
+        # (see LocationResolver's own doc comment). Pinned locations
+        # therefore keep working with no location grant present at all.
+        #
         # Shared cache with the widget extension (bluegull-aqi-8ef.5).
         com.apple.security.application-groups:
           - group.solutions.bluegull.aqi
