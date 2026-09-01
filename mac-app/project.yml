@@ -14,11 +14,41 @@ targets:
     platform: macOS
     sources:
       - path: BluegullAQI
+        # Or the plist below lands in Contents/Resources as well, via the
+        # copy phase AND as an ordinary resource -- two copies, one of them
+        # in a place SMAppService will never look.
+        excludes:
+          - "LaunchAgents/**"
+      # bluegull-aqi-hib.3: SMAppService.agent(plistName:) resolves its
+      # plist from the app's own Contents/Library/LaunchAgents and nowhere
+      # else (SMAppService.h) -- this copy phase is load-bearing, not
+      # packaging taste.
+      - path: BluegullAQI/LaunchAgents
+        buildPhase:
+          copyFiles:
+            destination: wrapper
+            subpath: Contents/Library/LaunchAgents
     dependencies:
       - package: BluegullAQIKit
         product: BluegullAQIKit
       - target: BluegullAQIWidget
         embed: true
+      # bluegull-aqi-hib.2. Lands at Contents/Library/LoginItems/
+      # BluegullAQIHelper.app, which is what the LaunchAgent plist's
+      # BundleProgram key names -- change one and you must change the other.
+      # LoginItems is the conventional home for a nested helper app and
+      # codesign seals it as nested code.
+      #
+      # codeSignOnCopy so the helper keeps its OWN code-signing identity: a
+      # separate identity is the entire reason a helper can hold a location
+      # grant the app's own bundle cannot lend it, so getting this wrong
+      # would quietly defeat the point of the whole epic.
+      - target: BluegullAQIHelper
+        embed: true
+        codeSignOnCopy: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Library/LoginItems
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: solutions.bluegull.aqi
@@ -178,6 +208,90 @@ targets:
         keychain-access-groups:
           - $(AppIdentifierPrefix)solutions.bluegull.aqi
 
+  # bluegull-aqi-hib.2/hib.4. The location helper agent: a separate bundle,
+  # therefore a separate TCC identity, therefore able to hold its own
+  # location grant -- which is the one thing a widget extension structurally
+  # cannot do (proven across three spike rounds; Apple's own Weather widget
+  # gets there only via the private com.apple.locationd.effective_bundle).
+  #
+  # An `application`, not a `tool`, even though nothing about it is an app in
+  # the usual sense: CoreLocation needs a real Info.plist carrying
+  # NSLocationWhenInUseUsageDescription, and the spike measured exactly this
+  # shape (an LSUIElement .app, started headlessly by launchd) getting a
+  # prompt, a grant and a fix. LSUIElement keeps it out of the Dock and the
+  # app switcher.
+  BluegullAQIHelper:
+    type: application
+    platform: macOS
+    sources:
+      - path: BluegullAQIHelper
+    dependencies:
+      - package: BluegullAQIKit
+        product: BluegullAQIKit
+    settings:
+      base:
+        # NOT solutions.bluegull.aqi.helper (bluegull-aqi-hib.2): the
+        # 2026-08-12 spike left a real, unremovable locationd grant for that
+        # identifier -- tccutil has no authority over locationd Location
+        # grants and fails -10814 -- so reusing it would silently inherit a
+        # grant and make any first-run test invalid. Keep in sync with
+        # LocationHelperIdentity.bundleIdentifier.
+        PRODUCT_BUNDLE_IDENTIFIER: solutions.bluegull.aqi.locationhelper
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: G5DWPBWHQ5
+        ENABLE_HARDENED_RUNTIME: true
+        # bluegull-aqi-fw4.9: kept in lockstep with the container app's own,
+        # same reasoning as the widget extension's.
+        MARKETING_VERSION: "0.2.1"
+        CURRENT_PROJECT_VERSION: "1"
+    info:
+      path: BluegullAQIHelper/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        # No Dock icon, no windows -- see the target comment above.
+        LSUIElement: true
+        # bluegull-aqi-hib.6 item 2: the location prompt quotes the HELPER's
+        # display name, not the app's. The spike's said "BlueGull AQI
+        # Location Probe", which is not a thing a user has heard of. This has
+        # to read as the app they installed, and it is also the name that
+        # appears in System Settings > Login Items & Extensions.
+        CFBundleDisplayName: BlueGull AQI
+        # Must match the app's own string (see the BluegullAQI target) --
+        # under bluegull-aqi-hib.6 this is the ONLY one the user ever sees,
+        # because the app stops asking for location entirely.
+        NSLocationWhenInUseUsageDescription: >-
+          BlueGull AQI uses your location to show the air quality for where you are.
+    entitlements:
+      path: BluegullAQIHelper/BluegullAQIHelper.entitlements
+      properties:
+        # Spelled out here rather than hand-written at the path above:
+        # xcodegen GENERATES that file from these properties and silently
+        # overwrites whatever was there. A hand-written entitlements file
+        # referenced with only `path:` gets replaced by an empty <dict/> on
+        # the next `generate` -- which happened in spike/hib10 and produced a
+        # signed-but-unsandboxed agent that looked fine until the signature
+        # was inspected.
+        com.apple.security.app-sandbox: true
+        # The whole point of this target.
+        com.apple.security.personal-information.location: true
+        # Direct-mode fetches to AirNow, Service-mode to the BlueGull backend.
+        com.apple.security.network.client: true
+        # Shared cache with the app and the widget -- where this writes the
+        # current-location reading (bluegull-aqi-hib.4). ALSO the prefix that
+        # makes the mach service reachable from the sandboxed app at all
+        # (bluegull-aqi-hib.11): a sandboxed process may look up a global
+        # mach name only if it begins with one of its own app-group values.
+        com.apple.security.application-groups:
+          - group.solutions.bluegull.aqi
+        # Reads the user's AirNow key for Direct-mode fetches. NOTE:
+        # AirNowDirectClient sends that key as a URL query parameter --
+        # never log a request URL from this process (CLAUDE.md secrets rule;
+        # ComplianceTests guards it). Must stay in sync with
+        # KeychainAccessGroup.shared.
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)solutions.bluegull.aqi
+
   BluegullAQITests:
     type: bundle.unit-test
     platform: macOS
@@ -207,6 +321,7 @@ schemes:
       targets:
         BluegullAQI: all
         BluegullAQIWidget: all
+        BluegullAQIHelper: all
         BluegullAQITests: [test]
         BluegullAQIUITests: [test]
     run:

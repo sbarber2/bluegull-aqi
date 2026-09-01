@@ -145,6 +145,122 @@ final class SystemLocationProviderTimeoutTests: XCTestCase {
             XCTFail("Expected .permissionDenied, got \(error)")
         }
     }
+
+    // MARK: - bluegull-aqi-hib.4: the authorization-status race
+
+    /// The bug: `CLLocationManager` populates `authorizationStatus`
+    /// asynchronously, so it reads `.notDetermined` for the first moments
+    /// after construction whatever the real grant is. Reading it
+    /// synchronously told a fully-authorized process it had no permission.
+    /// A long-lived app never notices -- its manager settled minutes ago --
+    /// but a launchd-woken helper constructs its manager and asks in the
+    /// same breath, which is the entire bluegull-aqi-hib design.
+    func testStatusThatIsMerelyUnpopulatedIsWaitedOutRatherThanTreatedAsDenial() async throws {
+        let manager = FakeLocationManager()
+        manager.authorizationStatus = .notDetermined
+        // Assigning the delegate is what makes a real manager report -- so
+        // that is where the fake flips to the truth, as CoreLocation would.
+        manager.onDelegateSet = { [unusedManager] delegate in
+            manager.authorizationStatus = .authorizedAlways
+            delegate?.locationManagerDidChangeAuthorization?(unusedManager)
+        }
+        manager.onRequestLocation = { [unusedManager] delegate in
+            delegate?.locationManager?(
+                unusedManager,
+                didUpdateLocations: [CLLocation(latitude: 37.7749, longitude: -122.4194)]
+            )
+        }
+        let provider = SystemLocationProvider(manager: manager, timeout: 30)
+
+        let location = try await provider.currentLocation()
+
+        XCTAssertEqual(location.latitude, 37.7749, accuracy: 0.0001)
+    }
+
+    /// The same wait must not turn a real denial into a fix -- if the
+    /// settled answer is "no", it stays "no".
+    func testStatusThatSettlesToDeniedStillFails() async {
+        let manager = FakeLocationManager()
+        manager.authorizationStatus = .notDetermined
+        manager.onDelegateSet = { [unusedManager] delegate in
+            manager.authorizationStatus = .denied
+            delegate?.locationManagerDidChangeAuthorization?(unusedManager)
+        }
+        let provider = SystemLocationProvider(manager: manager, timeout: 30)
+
+        do {
+            _ = try await provider.currentLocation()
+            XCTFail("Expected LocationResolverError.permissionDenied")
+        } catch LocationResolverError.permissionDenied {
+            XCTAssertFalse(manager.didRequestLocation)
+        } catch {
+            XCTFail("Expected .permissionDenied, got \(error)")
+        }
+    }
+
+    /// A genuinely undetermined process -- no grant yet, the normal state
+    /// before bluegull-aqi-hib.6's first-run flow -- must fail on the FIRST
+    /// callback, not burn the whole settle deadline. Every wake pays this
+    /// cost otherwise.
+    func testGenuinelyUndeterminedFailsOnTheFirstCallbackNotTheDeadline() async {
+        let manager = FakeLocationManager()
+        manager.authorizationStatus = .notDetermined
+        manager.onDelegateSet = { [unusedManager] delegate in
+            delegate?.locationManagerDidChangeAuthorization?(unusedManager)
+        }
+        let provider = SystemLocationProvider(manager: manager, timeout: 30, authorizationSettleTimeout: 30)
+
+        let start = Date()
+        do {
+            _ = try await provider.currentLocation()
+            XCTFail("Expected LocationResolverError.permissionDenied")
+        } catch LocationResolverError.permissionDenied {
+            XCTAssertLessThan(Date().timeIntervalSince(start), 5, "waited out the deadline instead of trusting the callback")
+        } catch {
+            XCTFail("Expected .permissionDenied, got \(error)")
+        }
+    }
+
+    /// A manager that never calls back at all must not suspend the caller
+    /// forever -- the same silence-not-failure defect as
+    /// bluegull-aqi-10h.22, one layer up.
+    func testNoAuthorizationCallbackAtAllGivesUpOnTheDeadline() async {
+        let manager = FakeLocationManager()  // onDelegateSet nil: never reports
+        manager.authorizationStatus = .notDetermined
+        let provider = SystemLocationProvider(manager: manager, timeout: 30, authorizationSettleTimeout: 0.05)
+
+        do {
+            _ = try await provider.currentLocation()
+            XCTFail("Expected LocationResolverError.permissionDenied")
+        } catch LocationResolverError.permissionDenied {
+            XCTAssertFalse(manager.didRequestLocation)
+        } catch {
+            XCTFail("Expected .permissionDenied, got \(error)")
+        }
+    }
+
+    /// An already-decided status must not pay for the wait at all -- this is
+    /// the path every refresh in the long-running app takes.
+    func testAlreadyDecidedStatusIsNotWaitedOn() async throws {
+        let manager = FakeLocationManager()
+        manager.authorizationStatus = .authorizedAlways
+        manager.onRequestLocation = { [unusedManager] delegate in
+            delegate?.locationManager?(
+                unusedManager,
+                didUpdateLocations: [CLLocation(latitude: 37.7749, longitude: -122.4194)]
+            )
+        }
+        // A settle deadline long enough that waiting on it would hang the
+        // test rather than merely slow it down.
+        let provider = SystemLocationProvider(manager: manager, timeout: 30, authorizationSettleTimeout: 600)
+
+        _ = try await provider.currentLocation()
+
+        // Exactly one: the in-flight request's own delegate. A settle pass
+        // would have installed its watch first, making two -- which is what
+        // the .notDetermined tests above assert instead.
+        XCTAssertEqual(manager.delegateAssignmentCount, 1)
+    }
 }
 
 /// Stands in for `CLLocationManager`. Its default behaviour is the one that
@@ -152,8 +268,21 @@ final class SystemLocationProviderTimeoutTests: XCTestCase {
 /// anything again.
 private final class FakeLocationManager: LocationManaging {
     var authorizationStatus: CLAuthorizationStatus = .authorizedAlways
-    weak var delegate: CLLocationManagerDelegate?
 
+    /// Assignment has a side effect on a real `CLLocationManager` -- it is
+    /// what provokes the first `locationManagerDidChangeAuthorization` --
+    /// so the fake models that rather than pretending it is a plain
+    /// property (bluegull-aqi-hib.4).
+    weak var delegate: CLLocationManagerDelegate? {
+        didSet {
+            delegateAssignmentCount += 1
+            onDelegateSet?(delegate)
+        }
+    }
+
+    private(set) var delegateAssignmentCount = 0
+
+    var onDelegateSet: ((CLLocationManagerDelegate?) -> Void)?
     var onRequestLocation: ((CLLocationManagerDelegate?) -> Void)?
     var onStopUpdatingLocation: (() -> Void)?
 

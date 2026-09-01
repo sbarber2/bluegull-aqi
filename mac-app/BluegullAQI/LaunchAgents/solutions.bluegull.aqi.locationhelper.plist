@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The BlueGull AQI location helper agent (bluegull-aqi-hib.3/hib.5).
+
+  Registered by the container app via SMAppService.agent(plistName:), which
+  resolves this file from the app's own Contents/Library/LaunchAgents -- per
+  SMAppService.h that path is not negotiable, which is why project.yml
+  carries a copy phase for this directory.
+
+  RE-REGISTRATION: SMAppService.h warns that if either this plist or the
+  executable it names changes, the service must be re-registered or it may
+  not launch, and that unregistering first is recommended when the
+  executable changed. That applies to every dev iteration AND every shipped
+  app update -- see LocationHelperController, which does exactly that rather
+  than leaving it to be debugged later as a stale agent.
+
+  EVERY VALUE HERE THAT MATTERS WAS MEASURED, in spike/hib10 on this Mac,
+  not copied from com.apple.weatherd.plist. weatherd was the original model
+  and is a poor one on inspection: its own scheduled activity is
+  Repeating=FALSE, it carries private Duet keys (DuetRelatedApplications,
+  RequiresBuddyComplete) unavailable to third parties, and it does not stay
+  fresh by scheduled activity at all -- it is push-driven. BlueGull has no
+  push channel, so it must poll, which is a different scheduling problem.
+
+  DELIBERATELY ABSENT: RunAtLoad and KeepAlive. That absence is what makes
+  this an on-demand agent rather than a login item that runs forever, which
+  was Steve's explicit requirement for the whole epic. The two ways in are
+  the activity below and the mach service below it; nothing else starts it.
+-->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>solutions.bluegull.aqi.locationhelper</string>
+
+	<!-- Bundle-relative, per SMAppService.h, so the app can be moved after
+	     install without breaking the agent. Reaches into a nested .app
+	     rather than Contents/MacOS because the helper must be a real bundle
+	     with a real Info.plist to carry NSLocationWhenInUseUsageDescription
+	     -- see BluegullAQIHelper/main.swift on why that shape is not
+	     negotiable for a process that has to prompt for location. -->
+	<key>BundleProgram</key>
+	<string>Contents/Library/LoginItems/BluegullAQIHelper.app/Contents/MacOS/BluegullAQIHelper</string>
+
+	<!-- Makes the process eligible for termination when it is idle and the
+	     system wants the memory. It does NOT reap an idle job: measured, one
+	     pid stayed resident ~19.5 hours at 2.9 MB before jetsam idle-exited
+	     it. Set anyway -- being cheap to kill is the honest posture for a
+	     background agent, and it is what lets the OS reclaim us first. -->
+	<key>EnablePressuredExit</key>
+	<true/>
+	<key>EnableTransactions</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Adaptive</string>
+
+	<!-- Lets the app start the helper at a moment of its own choosing
+	     (bluegull-aqi-hib.11) -- registration alone does not start a job
+	     with no RunAtLoad, and waiting for the activity to fire naturally is
+	     the uncontrolled timing hib.6's first-run design exists to avoid.
+
+	     The app-group prefix is load-bearing: a sandboxed process may only
+	     look up a global mach name beginning with one of its own
+	     application-group values. Confirmed working between two sandboxed
+	     processes, against a negative control on a team-id-prefixed name
+	     that the sandbox refused. Keep in sync with
+	     LocationHelperIdentity.machServiceName. -->
+	<key>MachServices</key>
+	<dict>
+		<key>group.solutions.bluegull.aqi.locationhelper</key>
+		<true/>
+	</dict>
+
+	<!-- Criteria declared HERE rather than via xpc_activity_register in the
+	     agent's own code. That is the whole reason this works: launchd knows
+	     the schedule at registration time, so it can start a helper that has
+	     never run and whose container app may never be launched again.
+	     Criteria in code have a bootstrap hole -- code that has never run
+	     cannot register anything. Measured over 247 wakes across 29 hours
+	     and again 5m21s after a cold boot.
+
+	     Interval 1800 with a soft cache TTL of 3600 (AppGroupCache.
+	     defaultSoftTTL) is deliberate and is NOT a 2x increase in fetches.
+	     GracePeriod lets the system defer a wake to a cheap moment, so at
+	     Interval 3600 a deferred wake could leave the current-location slot
+	     soft-stale for the remainder of a whole cycle. Waking twice per TTL
+	     removes that; HelperRefreshJob then returns .skippedStillFresh
+	     without resolving GPS or fetching anything when the slot is still
+	     fresh, so the fetch cadence stays ~hourly, matching AirNow's own
+	     NowCast publish rate. The wake is the cheap part; the fetch is the
+	     part worth rationing.
+
+	     Delay is explicit because an Interval with no Delay implies a delay
+	     of HALF the interval (documented in xpc/activity.h, and measured:
+	     first fire at 152s against a 300s interval). Without it a fresh
+	     install would wait ~15 minutes for its first background refresh.
+	     hib.6's first-run flow pokes the mach service immediately anyway;
+	     this is the backstop for every path that doesn't.
+
+	     RequireNetworkConnectivity is NOT set even though weatherd sets it:
+	     it is not a public constant, absent from xpc/activity.h entirely.
+	     Keep in sync with LocationHelperIdentity.refreshActivityName. -->
+	<key>LaunchEvents</key>
+	<dict>
+		<key>com.apple.xpc.activity</key>
+		<dict>
+			<key>solutions.bluegull.aqi.locationhelper.refresh</key>
+			<dict>
+				<key>Interval</key>
+				<integer>1800</integer>
+				<key>Delay</key>
+				<integer>300</integer>
+				<key>GracePeriod</key>
+				<integer>900</integer>
+				<key>Repeating</key>
+				<true/>
+				<key>AllowBattery</key>
+				<true/>
+				<key>Priority</key>
+				<string>Utility</string>
+			</dict>
+		</dict>
+	</dict>
+</dict>
+</plist>

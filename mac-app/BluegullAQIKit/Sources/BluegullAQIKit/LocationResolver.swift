@@ -133,24 +133,43 @@ public final class SystemLocationProvider: NSObject, LocationProvider, @unchecke
     /// (bluegull-aqi-e70.47) picks it up 60s later.
     public static let defaultTimeout: TimeInterval = 15
 
+    /// Backstop for how long `authorizationStatus` may stay unpopulated
+    /// before this gives up and treats `.notDetermined` at face value
+    /// (bluegull-aqi-hib.4). Short, because the normal case resolves on
+    /// the manager's first delegate callback rather than by waiting this
+    /// out -- see `settledAuthorizationStatus()`. Nothing is retried on
+    /// this deadline; it exists only so a manager that never calls back at
+    /// all can't suspend a caller forever, the same failure mode
+    /// bluegull-aqi-10h.22 fixed for the fix request itself.
+    public static let defaultAuthorizationSettleTimeout: TimeInterval = 3
+
     private let manager: LocationManaging
     private let timeout: TimeInterval
+    private let authorizationSettleTimeout: TimeInterval
     /// Keeps the in-flight request alive: `CLLocationManager.delegate` is
     /// a weak reference, so nothing else retains it for the duration.
     private var activeRequest: LocationRequest?
+    /// Same weak-delegate reason as `activeRequest` above, for the brief
+    /// window where the authorization status is being settled.
+    private var activeAuthorizationWatch: AuthorizationWatch?
 
     override public convenience init() {
         self.init(manager: CLLocationManager())
     }
 
-    init(manager: LocationManaging, timeout: TimeInterval = SystemLocationProvider.defaultTimeout) {
+    init(
+        manager: LocationManaging,
+        timeout: TimeInterval = SystemLocationProvider.defaultTimeout,
+        authorizationSettleTimeout: TimeInterval = SystemLocationProvider.defaultAuthorizationSettleTimeout
+    ) {
         self.manager = manager
         self.timeout = timeout
+        self.authorizationSettleTimeout = authorizationSettleTimeout
         super.init()
     }
 
     public func currentLocation() async throws -> Location {
-        switch manager.authorizationStatus {
+        switch await settledAuthorizationStatus() {
         case .denied, .restricted, .notDetermined:
             throw LocationResolverError.permissionDenied
         default:
@@ -169,6 +188,134 @@ public final class SystemLocationProvider: NSObject, LocationProvider, @unchecke
             request.start(continuation)
             manager.requestLocation()
         }
+    }
+
+    /// `authorizationStatus` read only once the manager has actually
+    /// answered (bluegull-aqi-hib.4).
+    ///
+    /// `CLLocationManager` populates that property asynchronously: it is
+    /// `.notDetermined` for the first moments after construction whatever
+    /// the real grant is, and only becomes accurate once the manager has
+    /// round-tripped with locationd. The previous version read it
+    /// synchronously microseconds after `init` and threw
+    /// `.permissionDenied` on `.notDetermined`, so a fully-authorized
+    /// process could be told it had no permission. A long-lived app never
+    /// notices -- its manager settled minutes ago and every later refresh
+    /// reads a real value -- but a short-lived helper woken by launchd
+    /// constructs its manager and asks in the same breath, which is
+    /// exactly the case bluegull-aqi-hib is built around.
+    ///
+    /// Waits for the first `locationManagerDidChangeAuthorization` rather
+    /// than polling or sleeping a fixed interval: the manager calls that
+    /// delegate method once as soon as it has a real answer (including
+    /// immediately on delegate assignment), so the first callback IS the
+    /// settled value. Taking the first one also means a genuinely
+    /// undetermined process fails fast instead of burning the whole
+    /// deadline -- which matters, because "no grant yet" is the normal
+    /// state for the helper before bluegull-aqi-hib.6's first-run flow has
+    /// run.
+    ///
+    /// Deliberately still does NOT request authorization -- see this
+    /// file's `LocationResolver` doc comment. Settling a status and asking
+    /// for one are different acts, and only the first belongs here.
+    private func settledAuthorizationStatus() async -> CLAuthorizationStatus {
+        let reported = manager.authorizationStatus
+        // Anything decided is already trustworthy: the property is never
+        // spuriously `.denied`/`.authorized*`, only spuriously
+        // `.notDetermined`.
+        guard reported == .notDetermined else { return reported }
+
+        let watch = AuthorizationWatch(manager: manager, timeout: authorizationSettleTimeout)
+        activeAuthorizationWatch = watch
+        // Assignment is itself the trigger for the first callback.
+        manager.delegate = watch
+        let settled = await watch.settledStatus()
+        activeAuthorizationWatch = nil
+        return settled
+    }
+}
+
+/// Waits for a `CLLocationManager`'s first authorization callback -- see
+/// `SystemLocationProvider.settledAuthorizationStatus()` for why that is
+/// the right signal to wait on. Resumes exactly once, from either the
+/// callback or the deadline, under the same lock discipline as
+/// `LocationRequest` below and for the same reason.
+private final class AuthorizationWatch: NSObject, CLLocationManagerDelegate, @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<CLAuthorizationStatus, Never>?
+    private var timeoutTask: Task<Void, Never>?
+    /// Non-nil once an answer exists, which doubles as the "already
+    /// finished" flag -- one piece of state rather than a separate boolean
+    /// that could disagree with it.
+    private var settled: CLAuthorizationStatus?
+
+    /// Read on both exits, rather than taking the `CLLocationManager` the
+    /// delegate callback hands back: that argument is always a real
+    /// `CLLocationManager`, so trusting it would read the machine's actual
+    /// authorization state and silently bypass the injected
+    /// `LocationManaging` every test drives -- the same reason
+    /// `LocationRequest` below holds its own reference.
+    private let manager: LocationManaging
+    private let timeout: TimeInterval
+
+    init(manager: LocationManaging, timeout: TimeInterval) {
+        self.manager = manager
+        self.timeout = timeout
+        super.init()
+    }
+
+    /// Resolves on the manager's first authorization callback, or on the
+    /// deadline -- which reports whatever the status has become by then,
+    /// so a manager that never calls back still yields the best available
+    /// answer rather than a guess.
+    ///
+    /// Handles a callback that has ALREADY arrived: the delegate is
+    /// assigned before this is awaited, and while a real
+    /// `CLLocationManager` delivers on the main queue rather than
+    /// synchronously inside the setter, relying on that ordering would make
+    /// correctness depend on a scheduling detail nothing guarantees. A
+    /// status recorded early is returned immediately instead of being lost
+    /// and waited out.
+    func settledStatus() async -> CLAuthorizationStatus {
+        await withCheckedContinuation { continuation in
+            lock.lock()
+            if let settled {
+                lock.unlock()
+                continuation.resume(returning: settled)
+                return
+            }
+            self.continuation = continuation
+            timeoutTask = Task { [weak self, timeout] in
+                try? await Task.sleep(nanoseconds: UInt64(max(0, timeout) * 1_000_000_000))
+                guard !Task.isCancelled, let self else { return }
+                self.finish(with: self.manager.authorizationStatus)
+            }
+            lock.unlock()
+        }
+    }
+
+    /// The single exit, whichever of the callback and the deadline arrives
+    /// first -- and it records the answer whether or not anyone is waiting
+    /// on it yet, which is what makes an early callback safe.
+    private func finish(with status: CLAuthorizationStatus) {
+        lock.lock()
+        guard settled == nil else {
+            lock.unlock()
+            return
+        }
+        settled = status
+        let continuation = self.continuation
+        self.continuation = nil
+        let task = timeoutTask
+        timeoutTask = nil
+        lock.unlock()
+
+        task?.cancel()
+        continuation?.resume(returning: status)
+    }
+
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        finish(with: self.manager.authorizationStatus)
     }
 }
 
