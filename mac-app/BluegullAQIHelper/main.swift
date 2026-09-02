@@ -86,7 +86,7 @@ func runRefresh(reason: String, force: Bool = false) async -> String {
     at=\(stamp(), privacy: .public)
     """)
     statusStore?.record(
-        authorization: await LocationAuthorizationRequester.currentAuthorization(),
+        authorization: await LocationAuthorizationRequester.settledAuthorization(log: log),
         lastOutcome: outcome.label
     )
     return outcome.label
@@ -220,7 +220,7 @@ xpc_connection_set_event_handler(machServiceListener) { peer in
             xpc_transaction_begin()
             Task {
                 let outcome = await runRefresh(reason: "on-demand")
-                send(authorization: await LocationAuthorizationRequester.currentAuthorization(), outcome: outcome)
+                send(authorization: await LocationAuthorizationRequester.settledAuthorization(log: log), outcome: outcome)
                 xpc_transaction_end()
             }
 

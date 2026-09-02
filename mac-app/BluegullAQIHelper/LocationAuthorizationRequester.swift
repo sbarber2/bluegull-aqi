@@ -39,6 +39,13 @@ final class LocationAuthorizationRequester: NSObject, CLLocationManagerDelegate,
     /// -- see that method for why that is load-bearing. Optional only
     /// because it cannot exist until that hop happens; written once, then
     /// only read.
+    /// False when this instance is OBSERVING rather than asking. The two
+    /// differ in exactly two places -- whether `requestWhenInUseAuthorization`
+    /// is called, and whether a `.notDetermined` callback counts as the
+    /// answer -- so they share everything else rather than being two
+    /// near-identical classes that can drift apart.
+    private let asking: Bool
+
     private var manager: CLLocationManager?
     private let log: Logger
     private let timeout: TimeInterval
@@ -48,9 +55,19 @@ final class LocationAuthorizationRequester: NSObject, CLLocationManagerDelegate,
     private var settled: LocationHelperAuthorization?
     private var timeoutTask: Task<Void, Never>?
 
-    init(log: Logger, timeout: TimeInterval = LocationAuthorizationRequester.decisionTimeout) {
+    /// How long to wait for the manager to report a status we did not ask
+    /// for. Short, because the answer arrives on the first delegate
+    /// callback; this only bounds a manager that never calls back at all.
+    static let settleTimeout: TimeInterval = 3
+
+    init(
+        log: Logger,
+        timeout: TimeInterval = LocationAuthorizationRequester.decisionTimeout,
+        asking: Bool = true
+    ) {
         self.log = log
         self.timeout = timeout
+        self.asking = asking
         super.init()
     }
 
@@ -81,11 +98,33 @@ final class LocationAuthorizationRequester: NSObject, CLLocationManagerDelegate,
     /// side: it would have sent an already-authorized helper down the
     /// asking path to wait out the whole deadline.
     func requestAuthorization() async -> LocationHelperAuthorization {
+        await resolve()
+    }
+
+    /// The helper's CURRENT grant, without asking for one -- what every
+    /// ordinary wake records, so a grant revoked in System Settings shows
+    /// up on the next wake instead of never.
+    ///
+    /// Waits for the first delegate callback rather than reading
+    /// `authorizationStatus` off a freshly-constructed manager. That read
+    /// is `.notDetermined` for the first moments whatever the real grant
+    /// is -- the same race bluegull-aqi-hib.4 fixed in
+    /// `SystemLocationProvider`. MEASURED 2026-09-01: with the grant
+    /// demonstrably in place, the helper recorded
+    /// `authorization: notDetermined` into the shared state the app reads,
+    /// which would have had hib.7 tell an authorized user they had no
+    /// permission and the app offer to turn on something already on.
+    static func settledAuthorization(log: Logger) async -> LocationHelperAuthorization {
+        await LocationAuthorizationRequester(log: log, timeout: settleTimeout, asking: false).resolve()
+    }
+
+    private func resolve() async -> LocationHelperAuthorization {
         await MainActor.run {
             let manager = CLLocationManager()
             self.manager = manager
             // Assignment is itself the trigger for the first callback.
             manager.delegate = self
+            guard self.asking else { return }
             self.log.notice("AUTH_REQUESTING at=\(stamp(), privacy: .public) -- prompt should appear now")
             manager.requestWhenInUseAuthorization()
         }
@@ -140,11 +179,16 @@ final class LocationAuthorizationRequester: NSObject, CLLocationManagerDelegate,
     func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let authorization = Self.map(manager.authorizationStatus)
         log.notice("AUTH_CHANGED status=\(authorization.rawValue, privacy: .public) at=\(stamp(), privacy: .public)")
-        // `.notDetermined` here is the callback CoreLocation fires on
-        // delegate assignment, before the user has touched anything -- not
-        // an answer. Waiting is correct; resolving on it would report "no
-        // grant" the instant we asked.
-        guard authorization != .notDetermined else { return }
+        // When ASKING, `.notDetermined` here is the callback CoreLocation
+        // fires on delegate assignment, before the user has touched
+        // anything -- not an answer. Waiting is correct; resolving on it
+        // would report "no grant" the instant we asked.
+        //
+        // When OBSERVING, that same callback IS the answer: it is the
+        // first moment `authorizationStatus` is trustworthy, and
+        // `.notDetermined` is a perfectly real state for a helper whose
+        // first run has not happened yet.
+        guard !asking || authorization != .notDetermined else { return }
         finish(authorization)
     }
 
@@ -163,11 +207,5 @@ final class LocationAuthorizationRequester: NSObject, CLLocationManagerDelegate,
         }
     }
 
-    /// The helper's current grant without asking for one -- what every
-    /// ordinary wake records, so a grant revoked in System Settings shows up
-    /// on the next wake instead of never.
-    @MainActor
-    static func currentAuthorization() -> LocationHelperAuthorization {
-        map(CLLocationManager().authorizationStatus)
-    }
+
 }
