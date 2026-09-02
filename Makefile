@@ -9,6 +9,26 @@
 
 MAC_APP_DIR := mac-app
 SERVICE_DIR := service
+# bluegull-aqi-der: the test targets build with CODE_SIGNING_ALLOWED=NO, and
+# until this existed they wrote into the SAME default DerivedData directory
+# that app-build/app-run/app-launch use -- so running the tests silently
+# replaced the signed, entitled app with an unsigned one, and app-launch
+# (which doesn't rebuild) then opened that.
+#
+# The mild symptom is a macOS app-data-isolation prompt: an unsigned binary
+# has no bundle identity, so TCC sees an unknown app reaching into the real
+# app's Group Container and asks the user about it. The severe symptom is
+# what happens if you click through it -- an unsigned build has NO
+# entitlements, so the App Group is unavailable, the helper can't open the
+# shared cache, and every downstream failure (no readings, helper does
+# nothing, widget stale) looks like a bug in the app. Both observed live,
+# 2026-09-01/02, and the second cost real debugging time.
+#
+# Relative, because every recipe using it has already `cd`-ed into
+# $(MAC_APP_DIR). Deliberately NOT under $(PACKAGE_BUILD_DIR), which
+# app-package wipes on every run -- that would make a release build quietly
+# throw away the test cache.
+TEST_DERIVED_DATA := build-tests
 SNAPSHOT_SCRATCH_DIR := /tmp/bluegull-widget-snapshots
 LSREGISTER := /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister
 
@@ -168,8 +188,10 @@ test: test-swift test-service
 # test-snapshots below for why.
 test-swift:
 	cd $(MAC_APP_DIR) && xcodegen generate
-	cd $(MAC_APP_DIR) && xcodebuild build -scheme BluegullAQI -destination 'platform=macOS' CODE_SIGNING_ALLOWED=NO
-	cd $(MAC_APP_DIR) && xcodebuild test -scheme BluegullAQI -destination 'platform=macOS' -only-testing:BluegullAQITests CODE_SIGNING_ALLOWED=NO
+	cd $(MAC_APP_DIR) && xcodebuild build -scheme BluegullAQI -destination 'platform=macOS' \
+		-derivedDataPath $(TEST_DERIVED_DATA) CODE_SIGNING_ALLOWED=NO
+	cd $(MAC_APP_DIR) && xcodebuild test -scheme BluegullAQI -destination 'platform=macOS' \
+		-derivedDataPath $(TEST_DERIVED_DATA) -only-testing:BluegullAQITests CODE_SIGNING_ALLOWED=NO
 	cd $(MAC_APP_DIR)/BluegullAQIKit && swift test --skip BluegullAQIWidgetSnapshotTests
 
 # Pixel-level golden-image comparison for the widget's per-family layouts
@@ -198,7 +220,8 @@ test-snapshots:
 # that permission -- run this deliberately, from a real interactive session.
 test-ui:
 	cd $(MAC_APP_DIR) && xcodegen generate
-	cd $(MAC_APP_DIR) && xcodebuild test -scheme BluegullAQI -destination 'platform=macOS' -only-testing:BluegullAQIUITests CODE_SIGNING_ALLOWED=NO
+	cd $(MAC_APP_DIR) && xcodebuild test -scheme BluegullAQI -destination 'platform=macOS' \
+		-derivedDataPath $(TEST_DERIVED_DATA) -only-testing:BluegullAQIUITests CODE_SIGNING_ALLOWED=NO
 
 # The service-side pytest suite -- delegates to service/Makefile, which
 # owns the DynamoDB Local fixture lifecycle (downloads its own jar on
@@ -266,11 +289,32 @@ app-run: app-build
 # xcodebuild at all -- for when you know nothing's changed since the last
 # app-build/app-run and just want to relaunch fast. Fails with a clear
 # Xcode error if nothing's been built yet (run app-build/app-run first).
+# The signing check is not belt-and-braces, it is the braces: this target
+# deliberately does NOT build (see app-run), so whatever is sitting in
+# DerivedData is what gets launched, however it got there. bluegull-aqi-der
+# is one way that goes wrong; a half-finished build or a hand-run xcodebuild
+# with different flags are others, and all of them fail silently at launch
+# rather than loudly here. Checking TeamIdentifier rather than the specific
+# team id keeps the team from being duplicated out of project.yml, and still
+# catches the only failure that actually occurs -- an unsigned product.
 app-launch:
 	@cd $(MAC_APP_DIR) && \
 	app_path=$$(xcodebuild -scheme BluegullAQI -configuration Debug -showBuildSettings -json 2>/dev/null \
 		| python3 -c "import json,sys; d=json.load(sys.stdin); s=next(e for e in d if e['target']=='BluegullAQI')['buildSettings']; print(s['BUILT_PRODUCTS_DIR'] + '/' + s['FULL_PRODUCT_NAME'])") && \
-	echo "Launching $$app_path" && \
+	if [ ! -d "$$app_path" ]; then \
+		echo "Nothing built at $$app_path -- run 'make app-build' (or 'make app-run')."; \
+		exit 1; \
+	fi; \
+	team=$$(codesign -dv "$$app_path" 2>&1 | sed -n 's/^TeamIdentifier=//p'); \
+	if [ -z "$$team" ] || [ "$$team" = "not set" ]; then \
+		echo "REFUSING TO LAUNCH: $$app_path is not signed (TeamIdentifier=$${team:-none})."; \
+		echo "  An unsigned build has no entitlements: no App Group, so the helper"; \
+		echo "  can't reach the shared cache and everything looks broken for the"; \
+		echo "  wrong reason. macOS may also prompt about 'data from other apps'."; \
+		echo "  Run 'make app-build', or 'make app-run' which builds first."; \
+		exit 1; \
+	fi; \
+	echo "Launching $$app_path (team $$team)" && \
 	open "$$app_path"
 
 # Just stops the running instance -- nothing else. Separate from app-clean
@@ -355,6 +399,9 @@ app-clean: app-stop widget-reset
 	# target was added to prevent.
 	-tccutil reset Location solutions.bluegull.aqi
 	rm -rf ~/Library/Developer/Xcode/DerivedData/BluegullAQI-*
+	# The test targets' own DerivedData (bluegull-aqi-der) -- a build cache,
+	# not app state, but "clean" should mean clean.
+	rm -rf $(MAC_APP_DIR)/$(TEST_DERIVED_DATA)
 	-security delete-generic-password -s solutions.bluegull.aqi.airnow-api-key -a airnow-api-key >/dev/null 2>&1
 	-defaults delete solutions.bluegull.aqi >/dev/null 2>&1
 	rm -rf ~/Library/Group\ Containers/group.solutions.bluegull.aqi

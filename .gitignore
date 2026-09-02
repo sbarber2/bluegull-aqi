@@ -87,6 +87,10 @@ DerivedData/
 # `make app-package` scratch dir (xcarchive, exported .app, zip, dmg) --
 # rebuilt from scratch every run, never committed.
 mac-app/build/
+# bluegull-aqi-der: the test targets' own DerivedData, kept separate from the
+# default one so a CODE_SIGNING_ALLOWED=NO test build can't overwrite the
+# signed app that app-launch opens. Pure cache; safe to delete any time.
+mac-app/build-tests/
 
 # Repo-root scratch dir for manual Xcode Organizer exports (archive/DMG),
 # same reasoning as mac-app/build/ above -- never committed.
