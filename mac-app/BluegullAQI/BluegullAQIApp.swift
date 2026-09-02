@@ -128,7 +128,8 @@ struct BluegullAQIApp: App {
                 // is off and offers the matching fix. "Not now" must stay
                 // free AND reversible, so this offer never goes away while
                 // the helper is off, however many times it was declined.
-                backgroundRefresh: Self.isRunningTests ? .working : (refreshController?.backgroundRefreshStatus ?? .working)
+                backgroundRefresh: Self.isRunningTests ? .working : (refreshController?.backgroundRefreshStatus ?? .working),
+                upgradedFromPreHelperBuild: refreshController?.upgradedFromPreHelperBuild ?? false
             )
         } label: {
             // .task/.onChange live here, not on AQIPopoverView above --

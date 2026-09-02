@@ -114,11 +114,11 @@ final class BackgroundRefreshStatusTests: XCTestCase {
     func testEveryFailingStateExplainsItselfAndTheWorkingOneStaysSilent() {
         for state in BackgroundRefreshStatus.allCases {
             if state.isWorking {
-                XCTAssertNil(state.explanation, "\(state) must render nothing at all")
+                XCTAssertNil(state.explanation(), "\(state) must render nothing at all")
                 XCTAssertNil(state.widgetCaption)
                 XCTAssertEqual(state.recovery, .none)
             } else {
-                XCTAssertNotNil(state.explanation, "\(state) has no explanation")
+                XCTAssertNotNil(state.explanation(), "\(state) has no explanation")
                 XCTAssertNotNil(state.widgetCaption, "\(state) has no widget caption")
             }
         }

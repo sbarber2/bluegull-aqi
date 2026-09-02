@@ -37,7 +37,11 @@ final class BackgroundRefreshNoticeRenderTests: XCTestCase {
     /// checks for nil.
     @MainActor
     func testTheWorkingStateContributesNoNotice() {
-        XCTAssertNil(BackgroundRefreshStatus.working.explanation)
+        // `.explanation()`, called -- not `.explanation`, which since
+        // hib.8 is a method reference and therefore never nil. That exact
+        // slip is what this assertion caught when the signature changed.
+        XCTAssertNil(BackgroundRefreshStatus.working.explanation())
+        XCTAssertNil(BackgroundRefreshStatus.working.explanation(afterUpgrade: true))
         XCTAssertEqual(BackgroundRefreshStatus.working.recovery.buttonTitle, nil)
     }
 }

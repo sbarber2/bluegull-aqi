@@ -20,6 +20,23 @@ public enum LocationHelperAuthorization: String, Sendable, Equatable, Codable {
     case authorized
 }
 
+/// Whether this install predates the location helper (bluegull-aqi-hib.8).
+///
+/// Exists so an upgrading user's copy can refer to the upgrade they just
+/// performed. Being asked for location permission again, by a product you
+/// already granted location to, is confusing unless something says why --
+/// and under hib.6's Option 1 the old grant genuinely cannot be reused,
+/// because it belongs to a different bundle identifier.
+public struct HelperMigration: Sendable, Equatable, Codable {
+    public let upgradedFromPreHelperBuild: Bool
+    public let recordedAt: Date
+
+    public init(upgradedFromPreHelperBuild: Bool, recordedAt: Date) {
+        self.upgradedFromPreHelperBuild = upgradedFromPreHelperBuild
+        self.recordedAt = recordedAt
+    }
+}
+
 /// The helper's last known state, written by the helper and read by the app.
 public struct LocationHelperState: Sendable, Equatable, Codable {
     public let authorization: LocationHelperAuthorization
@@ -68,6 +85,9 @@ public struct LocationHelperStatusStore: Sendable {
     /// force (bluegull-aqi-hib.3). See `registeredBuild()`.
     private static let registeredBuildKey = "location-helper-registered-build"
 
+    /// Whether this install predates the helper (bluegull-aqi-hib.8).
+    private static let migrationKey = "location-helper-migration"
+
     private let store: SharedCacheStore
 
     public init(store: SharedCacheStore) {
@@ -99,11 +119,45 @@ public struct LocationHelperStatusStore: Sendable {
         return try? JSONDecoder().decode(LocationHelperAvailability.self, from: data)
     }
 
+    /// Convenience for the surfaces that only need the flag.
+    public func upgradedFromPreHelperBuild() -> Bool {
+        migration()?.upgradedFromPreHelperBuild ?? false
+    }
+
     /// The one answer both surfaces render from -- see
     /// `BackgroundRefreshStatus` on why this is derived in shared code
     /// rather than independently on each side.
     public func backgroundRefreshStatus() -> BackgroundRefreshStatus {
         BackgroundRefreshStatus.derive(availability: availability(), helperState: current())
+    }
+
+    /// Whether this install existed BEFORE the helper did
+    /// (bluegull-aqi-hib.8) -- decided once, on the first launch of a
+    /// helper-aware build, and then never revisited.
+    ///
+    /// Recorded rather than inferred on demand because the obvious
+    /// inference is wrong. "Has this install ever fetched successfully?"
+    /// answers the question correctly only at that first launch; a minute
+    /// later a FRESH install that added a pinned location has also fetched
+    /// successfully, and would be told it had upgraded from something it
+    /// never had. Deciding once, at the only moment the signal is
+    /// trustworthy, is what makes it durable.
+    public func migration() -> HelperMigration? {
+        guard let data = store.data(forKey: Self.migrationKey) else { return nil }
+        return try? JSONDecoder().decode(HelperMigration.self, from: data)
+    }
+
+    /// Call once per launch; a no-op after the first. `hadPreviousData` is
+    /// the caller's evidence that this install was in use before the helper
+    /// existed -- in practice `AppGroupCache.lastSuccessfulFetchDate() != nil`.
+    @discardableResult
+    public func recordMigrationIfNeeded(hadPreviousData: Bool, now: Date = Date()) -> HelperMigration {
+        if let existing = migration() { return existing }
+        let migration = HelperMigration(upgradedFromPreHelperBuild: hadPreviousData, recordedAt: now)
+        if let data = try? JSONEncoder().encode(migration) {
+            store.set(data, forKey: Self.migrationKey)
+        }
+        return migration
     }
 
     /// The app build that registered the agent, or nil if nothing is

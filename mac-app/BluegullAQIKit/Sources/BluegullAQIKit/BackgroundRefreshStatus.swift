@@ -166,20 +166,35 @@ public enum BackgroundRefreshStatus: String, Sendable, Equatable, CaseIterable, 
     /// what went wrong internally -- nothing here mentions helpers, agents,
     /// launchd or XPC, which are all true and none of which is the user's
     /// problem.
-    public var explanation: String? {
+    ///
+    /// `afterUpgrade` changes the three states an upgrading user can
+    /// actually land in (bluegull-aqi-hib.8). Being asked for location
+    /// again, by a product you already granted location to, reads as either
+    /// a bug or a land grab unless something explains it -- and the
+    /// explanation is real: the old grant belongs to a different bundle
+    /// identifier and genuinely cannot be reused. Saying "this update
+    /// changed how it works" is the difference between a user who
+    /// understands and one who assumes the app broke itself.
+    public func explanation(afterUpgrade: Bool = false) -> String? {
         switch self {
         case .working:
             nil
         case .neverSetUp:
-            "BlueGull AQI isn't set up to check your location yet, so it can't show air quality for where you are."
+            afterUpgrade
+                ? "This update moves air quality for your current location into a background updater, so it keeps working when BlueGull AQI isn't open. That updater needs your permission once -- it's separate from the location access you gave BlueGull before."
+                : "BlueGull AQI isn't set up to check your location yet, so it can't show air quality for where you are."
         case .turnedOff:
             "Background updates were turned off in System Settings, so air quality for your current location has stopped refreshing."
         case .needsApproval:
             "macOS is waiting for you to approve BlueGull AQI's background updates. Until then, air quality for your current location won't refresh."
         case .permissionNotGranted:
-            "BlueGull AQI needs permission to use your location before it can show air quality for where you are."
+            afterUpgrade
+                ? "BlueGull AQI's new background updater still needs permission to use your location. It asks separately from the access you gave BlueGull before."
+                : "BlueGull AQI needs permission to use your location before it can show air quality for where you are."
         case .permissionRefused:
-            "Location access is turned off for BlueGull AQI. macOS only asks once, so this has to be changed in System Settings."
+            afterUpgrade
+                ? "Location access was declined for BlueGull AQI's background updater, so air quality for your current location has stopped updating. macOS only asks once, so this has to be turned back on in System Settings."
+                : "Location access is turned off for BlueGull AQI. macOS only asks once, so this has to be changed in System Settings."
         case .bundleMissing:
             "Part of BlueGull AQI seems to be missing. Reinstalling should fix it."
         case .unreachable:

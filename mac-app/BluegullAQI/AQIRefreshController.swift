@@ -122,6 +122,16 @@ final class AQIRefreshController {
         scheduler = RefreshScheduler(store: store)
         menuBarLocationMirror = SharedMenuBarLocationStore(store: store)
         helperStatusStore = LocationHelperStatusStore(store: store)
+        // bluegull-aqi-hib.8, and this is the ONLY moment the signal is
+        // trustworthy. On the first launch of a helper-aware build, a
+        // previous successful fetch can only have come from the old,
+        // app-owned location path -- so it means "this install predates the
+        // helper". A minute later the same test is worthless: a fresh
+        // install that added a pinned location has also fetched
+        // successfully. Decided once, here, and never revisited.
+        helperStatusStore.recordMigrationIfNeeded(
+            hadPreviousData: cache.lastSuccessfulFetchDate() != nil
+        )
         latestReading = cache.mostRecentEntry()
         lastFetchedAt = cache.lastSuccessfulFetchDate()
         if startOnInit {
@@ -165,6 +175,13 @@ final class AQIRefreshController {
     /// stored flag would go quietly wrong.
     var backgroundRefreshStatus: BackgroundRefreshStatus {
         helperStatusStore.backgroundRefreshStatus()
+    }
+
+    /// True when this install predates the helper (bluegull-aqi-hib.8), so
+    /// the popover and the setup window can explain a new permission
+    /// request in terms of the upgrade that caused it.
+    var upgradedFromPreHelperBuild: Bool {
+        helperStatusStore.upgradedFromPreHelperBuild()
     }
 
     /// Polls `SMAppService` and writes the answer into the App Group.

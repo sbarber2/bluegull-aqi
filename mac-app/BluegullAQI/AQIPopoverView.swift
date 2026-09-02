@@ -59,6 +59,11 @@ struct AQIPopoverView: View {
     // makes people give up on an app.
     var backgroundRefresh: BackgroundRefreshStatus = .working
 
+    // bluegull-aqi-hib.8: this install predates the helper, so the copy
+    // above should refer to the upgrade that caused a familiar app to ask
+    // for location again.
+    var upgradedFromPreHelperBuild = false
+
     // bluegull-aqi-e70.27: injectable so render tests can substitute a
     // fake-backed resolver instead of `ResolvedPlaceNameCaption`'s own
     // default hitting real CLGeocoder -- same reasoning as every other
@@ -220,7 +225,7 @@ struct AQIPopoverView: View {
     /// inaccurate and useless.
     @ViewBuilder
     private var backgroundRefreshNotice: some View {
-        if let explanation = backgroundRefresh.explanation {
+        if let explanation = backgroundRefresh.explanation(afterUpgrade: upgradedFromPreHelperBuild) {
             VStack(alignment: .leading, spacing: 6) {
                 Label(explanation, systemImage: "location.slash")
                     .font(.caption)

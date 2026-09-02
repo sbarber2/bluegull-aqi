@@ -211,15 +211,19 @@ struct LocationSetupWindowContent: View {
 
     @Environment(\.dismissWindow) private var dismissWindow
 
-    /// An upgrade rather than a fresh install, inferred from whether this
-    /// install has ever completed a fetch. Deliberately NOT read from
-    /// `CLLocationManager.authorizationStatus`: constructing a location
-    /// manager in the app is exactly what bluegull-aqi-hib.6 removes, and
-    /// this only decides which of two sentences to show. The real migration
-    /// of an existing app-side grant is bluegull-aqi-hib.8.
+    /// An upgrade rather than a fresh install (bluegull-aqi-hib.8).
+    ///
+    /// Reads the fact recorded at the first launch of a helper-aware build,
+    /// replacing hib.6's stop-gap, which asked "has this install ever
+    /// fetched?" live. That was right only on the very first launch: any
+    /// FRESH install that had since added a pinned location also answers
+    /// yes, and would have been told it upgraded from something it never
+    /// had. Still deliberately not read from
+    /// `CLLocationManager.authorizationStatus` -- constructing a location
+    /// manager in the app is exactly what hib.6 removed.
     private var isUpgrade: Bool {
         guard let store = UserDefaultsCacheStore() else { return false }
-        return AppGroupCache(store: store).lastSuccessfulFetchDate() != nil
+        return LocationHelperStatusStore(store: store).upgradedFromPreHelperBuild()
     }
 
     var body: some View {
