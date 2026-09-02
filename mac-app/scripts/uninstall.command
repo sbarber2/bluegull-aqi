@@ -23,11 +23,17 @@ set -u
 
 APP_BUNDLE_ID="solutions.bluegull.aqi"
 WIDGET_BUNDLE_ID="solutions.bluegull.aqi.widget"
-# Not a shipped target (see mac-app/project.yml -- only the two above are
-# real) -- an experimental helper-agent container has shown up on at least
-# one dev machine from an early feasibility spike (bluegull-aqi-hib epic,
-# still undecided). Harmless to check for and remove defensively; a no-op
-# on a normal install that never had one.
+# The background updater that keeps "Current Location" fresh while the app
+# isn't running (bluegull-aqi-hib epic). A real shipped target as of the
+# hib work -- it lives inside the app bundle but is its OWN sandboxed
+# bundle id, so it has its own container that removing the app's does not
+# touch.
+HELPER_BUNDLE_ID="solutions.bluegull.aqi.locationhelper"
+# A DIFFERENT, dead identifier from the 2026-08-12 feasibility spike, which
+# has shown up on at least one dev machine. Never shipped; the real helper
+# above deliberately uses a fresh id because the spike's locationd grant
+# could not be removed (tccutil fails -10814). Harmless to clean up, and a
+# no-op on any normal install.
 STRAY_HELPER_BUNDLE_ID="solutions.bluegull.aqi.helper"
 APP_GROUP_ID="group.solutions.bluegull.aqi"
 KEYCHAIN_SERVICE="solutions.bluegull.aqi.airnow-api-key"
@@ -57,6 +63,7 @@ say "This will remove BlueGull AQI and all of its data from this Mac:"
 say "  - The app itself (and the widget extension inside it)"
 say "  - All saved settings, pinned locations, and cached AQI readings"
 say "  - Your saved AirNow API key (Direct mode), if any, from Keychain"
+say "  - The background updater that keeps your current location up to date"
 say ""
 say "This cannot be undone."
 say ""
@@ -90,6 +97,26 @@ fi
 
 if [ -n "$app_path" ]; then
     say "  Found: $app_path"
+
+    heading "Turning off background updates"
+    # MUST run before the app bundle is deleted, a few steps below.
+    # SMAppService resolves the agent relative to the bundle it is called
+    # from, so this only works from inside the app that is about to be
+    # removed -- afterwards there is nothing left to unregister with, and
+    # the row in System Settings > Login Items & Extensions survives
+    # pointing at a bundle that no longer exists. `launchctl bootout` is
+    # not a substitute: it stops a running job and leaves that record
+    # behind (measured during the bluegull-aqi-hib.10 spike, which is
+    # exactly how a thing can look uninstalled and still be registered).
+    helper_exec="$app_path/Contents/MacOS/$PROCESS_NAME"
+    if [ -x "$helper_exec" ]; then
+        BLUEGULL_HELPER_ACTION=unregister "$helper_exec" 2>&1 | sed 's/^/  /' \
+            || say "  Couldn't turn it off automatically (non-fatal) -- check Login Items & Extensions below."
+        removed_anything=1
+    else
+        say "  App executable not found -- skipping."
+    fi
+
     heading "Unregistering from LaunchServices"
     /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister -u "$app_path" 2>/dev/null \
         && say "  Unregistered." \
@@ -114,6 +141,7 @@ heading "Removing app data"
 # it was fixed by hand during development.
 remove_path "$HOME/Library/Containers/$APP_BUNDLE_ID"
 remove_path "$HOME/Library/Containers/$WIDGET_BUNDLE_ID"
+remove_path "$HOME/Library/Containers/$HELPER_BUNDLE_ID"
 remove_path "$HOME/Library/Containers/$STRAY_HELPER_BUNDLE_ID"
 remove_path "$HOME/Library/Group Containers/$APP_GROUP_ID"
 remove_path "$HOME/Library/Saved Application State/$APP_BUNDLE_ID.savedState"
@@ -141,8 +169,15 @@ else
     say "  None found (or already removed)."
 fi
 
-heading "Login item"
-say "  If you had \"Launch BlueGull AQI at login\" turned on in Settings,"
+heading "Login items"
+# The background updater was unregistered above, while the bundle still
+# existed. What remains here is the SEPARATE "Launch BlueGull AQI at login"
+# setting (bluegull-aqi-fvt, SMAppService.mainApp) -- a different
+# registration this script cannot remove the same way, because by now the
+# app it points at is gone.
+say "  Background updates were turned off above."
+say ""
+say "  If you also had \"Launch BlueGull AQI at login\" turned on in Settings,"
 say "  macOS may still list it in System Settings > General > Login Items"
 say "  & Extensions. Opening that pane now so you can remove it if present."
 open "x-apple.systempreferences:com.apple.LoginItems-Settings.extension" 2>/dev/null || true

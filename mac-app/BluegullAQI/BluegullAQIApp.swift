@@ -81,6 +81,14 @@ struct BluegullAQIApp: App {
         // host process races the real single-instance lock and exits
         // immediately whenever a real signed instance is already running.
         guard !Self.isRunningTests else { return }
+        // bluegull-aqi-hib.3: before the single-instance lock below, and
+        // before any scene exists. `uninstall.command` invokes this to
+        // unregister the background updater while the bundle it lives in
+        // still exists -- and it must not be turned away by the lock just
+        // because the user happens to have the app running, which during an
+        // uninstall is likely. Exits the process; a no-op when the
+        // environment variable is absent, which is every ordinary launch.
+        LocationHelperController.runHeadlessActionIfRequested()
         // bluegull-aqi-8iz: BEFORE the Settings Window scene (below) ever
         // gets a chance to create its NSWindow and restore a saved frame
         // into it -- see `SettingsWindowFrameSanitizer`'s own doc comment
@@ -157,7 +165,15 @@ struct BluegullAQIApp: App {
                 // under `make test-swift`, and a test run must not register
                 // a background agent or open a window.
                 .task {
-                    guard !Self.isRunningTests, locationSetup.shouldOfferSetupOnLaunch else { return }
+                    guard !Self.isRunningTests else { return }
+                    // bluegull-aqi-hib.3: an app update changes the
+                    // executable, which per SMAppService.h can leave the
+                    // registration stale and the agent silently never
+                    // waking. Runs before the setup offer below, so an
+                    // install that just needed refreshing isn't mistaken
+                    // for one that was never set up.
+                    LocationHelperController.reregisterIfBundleChanged()
+                    guard locationSetup.shouldOfferSetupOnLaunch else { return }
                     // LSUIElement apps aren't reliably brought forward just
                     // by creating a window -- same explicit activation the
                     // popover's own Settings button already needs.

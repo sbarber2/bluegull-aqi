@@ -6,16 +6,59 @@ import XCTest
 /// derivation is what stands between the user and a silent, permanent
 /// failure of Current Location.
 final class BackgroundRefreshStatusTests: XCTestCase {
+    private let now = Date()
+
     private func status(
         _ availability: LocationHelperAvailability?,
-        _ authorization: LocationHelperAuthorization? = nil
+        _ authorization: LocationHelperAuthorization? = nil,
+        lastWroteSecondsAgo: TimeInterval = 0
     ) -> BackgroundRefreshStatus {
         BackgroundRefreshStatus.derive(
             availability: availability,
             helperState: authorization.map {
-                LocationHelperState(authorization: $0, lastOutcome: nil, recordedAt: Date())
-            }
+                LocationHelperState(
+                    authorization: $0,
+                    lastOutcome: nil,
+                    recordedAt: now.addingTimeInterval(-lastWroteSecondsAgo)
+                )
+            },
+            now: now
         )
+    }
+
+    // MARK: - Enabled, approved, granted -- and still not running
+
+    /// Regression for a failure measured on a real machine 2026-09-02: an
+    /// agent whose Background Task Management record pinned a code
+    /// requirement its rebuilt executable no longer satisfied failed to
+    /// spawn with EX_CONFIG and was retried by launchd every 10 seconds --
+    /// 3,452 times in twelve hours. `SMAppService.status` said `.enabled`
+    /// throughout, and the last recorded authorization was `.authorized`,
+    /// so every other signal here insisted everything was fine. Silence is
+    /// the only thing that gave it away.
+    func testAnAgentThatStoppedWritingIsNotReportedAsWorking() {
+        let justBeyond = BackgroundRefreshStatus.silenceImpliesNotWaking + 60
+
+        XCTAssertEqual(status(.enabled, .authorized, lastWroteSecondsAgo: justBeyond), .notWaking)
+    }
+
+    /// The threshold has to clear the honest worst case -- a 30-minute wake
+    /// interval plus a 15-minute grace period -- and a machine that slept.
+    /// A false alarm on a working install is worse than a beat of silence.
+    func testAnOrdinaryGapBetweenWakesIsNotAnAlarm() {
+        XCTAssertEqual(status(.enabled, .authorized, lastWroteSecondsAgo: 45 * 60), .working)
+        XCTAssertEqual(status(.enabled, .authorized, lastWroteSecondsAgo: 4 * 3600), .working)
+    }
+
+    /// Silence only means "not waking" when everything else says it should
+    /// be. Without a grant it has a better explanation already, and telling
+    /// the user to re-register would be the wrong fix.
+    func testSilenceDoesNotOverrideAMoreSpecificExplanation() {
+        let old = BackgroundRefreshStatus.silenceImpliesNotWaking + 60
+
+        XCTAssertEqual(status(.enabled, .refused, lastWroteSecondsAgo: old), .permissionRefused)
+        XCTAssertEqual(status(.enabled, .notDetermined, lastWroteSecondsAgo: old), .permissionNotGranted)
+        XCTAssertEqual(status(.notRegistered, .authorized, lastWroteSecondsAgo: old), .turnedOff)
     }
 
     // MARK: - The distinction the framework can't make

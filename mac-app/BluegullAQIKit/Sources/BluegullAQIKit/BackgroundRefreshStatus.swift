@@ -70,14 +70,45 @@ public enum BackgroundRefreshStatus: String, Sendable, Equatable, CaseIterable, 
     case bundleMissing
     /// Registered and enabled, but not answering.
     case unreachable
+    /// Registered, approved, holding a grant -- and demonstrably not
+    /// running anyway.
+    ///
+    /// MEASURED 2026-09-02, and the reason this case exists: an agent whose
+    /// Background Task Management record pins a lightweight code
+    /// requirement the current executable no longer satisfies fails to
+    /// spawn with EX_CONFIG, and launchd retries every 10 seconds forever
+    /// -- 3,452 attempts in twelve hours on a real machine. Throughout,
+    /// `SMAppService.status` reports `.enabled`, so every signal this type
+    /// otherwise has says everything is fine.
+    ///
+    /// The only observable difference is that the helper stops writing. So
+    /// that is what this checks -- exactly the corroboration
+    /// bluegull-aqi-hib.7 anticipated ("worth also treating a long gap
+    /// since the last successful helper write as corroborating evidence").
+    case notWaking
 
     /// The single decision point. `helperState` is nil until the helper has
     /// run at least once, which is what distinguishes "never set up" from
     /// "was set up and has since been switched off" -- `SMAppService`
     /// reports `.notRegistered` for both.
+    /// How long the helper may go without writing before its silence is
+    /// treated as evidence it isn't running.
+    ///
+    /// Deliberately far beyond any legitimate gap. The agent wakes every 30
+    /// minutes with a 15-minute grace period, so ~45 minutes is the honest
+    /// worst case; six hours leaves room for a machine that slept, which is
+    /// the one benign way this can look bad. A false alarm on a working
+    /// install is worse than a beat of silence, and this self-corrects on
+    /// the helper's next wake either way. Past six hours the
+    /// current-location entry is also long dead (3h hard TTL), so there is
+    /// nothing to show regardless and saying why is strictly better than
+    /// an unexplained blank.
+    public static let silenceImpliesNotWaking: TimeInterval = 6 * 3600
+
     public static func derive(
         availability: LocationHelperAvailability?,
-        helperState: LocationHelperState?
+        helperState: LocationHelperState?,
+        now: Date = Date()
     ) -> BackgroundRefreshStatus {
         // Nothing observed yet: the app hasn't polled since launch. Treat
         // as not-set-up rather than inventing a failure -- a wrong alarm on
@@ -94,18 +125,22 @@ public enum BackgroundRefreshStatus: String, Sendable, Equatable, CaseIterable, 
         case .unreachable:
             return .unreachable
         case .enabled:
-            switch helperState?.authorization {
+            guard let state = helperState else {
+                // Registered and enabled but has not run yet -- the gap
+                // between the app registering it and its first wake.
+                // Nothing is wrong.
+                return .working
+            }
+            switch state.authorization {
             case .refused:
                 return .permissionRefused
             case .notDetermined:
                 return .permissionNotGranted
             case .authorized:
-                return .working
-            case nil:
-                // Registered and enabled but has not run yet -- the gap
-                // between the app registering it and its first wake.
-                // Nothing is wrong.
-                return .working
+                // Enabled and granted, but has it actually run lately?
+                return now.timeIntervalSince(state.recordedAt) > silenceImpliesNotWaking
+                    ? .notWaking
+                    : .working
             }
         }
     }
@@ -122,6 +157,7 @@ public enum BackgroundRefreshStatus: String, Sendable, Equatable, CaseIterable, 
         case .working: nil
         case .neverSetUp: "Open BlueGull AQI to set up"
         case .turnedOff, .needsApproval, .bundleMissing, .unreachable: "Background updates are off"
+        case .notWaking: "Background updates aren't running"
         case .permissionNotGranted, .permissionRefused: "Location access needed"
         }
     }
@@ -148,6 +184,8 @@ public enum BackgroundRefreshStatus: String, Sendable, Equatable, CaseIterable, 
             "Part of BlueGull AQI seems to be missing. Reinstalling should fix it."
         case .unreachable:
             "BlueGull AQI's background updater isn't responding. Quitting and reopening BlueGull AQI usually fixes it."
+        case .notWaking:
+            "BlueGull AQI's background updater hasn't run in a while, so air quality for your current location has stopped refreshing. Turning it off and on again should fix it."
         }
     }
 
@@ -162,6 +200,9 @@ public enum BackgroundRefreshStatus: String, Sendable, Equatable, CaseIterable, 
         case .permissionNotGranted: .turnOnInApp
         case .permissionRefused: .locationPrivacySettings
         case .bundleMissing, .unreachable: .none
+        // Re-registering is exactly the repair: it rebuilds the launchd
+        // record against the executable that actually exists now.
+        case .notWaking: .turnOnInApp
         }
     }
 

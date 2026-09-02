@@ -64,6 +64,10 @@ public struct LocationHelperStatusStore: Sendable {
     /// the other's half.
     private static let availabilityKey = "location-helper-availability"
 
+    /// Which build of the app performed the registration currently in
+    /// force (bluegull-aqi-hib.3). See `registeredBuild()`.
+    private static let registeredBuildKey = "location-helper-registered-build"
+
     private let store: SharedCacheStore
 
     public init(store: SharedCacheStore) {
@@ -100,6 +104,30 @@ public struct LocationHelperStatusStore: Sendable {
     /// rather than independently on each side.
     public func backgroundRefreshStatus() -> BackgroundRefreshStatus {
         BackgroundRefreshStatus.derive(availability: availability(), helperState: current())
+    }
+
+    /// The app build that registered the agent, or nil if nothing is
+    /// registered (bluegull-aqi-hib.3).
+    ///
+    /// SMAppService.h states that if the plist OR THE EXECUTABLE changes,
+    /// the service must be re-registered or it may not launch. Every app
+    /// update changes the executable, so without this an updated BlueGull
+    /// would carry a registration pointing at the previous build -- and the
+    /// failure mode is the worst kind for this epic: the Login Items row is
+    /// still there, `SMAppService.status` still says `.enabled`, and the
+    /// agent simply never wakes. Nothing in the system reports it.
+    ///
+    /// Stored rather than derived because there is nothing to derive it
+    /// from: launchd exposes no "which build registered you" fact, so the
+    /// app has to write down what it did.
+    public func registeredBuild() -> String? {
+        guard let data = store.data(forKey: Self.registeredBuildKey) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// nil clears the record, for unregistration.
+    public func recordRegisteredBuild(_ build: String?) {
+        store.set(build.flatMap { $0.data(using: .utf8) }, forKey: Self.registeredBuildKey)
     }
 
     /// Called by the helper after every run, so a grant revoked in System

@@ -44,6 +44,13 @@ public enum LocationHelperIdentity {
     /// phase for it rather than treating it as packaging taste.
     public static let plistName = "\(launchAgentLabel).plist"
 
+    /// The helper executable's path relative to the app bundle -- the same
+    /// value the launch agent plist's `BundleProgram` key carries, and it
+    /// must stay identical to it. Used by the app to fingerprint the
+    /// executable it registered (bluegull-aqi-hib.3).
+    public static let bundleRelativeExecutablePath =
+        "Contents/Library/LoginItems/BluegullAQIHelper.app/Contents/MacOS/BluegullAQIHelper"
+
     /// The repeating XPC activity declared under the plist's `LaunchEvents`
     /// and checked in to with `XPC_ACTIVITY_CHECK_IN`. Declaring criteria in
     /// the plist rather than calling `xpc_activity_register` with them in

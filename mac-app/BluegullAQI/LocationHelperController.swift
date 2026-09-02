@@ -73,14 +73,18 @@ enum LocationHelperController {
     /// start rather than debugged later from a helper that quietly stopped
     /// waking.
     @discardableResult
-    static func register() -> Result<SMAppService.Status, Error> {
+    static func register(build: String = executableFingerprint) -> Result<SMAppService.Status, Error> {
         let service = self.service
         if service.status == .enabled {
             try? service.unregister()
         }
         do {
             try service.register()
-            log.notice("HELPER_REGISTERED status=\(describe(service.status), privacy: .public)")
+            // Stamped on every successful registration so
+            // `reregisterIfBundleChanged()` can tell a registration made by
+            // THIS build from one inherited across an update.
+            statusStore?.recordRegisteredBuild(build)
+            log.notice("HELPER_REGISTERED status=\(describe(service.status), privacy: .public) build=\(build, privacy: .public)")
             return .success(service.status)
         } catch {
             let ns = error as NSError
@@ -92,6 +96,120 @@ enum LocationHelperController {
         }
     }
 
+    private static var statusStore: LocationHelperStatusStore? {
+        UserDefaultsCacheStore().map(LocationHelperStatusStore.init(store:))
+    }
+
+    /// Re-registers the agent after an app update (bluegull-aqi-hib.3).
+    ///
+    /// SMAppService.h: if the plist or the executable changes, the service
+    /// must be re-registered or it may not launch. Every app update changes
+    /// the executable, and the resulting failure is invisible -- the Login
+    /// Items row is still present, `status` still reports `.enabled`, and
+    /// the agent simply never wakes again. That is the same
+    /// silent-and-deferred failure shape this epic keeps having to design
+    /// against, so it is handled at launch rather than left to be diagnosed
+    /// from a helper that mysteriously stopped.
+    ///
+    /// Only acts on a registration that already exists: an update must not
+    /// register an agent for someone who never agreed to one
+    /// (bluegull-aqi-hib.6), and re-registering a `.notRegistered` service
+    /// would do exactly that.
+    ///
+    /// WORTH VERIFYING LIVE ACROSS A REAL VERSION BUMP (bluegull-aqi-hib.9):
+    /// `register()` unregisters first, per that same header's
+    /// recommendation, and whether macOS preserves the user's approval
+    /// across that is not something the framework documents. If it does
+    /// not, every update would silently send users back to System Settings
+    /// -- which would be a worse failure than the stale registration this
+    /// prevents, and would mean preferring a plain re-`register()` instead.
+    /// Identifies the executable currently on disk, so a registration made
+    /// against a DIFFERENT one can be spotted.
+    ///
+    /// The app version alone is not enough, and today's failure proves it:
+    /// every rebuild that broke the registration carried the identical
+    /// version string, because `CURRENT_PROJECT_VERSION`/`GitCommitSHA` are
+    /// only stamped in by the Makefile -- a raw `xcodebuild` yields the
+    /// same "v0.2.1 (1)" forever. Two different executables sharing one
+    /// version string is also the normal case for any two builds from the
+    /// same commit.
+    ///
+    /// Size and modification date of the helper binary catch that: they
+    /// change on every rebuild, and for a shipped app they are fixed at
+    /// build time and preserved by `ditto`, Finder copies and DMG installs
+    /// alike, so they don't churn once installed. Cheap, too -- one `stat`,
+    /// no code-signing API and no hashing of a Mach-O on every launch.
+    static var executableFingerprint: String {
+        let url = Bundle.main.bundleURL.appendingPathComponent(
+            LocationHelperIdentity.bundleRelativeExecutablePath
+        )
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        let size = (attributes?[.size] as? NSNumber)?.intValue ?? -1
+        let modified = (attributes?[.modificationDate] as? Date)?.timeIntervalSince1970 ?? -1
+        return "\(AppVersionInfo.current)|\(size)|\(Int(modified))"
+    }
+
+    static func reregisterIfBundleChanged(currentBuild: String = executableFingerprint) {
+        guard let statusStore else { return }
+        let status = self.status
+        guard status == .enabled || status == .requiresApproval else { return }
+        guard statusStore.registeredBuild() != currentBuild else { return }
+
+        log.notice("""
+        HELPER_REREGISTERING was=\(statusStore.registeredBuild() ?? "(unrecorded)", privacy: .public) \
+        now=\(currentBuild, privacy: .public)
+        """)
+        register(build: currentBuild)
+    }
+
+    /// Lets `uninstall.command` remove the agent's Background Task
+    /// Management record before it deletes the app bundle
+    /// (bluegull-aqi-hib.3).
+    ///
+    /// ORDER IS THE WHOLE POINT. `SMAppService.unregister()` resolves its
+    /// service relative to `Bundle.main`, so it can only run from INSIDE
+    /// the bundle being removed -- once the .app is gone there is nothing
+    /// left to unregister with, and the Login Items row survives pointing
+    /// at a bundle that no longer exists. `launchctl bootout` is not a
+    /// substitute: it stops a running job and leaves the record untouched,
+    /// measured directly during the hib.10 spike.
+    ///
+    /// An env var rather than an argument or a URL scheme because the
+    /// caller is a shell script that has the executable's path and nothing
+    /// else, and because this must run before SwiftUI builds any scene.
+    /// It grants no privilege the app does not already have -- unregistering
+    /// its own login item is exactly what the Settings toggle does.
+    static func runHeadlessActionIfRequested() {
+        guard let action = ProcessInfo.processInfo.environment[headlessActionEnvironmentKey] else { return }
+        switch action {
+        case "unregister":
+            // `.notRegistered` is success, not failure: uninstalling
+            // something already absent is the expected common case, and the
+            // uninstaller should not report an error for it.
+            guard status != .notRegistered else {
+                print("background updater: not registered")
+                exit(0)
+            }
+            switch unregister() {
+            case .success:
+                print("background updater: unregistered")
+                exit(0)
+            case .failure(let error):
+                let ns = error as NSError
+                FileHandle.standardError.write(Data("background updater: unregister failed (\(ns.domain) \(ns.code))\n".utf8))
+                exit(1)
+            }
+        case "status":
+            print(describe(status))
+            exit(0)
+        default:
+            FileHandle.standardError.write(Data("unknown \(headlessActionEnvironmentKey): \(action)\n".utf8))
+            exit(2)
+        }
+    }
+
+    static let headlessActionEnvironmentKey = "BLUEGULL_HELPER_ACTION"
+
     /// Removes the agent AND its Background Task Management record -- the
     /// row in Login Items & Extensions. `launchctl bootout` alone only stops
     /// a running process and leaves that record behind, which is how a spike
@@ -100,6 +218,7 @@ enum LocationHelperController {
     static func unregister() -> Result<Void, Error> {
         do {
             try service.unregister()
+            statusStore?.recordRegisteredBuild(nil)
             log.notice("HELPER_UNREGISTERED")
             return .success(())
         } catch {
