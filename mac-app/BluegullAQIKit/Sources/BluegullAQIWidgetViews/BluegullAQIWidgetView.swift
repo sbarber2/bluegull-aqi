@@ -112,6 +112,20 @@ public struct BluegullAQIWidgetView: View {
                     .font(.caption2)
                     .foregroundStyle(.white.opacity(0.72))
             }
+            // bluegull-aqi-hib.7: WHY there is nothing to show, when the
+            // reason is background refresh rather than a fetch that failed.
+            // Without it a Current Location widget is indistinguishable
+            // from a broken one -- and under hib.6's Option 1 there is no
+            // app-side fallback to quietly paper over it, so this is the
+            // only place the user ever learns. Never on a pinned widget:
+            // `backgroundRefresh` is always `.working` for those.
+            if let caption = entry.backgroundRefresh.widgetCaption {
+                Text(caption)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.72))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
+            }
         }
         .multilineTextAlignment(.center)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

@@ -116,10 +116,11 @@ struct BluegullAQIApp: App {
                 lastError: refreshController?.lastError,
                 lastFetchedAt: refreshController?.lastFetchedAt,
                 onLocationChange: { Task { await refreshController?.refreshNow() } },
-                // bluegull-aqi-hib.6: "Not now" must be free AND reversible,
-                // so the offer stays available here for as long as the
-                // helper is off, however many times it has been declined.
-                needsLocationSetup: !Self.isRunningTests && LocationSetupCoordinator.shouldOfferSetupInPopover
+                // bluegull-aqi-hib.7: the popover explains WHICH way this
+                // is off and offers the matching fix. "Not now" must stay
+                // free AND reversible, so this offer never goes away while
+                // the helper is off, however many times it was declined.
+                backgroundRefresh: Self.isRunningTests ? .working : (refreshController?.backgroundRefreshStatus ?? .working)
             )
         } label: {
             // .task/.onChange live here, not on AQIPopoverView above --

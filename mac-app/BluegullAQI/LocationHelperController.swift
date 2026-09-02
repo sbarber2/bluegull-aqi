@@ -45,6 +45,23 @@ enum LocationHelperController {
     /// bluegull-aqi-hib.7.
     static var status: SMAppService.Status { service.status }
 
+    /// `status` translated into the shared vocabulary the widget can also
+    /// read (bluegull-aqi-hib.7). `SMAppService` is unavailable to an app
+    /// extension, so the app is the only process that can answer this, and
+    /// `LocationHelperStatusStore` is where it writes the answer down.
+    static var availability: LocationHelperAvailability {
+        switch status {
+        case .enabled: .enabled
+        case .requiresApproval: .requiresApproval
+        case .notRegistered: .notRegistered
+        case .notFound: .notFound
+        // A status the framework grows later is safer reported as "needs
+        // attention" than silently as "fine" -- the whole point of this
+        // issue is that failure here is otherwise invisible.
+        @unknown default: .unreachable
+        }
+    }
+
     /// Registers the agent, re-registering if it was already registered.
     ///
     /// The unregister-first step is not defensive tidying: SMAppService.h

@@ -50,6 +50,10 @@ public struct BluegullAQIWidgetEntry: TimelineEntry {
     /// network); the view just omits the extra line in that case.
     public let resolvedPlaceName: String?
 
+    /// bluegull-aqi-hib.7 -- `.working` for every pinned widget. See
+    /// `WidgetTimelineSnapshot.backgroundRefresh`.
+    public let backgroundRefresh: BackgroundRefreshStatus
+
     public init(
         date: Date,
         reading: AQIReading?,
@@ -57,7 +61,8 @@ public struct BluegullAQIWidgetEntry: TimelineEntry {
         locationName: String = LocationOptionEntity.currentLocation.name,
         lastSuccessfulFetchDate: Date? = nil,
         freshness: AQIFreshness? = nil,
-        resolvedPlaceName: String? = nil
+        resolvedPlaceName: String? = nil,
+        backgroundRefresh: BackgroundRefreshStatus = .working
     ) {
         self.date = date
         self.reading = reading
@@ -66,6 +71,7 @@ public struct BluegullAQIWidgetEntry: TimelineEntry {
         self.lastSuccessfulFetchDate = lastSuccessfulFetchDate
         self.freshness = freshness
         self.resolvedPlaceName = resolvedPlaceName
+        self.backgroundRefresh = backgroundRefresh
     }
 
     public init(_ snapshot: WidgetTimelineSnapshot, configuredLocation: Location? = nil, locationName: String = LocationOptionEntity.currentLocation.name) {
@@ -76,6 +82,7 @@ public struct BluegullAQIWidgetEntry: TimelineEntry {
         lastSuccessfulFetchDate = snapshot.lastSuccessfulFetchDate
         freshness = snapshot.freshness
         resolvedPlaceName = nil
+        backgroundRefresh = snapshot.backgroundRefresh
     }
 
     /// Same entry, `resolvedPlaceName` filled in -- `BluegullAQIWidgetTimelineProvider`
@@ -91,7 +98,8 @@ public struct BluegullAQIWidgetEntry: TimelineEntry {
             locationName: locationName,
             lastSuccessfulFetchDate: lastSuccessfulFetchDate,
             freshness: freshness,
-            resolvedPlaceName: resolvedPlaceName
+            resolvedPlaceName: resolvedPlaceName,
+            backgroundRefresh: backgroundRefresh
         )
     }
 }

@@ -181,3 +181,4 @@
 {"id":"int-0173f465070897a9f835ee8d7a9fdcbb","kind":"field_change","created_at":"2026-09-01T22:16:40.90019Z","actor":"Steve Barber","issue_id":"bluegull-aqi-hib.2","extra":{"field":"status","new_value":"closed","old_value":"open"}}
 {"id":"int-1a089fb8ccb3f6b450d0e91d758a3f2e","kind":"field_change","created_at":"2026-09-01T22:32:15.798997Z","actor":"Steve Barber","issue_id":"bluegull-aqi-hib.6","extra":{"field":"status","new_value":"closed","old_value":"open"}}
 {"id":"int-8c3cdd6aa8c9f4e0bdd07bcb4c723826","kind":"field_change","created_at":"2026-09-02T11:12:52.049914Z","actor":"Steve Barber","issue_id":"bluegull-aqi-hib.12","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}
+{"id":"int-56dc6e435520de2e9b33b3dd8fec1753","kind":"field_change","created_at":"2026-09-02T11:18:16.59535Z","actor":"Steve Barber","issue_id":"bluegull-aqi-der","extra":{"field":"status","new_value":"closed","old_value":"open","reason":"Closed"}}

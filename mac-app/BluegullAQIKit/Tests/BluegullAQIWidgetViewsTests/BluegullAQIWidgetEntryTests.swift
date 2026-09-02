@@ -35,3 +35,41 @@ final class BluegullAQIWidgetEntryTests: XCTestCase {
         XCTAssertEqual(updated.freshness, original.freshness)
     }
 }
+
+/// bluegull-aqi-hib.7. The snapshot knowing background refresh is off is
+/// worth nothing if the entry the widget actually renders drops it -- and
+/// because `backgroundRefresh` defaults to `.working`, dropping it would
+/// fail SILENTLY, showing a reassuring widget over a broken feature. Lives
+/// in this target rather than alongside the derivation tests because
+/// `BluegullAQIWidgetEntry` is in BluegullAQIWidgetViews, which
+/// BluegullAQIKitTests cannot see.
+final class WidgetEntryBackgroundRefreshTests: XCTestCase {
+    /// A local duplicate rather than a shared import -- test-only files
+    /// can't be linked across test targets (the same limitation
+    /// `FakeLocationResolver` and `FakeKeychainStore` already document).
+    private final class MemoryStore: SharedCacheStore, @unchecked Sendable {
+        private var values: [String: Data] = [:]
+        func data(forKey key: String) -> Data? { values[key] }
+        func set(_ data: Data?, forKey key: String) { values[key] = data }
+        func allKeys() -> [String] { Array(values.keys) }
+    }
+
+    private func entry(availability: LocationHelperAvailability) -> BluegullAQIWidgetEntry {
+        let store = MemoryStore()
+        LocationHelperStatusStore(store: store).recordAvailability(availability)
+        return BluegullAQIWidgetEntry(WidgetTimelineComputer(store: store).currentSnapshot(for: nil))
+    }
+
+    func testTheStatusSurvivesFromSnapshotIntoTheEntry() {
+        XCTAssertEqual(entry(availability: .requiresApproval).backgroundRefresh, .needsApproval)
+    }
+
+    /// The reverse-geocode step rebuilds the entry field by field, which is
+    /// exactly the kind of copy that quietly loses a newly-added property.
+    func testResolvingAPlaceNameDoesNotDropIt() {
+        let resolved = entry(availability: .requiresApproval).withResolvedPlaceName("Oakland, CA")
+
+        XCTAssertEqual(resolved.backgroundRefresh, .needsApproval)
+        XCTAssertEqual(resolved.resolvedPlaceName, "Oakland, CA")
+    }
+}

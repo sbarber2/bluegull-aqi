@@ -81,6 +81,7 @@ final class AQIRefreshController {
     private let cache: AppGroupCache
     private let scheduler: RefreshScheduler
     private let menuBarLocationMirror: SharedMenuBarLocationStore
+    private let helperStatusStore: LocationHelperStatusStore
     private var refreshTask: Task<Void, Never>?
 
     // bluegull-aqi-e70.47: drives RefreshScheduler's fast-retry cadence --
@@ -120,6 +121,7 @@ final class AQIRefreshController {
         coordinator = AQIFetchCoordinator(cache: cache)
         scheduler = RefreshScheduler(store: store)
         menuBarLocationMirror = SharedMenuBarLocationStore(store: store)
+        helperStatusStore = LocationHelperStatusStore(store: store)
         latestReading = cache.mostRecentEntry()
         lastFetchedAt = cache.lastSuccessfulFetchDate()
         if startOnInit {
@@ -156,7 +158,35 @@ final class AQIRefreshController {
     /// extension), so this loop also keeps that cache slot fresh on every
     /// cycle below, independent of whatever the menu bar itself is showing
     /// (bluegull-aqi-e10).
+    /// Live background-refresh status for the popover (bluegull-aqi-hib.7).
+    /// Recomputed on access rather than cached, for the same reason
+    /// `latestReadingFreshness` is: a user can switch the background item
+    /// off in System Settings at any moment and nothing notifies us, so a
+    /// stored flag would go quietly wrong.
+    var backgroundRefreshStatus: BackgroundRefreshStatus {
+        helperStatusStore.backgroundRefreshStatus()
+    }
+
+    /// Polls `SMAppService` and writes the answer into the App Group.
+    ///
+    /// Polling is the only mechanism available: there is NO notification
+    /// when a user disables a background item in Login Items & Extensions.
+    /// The same mitigation `LaunchAtLoginToggle` already applies to the
+    /// main app, with the same caveat -- it narrows the window in which the
+    /// app is wrong, it does not close it.
+    ///
+    /// Writing it down (rather than just reading it where needed) is what
+    /// lets the widget agree with the app: `SMAppService` is unavailable to
+    /// an app extension, so the widget cannot ask this question itself.
+    func refreshHelperAvailability() {
+        helperStatusStore.recordAvailability(LocationHelperController.availability)
+    }
+
     func refreshNow() async {
+        // Before anything reads the status this cycle, and before the
+        // current-location path below decides whether to bother poking a
+        // helper that may not be there at all.
+        refreshHelperAvailability()
         let mode = currentMode()
 
         // Mirrors the menu bar's current selection into the App Group
@@ -248,7 +278,17 @@ final class AQIRefreshController {
         if cache.currentLocationFreshness() == .fresh, let fresh = cache.getCurrentLocation() {
             return fresh
         }
-        _ = await LocationHelperController.refreshNow()
+        // Only worth poking something that is actually there. A poke at a
+        // deregistered agent just waits out its deadline.
+        guard LocationHelperController.availability == .enabled else {
+            throw LocationResolverError.locationUnavailable("background updates unavailable")
+        }
+        if await LocationHelperController.refreshNow() == nil {
+            // Registered and enabled, yet no answer -- the one failure
+            // SMAppService cannot see, so it is recorded here, where it is
+            // the only place it becomes observable (bluegull-aqi-hib.7).
+            helperStatusStore.recordAvailability(.unreachable)
+        }
         guard let reading = cache.getCurrentLocation() else {
             throw LocationResolverError.locationUnavailable("no current-location reading available")
         }

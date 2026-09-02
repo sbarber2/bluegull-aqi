@@ -56,6 +56,14 @@ public struct LocationHelperState: Sendable, Equatable, Codable {
 public struct LocationHelperStatusStore: Sendable {
     private static let key = "location-helper-state"
 
+    /// A SEPARATE key from `key` above, deliberately: the two records have
+    /// different writers -- the helper writes its own authorization, the
+    /// app writes what `SMAppService` reports -- and neither can see the
+    /// other's process. One key would mean two processes read-modify-
+    /// writing the same value, where whichever wrote last silently erases
+    /// the other's half.
+    private static let availabilityKey = "location-helper-availability"
+
     private let store: SharedCacheStore
 
     public init(store: SharedCacheStore) {
@@ -69,6 +77,29 @@ public struct LocationHelperStatusStore: Sendable {
     public func current() -> LocationHelperState? {
         guard let data = store.data(forKey: Self.key) else { return nil }
         return try? JSONDecoder().decode(LocationHelperState.self, from: data)
+    }
+
+    /// The app's view of whether the agent is registered and approved
+    /// (bluegull-aqi-hib.7). Written by the CONTAINER APP, because
+    /// `SMAppService` is unavailable to the widget extension -- app
+    /// extensions cannot manage services -- so this record is the widget's
+    /// only route to the answer.
+    public func recordAvailability(_ availability: LocationHelperAvailability) {
+        guard let data = try? JSONEncoder().encode(availability) else { return }
+        store.set(data, forKey: Self.availabilityKey)
+    }
+
+    /// nil before the app has polled even once this install.
+    public func availability() -> LocationHelperAvailability? {
+        guard let data = store.data(forKey: Self.availabilityKey) else { return nil }
+        return try? JSONDecoder().decode(LocationHelperAvailability.self, from: data)
+    }
+
+    /// The one answer both surfaces render from -- see
+    /// `BackgroundRefreshStatus` on why this is derived in shared code
+    /// rather than independently on each side.
+    public func backgroundRefreshStatus() -> BackgroundRefreshStatus {
+        BackgroundRefreshStatus.derive(availability: availability(), helperState: current())
     }
 
     /// Called by the helper after every run, so a grant revoked in System

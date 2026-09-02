@@ -25,11 +25,30 @@ public struct WidgetTimelineSnapshot: Sendable, Equatable {
     /// differently from a current one, instead of both looking identical.
     public let freshness: AQIFreshness?
 
-    public init(date: Date, reading: AQIReading?, lastSuccessfulFetchDate: Date? = nil, freshness: AQIFreshness? = nil) {
+    /// Why a CURRENT-LOCATION widget has nothing fresh to show
+    /// (bluegull-aqi-hib.7) -- `.working` for every pinned widget, always,
+    /// since pinned locations need no location grant at all and are
+    /// genuinely unaffected by any of this.
+    ///
+    /// Carried through the snapshot rather than read by the widget itself
+    /// because the widget CANNOT read it: the underlying signal is
+    /// `SMAppService.status`, which app extensions cannot query. The app
+    /// records it into the App Group and this passes it along, which is
+    /// what makes the two surfaces agree instead of each guessing.
+    public let backgroundRefresh: BackgroundRefreshStatus
+
+    public init(
+        date: Date,
+        reading: AQIReading?,
+        lastSuccessfulFetchDate: Date? = nil,
+        freshness: AQIFreshness? = nil,
+        backgroundRefresh: BackgroundRefreshStatus = .working
+    ) {
         self.date = date
         self.reading = reading
         self.lastSuccessfulFetchDate = lastSuccessfulFetchDate
         self.freshness = freshness
+        self.backgroundRefresh = backgroundRefresh
     }
 }
 
@@ -50,10 +69,12 @@ public struct WidgetTimelineSnapshot: Sendable, Equatable {
 public struct WidgetTimelineComputer: Sendable {
     private let cache: AppGroupCache
     private let refreshScheduler: RefreshScheduler
+    private let helperStatus: LocationHelperStatusStore
 
     public init(store: SharedCacheStore) {
         cache = AppGroupCache(store: store)
         refreshScheduler = RefreshScheduler(store: store)
+        helperStatus = LocationHelperStatusStore(store: store)
     }
 
     /// `location` is the widget instance's configured pin
@@ -101,7 +122,13 @@ public struct WidgetTimelineComputer: Sendable {
             date: now,
             reading: reading,
             lastSuccessfulFetchDate: cache.lastSuccessfulFetchDate(),
-            freshness: freshness
+            freshness: freshness,
+            // Only a nil `location` -- "Current Location" -- is affected.
+            // A widget pinned to a named place keeps working with no
+            // location grant at all (bluegull-aqi-hib.12), so reporting a
+            // problem on one would be telling the user something is wrong
+            // with a thing that is working (bluegull-aqi-hib.7).
+            backgroundRefresh: location == nil ? helperStatus.backgroundRefreshStatus() : .working
         )
     }
 

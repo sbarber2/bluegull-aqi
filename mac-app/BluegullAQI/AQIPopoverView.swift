@@ -49,13 +49,15 @@ struct AQIPopoverView: View {
     // next scheduled refresh, up to an hour away.
     let onLocationChange: () -> Void
 
-    // bluegull-aqi-hib.6: true while the background updater is off, so
-    // Current Location can't refresh. Shown as a working affordance rather
-    // than an error, because nothing is broken -- the user either hasn't
-    // been asked yet or said "Not now", and both are recoverable. This is
-    // the branch the whole re-askable pre-prompt exists to make possible:
-    // declining costs nothing precisely because this offer never goes away.
-    var needsLocationSetup = false
+    // bluegull-aqi-hib.7: why Current Location can't refresh, and what to
+    // do about it. `.working` renders nothing at all.
+    //
+    // Replaced hib.6's plain `needsLocationSetup: Bool`, which could only
+    // say "off" -- and "off" is four different situations with four
+    // different fixes. Being told to turn something on that is already on
+    // and merely awaiting macOS approval is the kind of wrong advice that
+    // makes people give up on an app.
+    var backgroundRefresh: BackgroundRefreshStatus = .working
 
     // bluegull-aqi-e70.27: injectable so render tests can substitute a
     // fake-backed resolver instead of `ResolvedPlaceNameCaption`'s own
@@ -114,11 +116,11 @@ struct AQIPopoverView: View {
 
             // Only for the current-location case: pinned locations work with
             // no location grant at all (CLGeocoder needs network, not
-            // location authorization), so showing this while a pin is
-            // selected would be telling the user something is wrong with a
-            // thing that is working fine.
-            if needsLocationSetup, resolvedLocationOption == .currentLocation {
-                locationSetupPrompt
+            // location authorization -- confirmed live, bluegull-aqi-hib.12),
+            // so showing this while a pin is selected would be telling the
+            // user something is wrong with a thing that is working fine.
+            if !backgroundRefresh.isWorking, resolvedLocationOption == .currentLocation {
+                backgroundRefreshNotice
             }
 
             if let reading,
@@ -211,23 +213,60 @@ struct AQIPopoverView: View {
         .background(AppBrand.backgroundGradient())
     }
 
-    private var locationSetupPrompt: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Label("Background updates are off", systemImage: "location.slash")
-                .font(.caption)
-                .foregroundStyle(.orange)
-                .fixedSize(horizontal: false, vertical: true)
-            Button("Turn On Background Updates") {
-                // Same explicit activation the Settings button needs -- an
-                // LSUIElement app isn't brought forward just by a window
-                // being created.
-                NSApp.activate(ignoringOtherApps: true)
-                openWindow(id: "location-setup")
+    /// bluegull-aqi-hib.7: says what happened, in plain language, and
+    /// offers a working way back. Never a bare error -- every case here is
+    /// something the user did or can undo, and treating it as a fault the
+    /// app suffered rather than a setting somebody changed would be both
+    /// inaccurate and useless.
+    @ViewBuilder
+    private var backgroundRefreshNotice: some View {
+        if let explanation = backgroundRefresh.explanation {
+            VStack(alignment: .leading, spacing: 6) {
+                Label(explanation, systemImage: "location.slash")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    // Without this a longer message truncates with an
+                    // ellipsis instead of wrapping -- same fix, and same
+                    // reason, as staleWarningBanner's own (bluegull-aqi-e70.40).
+                    .fixedSize(horizontal: false, vertical: true)
+
+                // The product degrades by one feature; say so, or a user
+                // whose pins are working fine reads this as "the app is
+                // broken" and stops trusting the numbers that ARE good.
+                Text(BackgroundRefreshStatus.pinnedLocationsUnaffected)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.72))
+                    .fixedSize(horizontal: false, vertical: true)
+
+                if let title = backgroundRefresh.recovery.buttonTitle {
+                    Button(title) { performRecovery() }
+                        .buttonStyle(.plain)
+                        .font(.caption.bold())
+                        .foregroundStyle(.white)
+                        .accessibilityIdentifier("backgroundRefreshRecoveryButton")
+                }
             }
-            .buttonStyle(.plain)
-            .font(.caption.bold())
-            .foregroundStyle(.white)
-            .accessibilityIdentifier("turnOnBackgroundUpdatesButton")
+        }
+    }
+
+    private func performRecovery() {
+        switch backgroundRefresh.recovery {
+        case .turnOnInApp:
+            // Same explicit activation the Settings button needs -- an
+            // LSUIElement app isn't brought forward just by a window being
+            // created.
+            NSApp.activate(ignoringOtherApps: true)
+            openWindow(id: "location-setup")
+        case .loginItemsSettings, .locationPrivacySettings:
+            // The two cases we genuinely cannot fix from inside the app: an
+            // unapproved background item, and a location grant CoreLocation
+            // will not re-prompt for. Taking the user to the right pane is
+            // the whole remedy available.
+            if let url = backgroundRefresh.recovery.settingsURL {
+                NSWorkspace.shared.open(url)
+            }
+        case .none:
+            break
         }
     }
 
