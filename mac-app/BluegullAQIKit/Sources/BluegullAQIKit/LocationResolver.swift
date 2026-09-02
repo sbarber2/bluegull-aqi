@@ -88,9 +88,7 @@ public protocol ReverseGeocoder: Sendable {
 /// already behind a protocol for exactly this reason; `CLLocationManager`
 /// was the one that wasn't, which is precisely why "the request never
 /// called back" had no test covering it and shipped as a hang.
-protocol LocationManaging: AnyObject {
-    var authorizationStatus: CLAuthorizationStatus { get }
-    var delegate: CLLocationManagerDelegate? { get set }
+protocol LocationManaging: LocationAuthorizationReporting {
     func requestLocation()
     func stopUpdatingLocation()
 }
@@ -151,7 +149,7 @@ public final class SystemLocationProvider: NSObject, LocationProvider, @unchecke
     private var activeRequest: LocationRequest?
     /// Same weak-delegate reason as `activeRequest` above, for the brief
     /// window where the authorization status is being settled.
-    private var activeAuthorizationWatch: AuthorizationWatch?
+    private var activeAuthorizationWatch: LocationAuthorizationWatcher?
 
     override public convenience init() {
         self.init(manager: CLLocationManager())
@@ -225,97 +223,20 @@ public final class SystemLocationProvider: NSObject, LocationProvider, @unchecke
         // `.notDetermined`.
         guard reported == .notDetermined else { return reported }
 
-        let watch = AuthorizationWatch(manager: manager, timeout: authorizationSettleTimeout)
-        activeAuthorizationWatch = watch
+        // Observing, not asking -- so a `.notDetermined` callback IS the
+        // answer here. See `LocationAuthorizationWatcher` for the hazard
+        // this shares with the helper agent, and why it is one shared type
+        // now rather than three copies (bluegull-aqi-hib.13).
+        let watcher = LocationAuthorizationWatcher(
+            timeout: authorizationSettleTimeout,
+            resolvesOnNotDetermined: true
+        )
+        activeAuthorizationWatch = watcher
         // Assignment is itself the trigger for the first callback.
-        manager.delegate = watch
-        let settled = await watch.settledStatus()
+        watcher.install(on: manager)
+        let settled = await watcher.settledStatus(fallingBackTo: { [manager] in manager.authorizationStatus })
         activeAuthorizationWatch = nil
         return settled
-    }
-}
-
-/// Waits for a `CLLocationManager`'s first authorization callback -- see
-/// `SystemLocationProvider.settledAuthorizationStatus()` for why that is
-/// the right signal to wait on. Resumes exactly once, from either the
-/// callback or the deadline, under the same lock discipline as
-/// `LocationRequest` below and for the same reason.
-private final class AuthorizationWatch: NSObject, CLLocationManagerDelegate, @unchecked Sendable {
-    private let lock = NSLock()
-    private var continuation: CheckedContinuation<CLAuthorizationStatus, Never>?
-    private var timeoutTask: Task<Void, Never>?
-    /// Non-nil once an answer exists, which doubles as the "already
-    /// finished" flag -- one piece of state rather than a separate boolean
-    /// that could disagree with it.
-    private var settled: CLAuthorizationStatus?
-
-    /// Read on both exits, rather than taking the `CLLocationManager` the
-    /// delegate callback hands back: that argument is always a real
-    /// `CLLocationManager`, so trusting it would read the machine's actual
-    /// authorization state and silently bypass the injected
-    /// `LocationManaging` every test drives -- the same reason
-    /// `LocationRequest` below holds its own reference.
-    private let manager: LocationManaging
-    private let timeout: TimeInterval
-
-    init(manager: LocationManaging, timeout: TimeInterval) {
-        self.manager = manager
-        self.timeout = timeout
-        super.init()
-    }
-
-    /// Resolves on the manager's first authorization callback, or on the
-    /// deadline -- which reports whatever the status has become by then,
-    /// so a manager that never calls back still yields the best available
-    /// answer rather than a guess.
-    ///
-    /// Handles a callback that has ALREADY arrived: the delegate is
-    /// assigned before this is awaited, and while a real
-    /// `CLLocationManager` delivers on the main queue rather than
-    /// synchronously inside the setter, relying on that ordering would make
-    /// correctness depend on a scheduling detail nothing guarantees. A
-    /// status recorded early is returned immediately instead of being lost
-    /// and waited out.
-    func settledStatus() async -> CLAuthorizationStatus {
-        await withCheckedContinuation { continuation in
-            lock.lock()
-            if let settled {
-                lock.unlock()
-                continuation.resume(returning: settled)
-                return
-            }
-            self.continuation = continuation
-            timeoutTask = Task { [weak self, timeout] in
-                try? await Task.sleep(nanoseconds: UInt64(max(0, timeout) * 1_000_000_000))
-                guard !Task.isCancelled, let self else { return }
-                self.finish(with: self.manager.authorizationStatus)
-            }
-            lock.unlock()
-        }
-    }
-
-    /// The single exit, whichever of the callback and the deadline arrives
-    /// first -- and it records the answer whether or not anyone is waiting
-    /// on it yet, which is what makes an early callback safe.
-    private func finish(with status: CLAuthorizationStatus) {
-        lock.lock()
-        guard settled == nil else {
-            lock.unlock()
-            return
-        }
-        settled = status
-        let continuation = self.continuation
-        self.continuation = nil
-        let task = timeoutTask
-        timeoutTask = nil
-        lock.unlock()
-
-        task?.cancel()
-        continuation?.resume(returning: status)
-    }
-
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        finish(with: self.manager.authorizationStatus)
     }
 }
 
