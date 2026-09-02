@@ -13,6 +13,10 @@ that reading is systematic rather than lucky.
 Companion to `doc/DEVINSTALL.md`. Same spirit as the manual checks in
 `bluegull-aqi-e70.8` and `mtm.9`.
 
+Also published as a page, for reading on the host while operating the VM:
+<https://claude.ai/code/artifact/92b57b49-a02f-4020-8ae7-e5345993b11c>
+(this file is the source of truth; update it first).
+
 ---
 
 ## 0. Feasibility gate — do this first, before anything else

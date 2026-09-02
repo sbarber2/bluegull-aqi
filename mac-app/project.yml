@@ -65,12 +65,18 @@ targets:
         # bluegull-aqi-fw4.9: not 1.0 -- that got used up on three
         # indistinguishable ad-hoc builds already handed to a tester before
         # anyone was tracking build numbers. Bump by hand at real
-        # milestones; CURRENT_PROJECT_VERSION below is the number that
+        # milestones -- 0.3.0 for bluegull-aqi-hib (bluegull-aqi-hib.15),
+        # which inverts location ownership, adds a background agent and
+        # removes the app's own location entitlement. Bumped on the branch
+        # rather than at release so a dev build is not confusable with the
+        # last shipped one during clean-room testing.
+        #
+        # CURRENT_PROJECT_VERSION below is the number that
         # actually disambiguates one build from another, and it's set from
         # the command line (git commit count), not here -- see the Makefile
         # (app-build/app-package) for the override. This "1" is just the
         # fallback for a raw Xcode build that bypasses the Makefile.
-        MARKETING_VERSION: "0.2.1"
+        MARKETING_VERSION: "0.3.0"
         CURRENT_PROJECT_VERSION: "1"
         # bluegull-aqi-fw4.9: default so a raw Xcode build (bypassing the
         # Makefile's git-derived override) shows something legible instead
@@ -181,7 +187,7 @@ targets:
         # bluegull-aqi-fw4.9: kept in lockstep with the container app's own
         # MARKETING_VERSION/CURRENT_PROJECT_VERSION -- see that target's own
         # comment.
-        MARKETING_VERSION: "0.2.1"
+        MARKETING_VERSION: "0.3.0"
         CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
@@ -257,7 +263,7 @@ targets:
         ENABLE_HARDENED_RUNTIME: true
         # bluegull-aqi-fw4.9: kept in lockstep with the container app's own,
         # same reasoning as the widget extension's.
-        MARKETING_VERSION: "0.2.1"
+        MARKETING_VERSION: "0.3.0"
         CURRENT_PROJECT_VERSION: "1"
     info:
       path: BluegullAQIHelper/Info.plist
