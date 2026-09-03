@@ -265,6 +265,30 @@ targets:
         # grant and make any first-run test invalid. Keep in sync with
         # LocationHelperIdentity.bundleIdentifier.
         PRODUCT_BUNDLE_IDENTIFIER: solutions.bluegull.aqi.locationhelper
+        # WITHOUT THIS, `make app-package` CANNOT PRODUCE A DISTRIBUTABLE
+        # BUILD. This target is `type: application`, and Xcode installs any
+        # application-type dependency into an archive's own
+        # Products/Applications -- so the archive ended up containing BOTH
+        # BluegullAQI.app and BluegullAQIHelper.app as top-level products.
+        # Xcode then cannot tell which is the primary, writes no
+        # ApplicationProperties into the archive's Info.plist, and EVERY
+        # distribution method rejects it ("doesn't support distributing
+        # archive"). -exportArchive fails complaining about the `method`
+        # key, which is downstream noise and sends you to the wrong file:
+        # ExportOptions.plist is fine.
+        #
+        # SKIP_INSTALL is what Apple prescribes for embedded content, and it
+        # does not affect embedding: the copy phase takes the helper from
+        # BUILT_PRODUCTS_DIR, not from the install location. Confirmed --
+        # Contents/Library/LoginItems/BluegullAQIHelper.app is still present
+        # in the exported app.
+        #
+        # Found 2026-09-03, and only by accident: a stray backtick in a
+        # shell string ran `make app-package` unintentionally. Nothing else
+        # in the epic exercises archiving, so this would otherwise have
+        # surfaced at the first attempt to build a DMG for the clean-room
+        # verification -- which is the very next step.
+        SKIP_INSTALL: true
         CODE_SIGN_STYLE: Automatic
         DEVELOPMENT_TEAM: G5DWPBWHQ5
         ENABLE_HARDENED_RUNTIME: true
