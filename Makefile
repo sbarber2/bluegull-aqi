@@ -62,9 +62,26 @@ NOTARY_PROFILE := bluegull-aqi-notary
 # commit. `-dirty` flags a build made from an uncommitted working tree --
 # deliberately loud, since a "clean" git commit-based build number is a lie
 # if the tree wasn't actually clean when it was built.
-GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)$(shell git diff --quiet HEAD -- 2>/dev/null || echo -dirty)
+GIT_DIRTY := $(shell git diff --quiet HEAD -- 2>/dev/null || echo dirty)
+GIT_SHA := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)$(if $(GIT_DIRTY),-dirty)
 GIT_BUILD_NUMBER := $(shell git rev-list --count HEAD 2>/dev/null || echo 0)
-XCODEBUILD_VERSION_OVERRIDES := GIT_COMMIT_SHA=$(GIT_SHA) CURRENT_PROJECT_VERSION=$(GIT_BUILD_NUMBER)
+# bluegull-aqi-hib.16: DERIVED, never typed. Empty for any build not made
+# from a tagged commit, which is what lets the app mark itself as a dev build
+# without putting a non-numeric string in CFBundleShortVersionString --
+# App Store Connect rejects those, and 8ef.16 plans App Store distribution.
+#
+# The alternative Steve floated was hand-typing "0.3.0dev" and removing it at
+# release. That has the fw4.9 failure mode built in: a hand-maintained value
+# somebody eventually forgets, which is exactly how three ad-hoc DMGs all
+# shipped reading "1.0". Here the marker disappears on its own, because
+# tagging IS the release step.
+#
+# Blanked when the tree is dirty: `git describe --exact-match` happily
+# describes HEAD regardless of uncommitted changes, so without this a dirty
+# working tree at a tagged commit would claim to be a release build. It
+# isn't one.
+GIT_RELEASE_TAG := $(if $(GIT_DIRTY),,$(shell git describe --exact-match --tags HEAD 2>/dev/null))
+XCODEBUILD_VERSION_OVERRIDES := GIT_COMMIT_SHA=$(GIT_SHA) CURRENT_PROJECT_VERSION=$(GIT_BUILD_NUMBER) GIT_RELEASE_TAG=$(GIT_RELEASE_TAG)
 # DMG Finder-window layout (bluegull-aqi-b3r) -- window size in points,
 # icon centers in the same coordinate space. Keep DMG_ICON_X/DMG_APPLINK_X
 # averaging to half of DMG_WINDOW_W so the pair stays centered in the
@@ -440,6 +457,16 @@ app-clean: app-stop widget-reset
 #      once, outside this repo.
 app-package:
 	@echo "Packaging build $(GIT_BUILD_NUMBER) ($(GIT_SHA))"
+	@# bluegull-aqi-hib.16: TAG BEFORE PACKAGING. An untagged commit
+	@# produces a DMG whose Settings pane and popover both say "-dev",
+	@# which is correct and deliberate -- but it means the release order is
+	@# `git tag`, then `make app-package`, not the reverse.
+	@if [ -z "$(GIT_RELEASE_TAG)" ]; then \
+		echo "  NOTE: no exact tag on HEAD$(if $(GIT_DIRTY), (working tree is dirty),) -- this builds as a DEV build."; \
+		echo "        Tag first if this is meant to be a release."; \
+	else \
+		echo "  Release tag: $(GIT_RELEASE_TAG)"; \
+	fi
 	cd $(MAC_APP_DIR) && xcodegen generate
 	rm -rf $(PACKAGE_BUILD_DIR)
 	mkdir -p $(PACKAGE_BUILD_DIR)

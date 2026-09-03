@@ -64,6 +64,15 @@ struct AQIPopoverView: View {
     // for location again.
     var upgradedFromPreHelperBuild = false
 
+    // bluegull-aqi-hib.16: Steve's own complaint was that telling a dev
+    // build from a release one meant reading the BUILD NUMBER in Settings.
+    // This puts it on the surface he actually looks at -- and only when it
+    // is a dev build, so release users see no clutter at all. Injectable
+    // for the same reason `locationResolver` is: a render test must not
+    // depend on how the test host happens to be stamped.
+    var isDevelopmentBuild = AppVersionInfo.isDevelopmentBuild
+    var versionText = AppVersionInfo.current
+
     // bluegull-aqi-e70.27: injectable so render tests can substitute a
     // fake-backed resolver instead of `ResolvedPlaceNameCaption`'s own
     // default hitting real CLGeocoder -- same reasoning as every other
@@ -202,6 +211,14 @@ struct AQIPopoverView: View {
             .buttonStyle(.plain)
             .foregroundStyle(.white.opacity(0.72))
             .accessibilityIdentifier("quitButton")
+
+            if isDevelopmentBuild {
+                Text(versionText)
+                    .font(.caption2)
+                    .foregroundStyle(.orange.opacity(0.85))
+                    .textSelection(.enabled)
+                    .accessibilityIdentifier("developmentBuildVersion")
+            }
         }
         .padding()
         .frame(width: 300)

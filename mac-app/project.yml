@@ -82,6 +82,11 @@ targets:
         # Makefile's git-derived override) shows something legible instead
         # of a literal unexpanded "$(GIT_COMMIT_SHA)" in Settings.
         GIT_COMMIT_SHA: unknown
+        # bluegull-aqi-hib.16: empty by default, and empty means "not a
+        # release build" -- so a raw Xcode build marks itself as a dev
+        # build, which is exactly right, since it is one. Only the Makefile
+        # ever sets this, and only from `git describe --exact-match`.
+        GIT_RELEASE_TAG: ""
         # BluegullAQI/Assets.xcassets/AppIcon.appiconset (bluegull-aqi-b3r)
         # -- the 10-image .iconset Xcode/the OS needs, generated from
         # mac-app/branding/AppIcon-1024.png. Regenerate both if the source
@@ -131,6 +136,8 @@ targets:
         # above by Xcode's own Info.plist processing (already running with
         # -expandbuildsettings), not injected by a separate script phase.
         GitCommitSHA: $(GIT_COMMIT_SHA)
+        # bluegull-aqi-hib.16 -- see the GIT_RELEASE_TAG build setting above.
+        GitReleaseTag: $(GIT_RELEASE_TAG)
     entitlements:
       path: BluegullAQI/BluegullAQI.entitlements
       properties:
