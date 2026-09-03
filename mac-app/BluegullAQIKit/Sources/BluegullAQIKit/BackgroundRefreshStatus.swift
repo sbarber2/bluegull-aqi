@@ -70,6 +70,25 @@ public enum BackgroundRefreshStatus: String, Sendable, Equatable, CaseIterable, 
     case bundleMissing
     /// Registered and enabled, but not answering.
     case unreachable
+    /// Location Services is switched off for the WHOLE MACHINE. The
+    /// helper's own grant is intact and irrelevant while it is.
+    case locationServicesOff
+    /// Permission granted, agent running, and macOS still cannot work out
+    /// where the machine is.
+    ///
+    /// Not a hypothetical and not only a VM artifact. Mac positioning leans
+    /// on Wi-Fi scanning, so a Mac mini or Studio on Ethernet with Wi-Fi
+    /// switched off lands here permanently -- a mainstream configuration.
+    /// Steve observed the same state in a macOS VM on 2026-09-02, where
+    /// Apple's own Weather app could not resolve a location despite having
+    /// permission.
+    ///
+    /// This case exists because without it the app said `.working`: the
+    /// derivation read only registration and authorization, both of which
+    /// are perfectly healthy here, while nothing ever refreshed. Blank menu
+    /// bar, "No Data" widget, no explanation anywhere -- the exact silent
+    /// failure this whole epic is built to avoid.
+    case locationUnavailable
     /// Registered, approved, holding a grant -- and demonstrably not
     /// running anyway.
     ///
@@ -138,9 +157,21 @@ public enum BackgroundRefreshStatus: String, Sendable, Equatable, CaseIterable, 
                 return .permissionNotGranted
             case .authorized:
                 // Enabled and granted, but has it actually run lately?
-                return now.timeIntervalSince(state.recordedAt) > silenceImpliesNotWaking
-                    ? .notWaking
-                    : .working
+                if now.timeIntervalSince(state.recordedAt) > silenceImpliesNotWaking {
+                    return .notWaking
+                }
+                // Running, and still getting nowhere. `servicesEnabled ==
+                // false` is checked first because it is both more specific
+                // and more actionable -- a master switch the user can flip
+                // beats "your Wi-Fi is probably off". nil means the record
+                // predates that field, so it says nothing either way.
+                if state.servicesEnabled == false {
+                    return .locationServicesOff
+                }
+                if state.lastOutcome == HelperRefreshJob.Outcome.locationUnavailableLabel {
+                    return .locationUnavailable
+                }
+                return .working
             }
         }
     }
@@ -158,6 +189,8 @@ public enum BackgroundRefreshStatus: String, Sendable, Equatable, CaseIterable, 
         case .neverSetUp: "Open BlueGull AQI to set up"
         case .turnedOff, .needsApproval, .bundleMissing, .unreachable: "Background updates are off"
         case .notWaking: "Background updates aren't running"
+        case .locationServicesOff: "Location Services is off"
+        case .locationUnavailable: "Can't determine your location"
         case .permissionNotGranted, .permissionRefused: "Location access needed"
         }
     }
@@ -201,6 +234,14 @@ public enum BackgroundRefreshStatus: String, Sendable, Equatable, CaseIterable, 
             "BlueGull AQI's background updater isn't responding. Quitting and reopening BlueGull AQI usually fixes it."
         case .notWaking:
             "BlueGull AQI's background updater hasn't run in a while, so air quality for your current location has stopped refreshing. Turning it off and on again should fix it."
+        case .locationServicesOff:
+            "Location Services is turned off for this Mac, so nothing can work out where you are. BlueGull AQI's own permission is fine and will start working again as soon as you turn it back on."
+        case .locationUnavailable:
+            // Names the likely cause rather than restating the symptom.
+            // "Could not determine your location" alone leaves the user
+            // with nothing to do; on a Mac the answer is nearly always
+            // Wi-Fi, because positioning leans on scanning for networks.
+            "BlueGull AQI has permission to use your location, but macOS can't work out where this Mac is. That usually means Wi-Fi is turned off — Mac location needs it even when you're on Ethernet."
         }
     }
 
@@ -218,6 +259,12 @@ public enum BackgroundRefreshStatus: String, Sendable, Equatable, CaseIterable, 
         // Re-registering is exactly the repair: it rebuilds the launchd
         // record against the executable that actually exists now.
         case .notWaking: .turnOnInApp
+        case .locationServicesOff: .locationPrivacySettings
+        // Deliberately no button. The fix is Wi-Fi, which is not a pane we
+        // can deep-link to, and offering "Open Location Settings" here
+        // would send the user somewhere that looks correct and changes
+        // nothing -- worse than no button at all.
+        case .locationUnavailable: .none
         }
     }
 

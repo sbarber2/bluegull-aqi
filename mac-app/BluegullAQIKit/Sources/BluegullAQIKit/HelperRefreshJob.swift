@@ -40,6 +40,13 @@ public struct HelperRefreshJob: Sendable {
         case locationUnavailable(LocationResolverError)
         case fetchFailed(AQIFetchError)
 
+        /// The one label another type branches on, named rather than
+        /// duplicated as a literal -- `BackgroundRefreshStatus.derive`
+        /// reads it out of the shared store to tell "granted but getting
+        /// nowhere" from "working" (bluegull-aqi-hib.18). A typo in a
+        /// string literal there would fail silently, reporting healthy.
+        public static let locationUnavailableLabel = "location-unavailable"
+
         /// Short, stable, log/XPC-safe label. Deliberately carries no
         /// coordinates and no reading values -- this crosses a process
         /// boundary into the unified log, where it is world-readable.
@@ -48,7 +55,7 @@ public struct HelperRefreshJob: Sendable {
             case .refreshed: "refreshed"
             case .skippedStillFresh: "skipped-still-fresh"
             case .notAuthorized: "not-authorized"
-            case .locationUnavailable: "location-unavailable"
+            case .locationUnavailable: Self.locationUnavailableLabel
             case .fetchFailed: "fetch-failed"
             }
         }

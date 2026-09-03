@@ -85,10 +85,25 @@ func runRefresh(reason: String, force: Bool = false) async -> String {
     secs=\(String(format: "%.1f", Date().timeIntervalSince(started)), privacy: .public) \
     at=\(stamp(), privacy: .public)
     """)
+    // Read BEFORE the main-actor hop below, so the potentially-blocking
+    // call stays off main (see locationServicesEnabled's own note).
+    let servicesEnabled = LocationAuthorizationRequester.locationServicesEnabled()
     statusStore?.record(
         authorization: await LocationAuthorizationRequester.settledAuthorization(log: log),
-        lastOutcome: outcome.label
+        lastOutcome: outcome.label,
+        servicesEnabled: servicesEnabled
     )
+    if outcome.label == HelperRefreshJob.Outcome.locationUnavailableLabel {
+        // Worth its own line: "authorized but no fix" is otherwise
+        // indistinguishable in the log from a healthy run that had nothing
+        // to do, and it is the state a Mac on Ethernet with Wi-Fi off sits
+        // in permanently (bluegull-aqi-hib.18).
+        log.error("""
+        NO_FIX pid=\(pid, privacy: .public) \
+        servicesEnabled=\(servicesEnabled, privacy: .public) \
+        -- granted, but macOS could not determine a location
+        """)
+    }
     return outcome.label
 }
 
@@ -114,7 +129,11 @@ func requestAuthorizationThenRefresh() async -> (authorization: LocationHelperAu
         // they just granted -- see HelperRefreshJob.run(now:force:).
         outcome = await runRefresh(reason: "first-run", force: true)
     } else {
-        statusStore?.record(authorization: authorization, lastOutcome: nil)
+        statusStore?.record(
+            authorization: authorization,
+            lastOutcome: nil,
+            servicesEnabled: LocationAuthorizationRequester.locationServicesEnabled()
+        )
     }
 
     log.notice("""

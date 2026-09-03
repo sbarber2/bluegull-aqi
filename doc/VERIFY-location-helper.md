@@ -50,6 +50,7 @@ Management state beyond what is already there. They are just running the app.
 | K — approval across an update | **VM** | mutates the BTM record |
 | L — uninstall leaves nothing | **VM** | destructive; trivial to redo from a snapshot |
 | M — idle footprint | host | observation only |
+| N — granted but no fix obtainable | **VM** | the VM is the easiest place to *produce* this state |
 
 ### Does CoreLocation work in the VM?
 
@@ -66,6 +67,13 @@ If it cannot fix, the VM checks still stand — A, B, F, J and K are about
 prompts, counts, states and copy. Where one of them also expects a *reading*,
 that half simply moves to the host; the doc flags those below. A VM that
 cannot resolve location is not an app failure and must not be recorded as one.
+
+**But it is a state the app must handle, and check N is where that gets
+tested.** A grant can exist while a fix is simply unobtainable — Steve
+observed exactly this in the guest on 2026-09-02, where Apple's own Weather
+app could not resolve a location despite having permission. So a VM that
+cannot fix is not merely a limitation to work around; it is the cheapest way
+to reproduce a configuration real users have.
 
 ---
 
@@ -334,6 +342,33 @@ Run **Uninstall BlueGull AQI.command** from the DMG.
 - **Fails if:** the row survives. Order matters — `SMAppService.unregister()`
   resolves relative to `Bundle.main` and cannot run once the bundle is gone,
   and `launchctl bootout` stops a job without removing the record.
+
+### N. Granted, running, and still no fix — **VM**
+
+The state a VM lands in naturally, and a Mac mini or Studio on Ethernet with
+Wi-Fi off lands in permanently — Mac positioning leans on Wi-Fi scanning, so
+this is a mainstream configuration, not an edge case.
+
+Complete A (grant the permission), then either use a VM that cannot resolve
+location, or on hardware turn Wi-Fi off and stay on Ethernet.
+
+- **Expect:** the popover says BlueGull has permission but macOS can't work
+  out where this Mac is, and names Wi-Fi as the likely cause. The widget
+  says "Can't determine your location". No button — the fix is Wi-Fi, and
+  there is no pane to deep-link to.
+- **Then turn Location Services off entirely** (System Settings → Privacy &
+  Security). The copy must change to say Location Services is off for the
+  whole Mac, that BlueGull's own permission is fine, and now it *does* offer
+  a button to that pane.
+- **Fails if:** the app reports nothing wrong. That was the behaviour before
+  `hib.18`: the derivation read only registration and authorization — both
+  healthy here — so it said "working" while the menu bar stayed blank and
+  the widget said "No Data", with no explanation anywhere.
+- **Log:** `NO_FIX … servicesEnabled=true|false — granted, but macOS could
+  not determine a location`.
+- **Fails if (the other direction):** a *healthy* install shows this notice.
+  It keys off the helper's most recent outcome, so one successful wake must
+  clear it.
 
 ### M. Idle footprint — **host**
 

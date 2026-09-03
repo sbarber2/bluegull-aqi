@@ -132,6 +132,18 @@ final class LocationAuthorizationRequester: NSObject, @unchecked Sendable {
         return authorization
     }
 
+    /// Whether Location Services is on for the whole machine
+    /// (bluegull-aqi-hib.18) -- a different question from this bundle's own
+    /// grant, and one the app cannot ask for itself.
+    ///
+    /// Deliberately NOT called on the main actor. Apple documents this as
+    /// potentially blocking, and blocking main in a process that is holding
+    /// a launchd transaction is how a background agent becomes a beachball
+    /// somebody else has to explain.
+    static func locationServicesEnabled() -> Bool {
+        CLLocationManager.locationServicesEnabled()
+    }
+
     static func map(_ status: CLAuthorizationStatus) -> LocationHelperAuthorization {
         switch status {
         case .notDetermined: .notDetermined

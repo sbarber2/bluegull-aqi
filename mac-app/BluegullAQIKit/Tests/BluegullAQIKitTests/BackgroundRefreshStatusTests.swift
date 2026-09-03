@@ -11,18 +11,90 @@ final class BackgroundRefreshStatusTests: XCTestCase {
     private func status(
         _ availability: LocationHelperAvailability?,
         _ authorization: LocationHelperAuthorization? = nil,
-        lastWroteSecondsAgo: TimeInterval = 0
+        lastWroteSecondsAgo: TimeInterval = 0,
+        lastOutcome: String? = nil,
+        servicesEnabled: Bool? = nil
     ) -> BackgroundRefreshStatus {
         BackgroundRefreshStatus.derive(
             availability: availability,
             helperState: authorization.map {
                 LocationHelperState(
                     authorization: $0,
-                    lastOutcome: nil,
-                    recordedAt: now.addingTimeInterval(-lastWroteSecondsAgo)
+                    lastOutcome: lastOutcome,
+                    recordedAt: now.addingTimeInterval(-lastWroteSecondsAgo),
+                    servicesEnabled: servicesEnabled
                 )
             },
             now: now
+        )
+    }
+
+    // MARK: - Granted, running, and still getting nowhere
+
+    /// bluegull-aqi-hib.18, found by Steve reasoning about the VM: a grant
+    /// can exist while a fix is simply unobtainable. Before this the
+    /// derivation read only registration and authorization -- both healthy
+    /// here -- and reported `.working` while nothing ever refreshed. Blank
+    /// menu bar, "No Data" widget, no explanation.
+    ///
+    /// NOT a VM artifact. Mac positioning leans on Wi-Fi scanning, so a Mac
+    /// mini or Studio on Ethernet with Wi-Fi off sits here permanently.
+    func testAuthorizedButUnableToFixIsNotReportedAsWorking() {
+        let outcome = HelperRefreshJob.Outcome.locationUnavailableLabel
+
+        XCTAssertEqual(status(.enabled, .authorized, lastOutcome: outcome), .locationUnavailable)
+    }
+
+    /// The master switch being off is both more specific and more
+    /// actionable than "your Wi-Fi is probably off", so it wins -- and it
+    /// is the one of the two we can actually deep-link a fix for.
+    func testTheSystemWideSwitchBeatsTheVaguerDiagnosis() {
+        let outcome = HelperRefreshJob.Outcome.locationUnavailableLabel
+
+        XCTAssertEqual(
+            status(.enabled, .authorized, lastOutcome: outcome, servicesEnabled: false),
+            .locationServicesOff
+        )
+        XCTAssertEqual(
+            status(.enabled, .authorized, lastOutcome: outcome, servicesEnabled: true),
+            .locationUnavailable
+        )
+    }
+
+    /// Records written before `servicesEnabled` existed decode with nil.
+    /// "We do not know" must never be reported as "it is off" -- that would
+    /// send every upgrading user to a System Settings pane with nothing
+    /// wrong in it.
+    func testAnUnknownSwitchStateIsNotTreatedAsOff() {
+        XCTAssertNotEqual(status(.enabled, .authorized, servicesEnabled: nil), .locationServicesOff)
+    }
+
+    /// A healthy run must still read as healthy -- this branch sits on the
+    /// success path, so over-triggering it would put a warning in front of
+    /// every working install.
+    func testOrdinaryOutcomesStillReportWorking() {
+        XCTAssertEqual(status(.enabled, .authorized, lastOutcome: "refreshed"), .working)
+        XCTAssertEqual(status(.enabled, .authorized, lastOutcome: "skipped-still-fresh"), .working)
+        XCTAssertEqual(status(.enabled, .authorized, lastOutcome: nil), .working)
+    }
+
+    /// The label is the contract between two files in different targets.
+    /// A literal on either side would drift silently and report healthy.
+    func testTheLabelMatchesWhatTheJobActuallyWrites() {
+        let job = HelperRefreshJob.Outcome.locationUnavailable(.timedOut(15))
+
+        XCTAssertEqual(job.label, HelperRefreshJob.Outcome.locationUnavailableLabel)
+    }
+
+    /// Silence still wins over a stale diagnosis: a helper that has not
+    /// written in six hours is not running at all, whatever its last
+    /// outcome happened to say.
+    func testNotWakingOutranksAStaleLastOutcome() {
+        XCTAssertEqual(
+            status(.enabled, .authorized,
+                   lastWroteSecondsAgo: BackgroundRefreshStatus.silenceImpliesNotWaking + 60,
+                   lastOutcome: HelperRefreshJob.Outcome.locationUnavailableLabel),
+            .notWaking
         )
     }
 

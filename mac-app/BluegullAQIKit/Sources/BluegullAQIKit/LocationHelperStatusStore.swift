@@ -40,6 +40,16 @@ public struct HelperMigration: Sendable, Equatable, Codable {
 /// The helper's last known state, written by the helper and read by the app.
 public struct LocationHelperState: Sendable, Equatable, Codable {
     public let authorization: LocationHelperAuthorization
+
+    /// Whether Location Services is switched on for the whole machine, as
+    /// the helper last saw it (bluegull-aqi-hib.18). Distinct from
+    /// `authorization`, which is this bundle's own grant: the master switch
+    /// can be off while the grant is perfectly intact, and the two want
+    /// completely different advice.
+    ///
+    /// Optional because records written before this existed decode without
+    /// it, and "we do not know" must not be reported as "it is off".
+    public let servicesEnabled: Bool?
     /// `HelperRefreshJob.Outcome.label` from the helper's most recent run,
     /// or nil if it hasn't run one yet. Deliberately the label rather than
     /// the outcome itself -- this is a status record, not a second copy of
@@ -47,10 +57,16 @@ public struct LocationHelperState: Sendable, Equatable, Codable {
     public let lastOutcome: String?
     public let recordedAt: Date
 
-    public init(authorization: LocationHelperAuthorization, lastOutcome: String?, recordedAt: Date) {
+    public init(
+        authorization: LocationHelperAuthorization,
+        lastOutcome: String?,
+        recordedAt: Date,
+        servicesEnabled: Bool? = nil
+    ) {
         self.authorization = authorization
         self.lastOutcome = lastOutcome
         self.recordedAt = recordedAt
+        self.servicesEnabled = servicesEnabled
     }
 }
 
@@ -191,12 +207,14 @@ public struct LocationHelperStatusStore: Sendable {
     public func record(
         authorization: LocationHelperAuthorization,
         lastOutcome: String?,
-        now: Date = Date()
+        now: Date = Date(),
+        servicesEnabled: Bool? = nil
     ) {
         let state = LocationHelperState(
             authorization: authorization,
             lastOutcome: lastOutcome,
-            recordedAt: now
+            recordedAt: now,
+            servicesEnabled: servicesEnabled
         )
         guard let data = try? JSONEncoder().encode(state) else { return }
         // Writing through `SharedCacheStore` rather than `UserDefaults`
