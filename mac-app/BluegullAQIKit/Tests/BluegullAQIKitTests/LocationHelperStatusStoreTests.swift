@@ -62,6 +62,53 @@ final class LocationHelperStatusStoreTests: XCTestCase {
         XCTAssertEqual(subject.current()?.authorization, .authorized)
     }
 
+    // MARK: - servicesEnabled (bluegull-aqi-hib.18)
+
+    func testServicesEnabledRoundTrips() {
+        let subject = LocationHelperStatusStore(store: InMemorySharedCacheStore())
+
+        subject.record(authorization: .authorized, lastOutcome: "refreshed", servicesEnabled: false)
+
+        XCTAssertEqual(subject.current()?.servicesEnabled, false)
+    }
+
+    /// THE IMPORTANT ONE, and it deliberately does not round-trip through
+    /// the current type -- doing that would prove nothing, because both
+    /// ends would share whatever shape the type happens to have today.
+    ///
+    /// This decodes a LITERAL record in the pre-hib.18 format, which is what
+    /// is actually sitting in the App Group of every existing install. Had
+    /// `servicesEnabled` been added as non-optional, decoding would fail
+    /// outright, `current()` would return nil, and `derive` would report
+    /// `.neverSetUp` -- telling every upgrading user their helper was never
+    /// set up, while it ran perfectly. Silent, total, and invisible to any
+    /// test that encodes with the same version it decodes with.
+    func testARecordWrittenBeforeServicesEnabledExistedStillDecodes() throws {
+        let store = InMemorySharedCacheStore()
+        let legacy = #"{"authorization":"authorized","lastOutcome":"refreshed","recordedAt":810042777.135433}"#
+        store.set(Data(legacy.utf8), forKey: "location-helper-state")
+        let subject = LocationHelperStatusStore(store: store)
+
+        let state = try XCTUnwrap(subject.current(), "a pre-hib.18 record must still decode")
+
+        XCTAssertEqual(state.authorization, .authorized)
+        XCTAssertEqual(state.lastOutcome, "refreshed")
+        XCTAssertNil(state.servicesEnabled, "absent must mean unknown, never false")
+    }
+
+    /// And the consequence of the above, end to end: an upgrading install
+    /// whose record predates the field must still be reported as working,
+    /// not diagnosed with a problem it does not have.
+    func testALegacyRecordStillDerivesAsWorking() {
+        let store = InMemorySharedCacheStore()
+        let legacy = #"{"authorization":"authorized","lastOutcome":"refreshed","recordedAt":\#(Date().timeIntervalSinceReferenceDate)}"#
+        store.set(Data(legacy.utf8), forKey: "location-helper-state")
+        let subject = LocationHelperStatusStore(store: store)
+        subject.recordAvailability(.enabled)
+
+        XCTAssertEqual(subject.backgroundRefreshStatus(), .working)
+    }
+
     /// These strings are persisted across processes and across app updates,
     /// so they are a wire format, not an implementation detail.
     func testRawValuesAreStable() {

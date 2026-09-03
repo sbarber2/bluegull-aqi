@@ -51,6 +51,45 @@ final class WidgetBackgroundRefreshTests: XCTestCase {
         XCTAssertEqual(snapshot.backgroundRefresh, .neverSetUp)
     }
 
+    /// bluegull-aqi-hib.18's states have to reach the widget too, and they
+    /// arrive by a different route from the others: not from
+    /// `SMAppService.status`, which the app writes, but from the HELPER's
+    /// own recorded outcome. A widget saying nothing while the app explains
+    /// the problem is the surfaces-disagree failure hib.7 exists to prevent.
+    func testTheGrantedButNoFixStatesReachTheWidget() {
+        for (svc, outcome, expected) in [
+            (true, HelperRefreshJob.Outcome.locationUnavailableLabel, BackgroundRefreshStatus.locationUnavailable),
+            (false, HelperRefreshJob.Outcome.locationUnavailableLabel, .locationServicesOff),
+        ] as [(Bool, String, BackgroundRefreshStatus)] {
+            let store = InMemorySharedCacheStore()
+            let helper = LocationHelperStatusStore(store: store)
+            helper.recordAvailability(.enabled)
+            helper.record(authorization: .authorized, lastOutcome: outcome, servicesEnabled: svc)
+
+            let snapshot = WidgetTimelineComputer(store: store).currentSnapshot(for: nil)
+
+            XCTAssertEqual(snapshot.backgroundRefresh, expected)
+            XCTAssertNotNil(snapshot.backgroundRefresh.widgetCaption, "\(expected) must say something on the widget")
+        }
+    }
+
+    /// And still never on a pinned widget — these two states are about
+    /// resolving the CURRENT location, which a named location does not need.
+    func testAPinnedWidgetIgnoresTheNoFixStatesToo() {
+        let store = InMemorySharedCacheStore()
+        let helper = LocationHelperStatusStore(store: store)
+        helper.recordAvailability(.enabled)
+        helper.record(
+            authorization: .authorized,
+            lastOutcome: HelperRefreshJob.Outcome.locationUnavailableLabel,
+            servicesEnabled: false
+        )
+
+        let snapshot = WidgetTimelineComputer(store: store).currentSnapshot(for: pinned)
+
+        XCTAssertEqual(snapshot.backgroundRefresh, .working)
+    }
+
     /// The criterion this protects: pinned locations need no location grant
     /// at all (confirmed live, bluegull-aqi-hib.12), so a pinned widget must
     /// never be told anything is wrong. Reporting a problem on a surface

@@ -178,6 +178,55 @@ final class BackgroundRefreshStatusTests: XCTestCase {
         XCTAssertEqual(status(nil, .authorized), .working)
     }
 
+    // MARK: - Exhaustiveness
+
+    /// Every case must be REACHABLE from `derive`. The allCases tests below
+    /// prove a state has copy and a way back; this proves it can actually
+    /// happen — which is the other half, and the half that silently rots.
+    ///
+    /// Sweeps every combination of the inputs `derive` reads and collects
+    /// the outputs. A case added later with no derivation path fails here
+    /// rather than shipping as unreachable dead copy; a case whose only
+    /// path is accidentally shadowed by an earlier branch fails here too.
+    func testEveryStateIsReachableFromDerive() {
+        let availabilities: [LocationHelperAvailability?] =
+            [nil] + LocationHelperAvailability.allCases.map { $0 }
+        let authorizations: [LocationHelperAuthorization?] = [nil, .notDetermined, .refused, .authorized]
+        let services: [Bool?] = [nil, true, false]
+        let outcomes: [String?] = [nil, "refreshed", HelperRefreshJob.Outcome.locationUnavailableLabel]
+        let ages: [TimeInterval] = [0, BackgroundRefreshStatus.silenceImpliesNotWaking + 60]
+
+        var reached: Set<BackgroundRefreshStatus> = []
+        for a in availabilities {
+            for auth in authorizations {
+                for svc in services {
+                    for outcome in outcomes {
+                        for age in ages {
+                            reached.insert(BackgroundRefreshStatus.derive(
+                                availability: a,
+                                helperState: auth.map {
+                                    LocationHelperState(
+                                        authorization: $0,
+                                        lastOutcome: outcome,
+                                        recordedAt: now.addingTimeInterval(-age),
+                                        servicesEnabled: svc
+                                    )
+                                },
+                                now: now
+                            ))
+                        }
+                    }
+                }
+            }
+        }
+
+        let unreachable = Set(BackgroundRefreshStatus.allCases).subtracting(reached)
+        XCTAssertTrue(
+            unreachable.isEmpty,
+            "unreachable from derive(), so the user can never be shown it: \(unreachable.map(\.rawValue).sorted())"
+        )
+    }
+
     // MARK: - Every non-working state must be actionable
 
     /// This issue's acceptance criteria require an explanation AND a way

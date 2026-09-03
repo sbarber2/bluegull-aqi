@@ -11,7 +11,7 @@ import Foundation
 /// down the answer; the widget reads it. Without that, the two surfaces
 /// could disagree about whether background refresh is working, which is
 /// exactly what this issue exists to prevent.
-public enum LocationHelperAvailability: String, Sendable, Equatable, Codable {
+public enum LocationHelperAvailability: String, Sendable, Equatable, CaseIterable, Codable {
     /// Registered and approved. Says nothing about whether it has a
     /// location grant -- that is `LocationHelperState.authorization`.
     case enabled
