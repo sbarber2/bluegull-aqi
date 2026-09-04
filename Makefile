@@ -210,6 +210,13 @@ test-swift:
 	cd $(MAC_APP_DIR) && xcodebuild test -scheme BluegullAQI -destination 'platform=macOS' \
 		-derivedDataPath $(TEST_DERIVED_DATA) -only-testing:BluegullAQITests CODE_SIGNING_ALLOWED=NO
 	cd $(MAC_APP_DIR)/BluegullAQIKit && swift test --skip BluegullAQIWidgetSnapshotTests
+	@# bluegull-aqi-der follow-up: building an app anywhere registers it with
+	@# LaunchServices, so the unsigned test build becomes a second
+	@# registration of solutions.bluegull.aqi competing with the real one --
+	@# and an unsigned extension has no App Group access, so a widget host
+	@# that picks it renders a placeholder forever. Unregister our own test
+	@# product rather than leaving it for widget-reset to find later.
+	-@$(LSREGISTER) -u "$(MAC_APP_DIR)/$(TEST_DERIVED_DATA)/Build/Products/Debug/BluegullAQI.app" >/dev/null 2>&1 || true
 
 # Pixel-level golden-image comparison for the widget's per-family layouts
 # (bluegull-aqi-mtm.11), split into its own target and make target
@@ -351,7 +358,21 @@ app-stop:
 # even though `pluginkit -m` still lists it as registered. Logging out and
 # back in does NOT clear this -- it's LaunchServices database state, not
 # anything session-scoped.
-# Finds every LaunchServices registration under any BluegullAQI-* DerivedData
+# Finds every LaunchServices registration for this app or its widget,
+# ANYWHERE -- not just under DerivedData (bluegull-aqi-der follow-up).
+#
+# The original pattern only matched DerivedData/BluegullAQI-*, which stopped
+# being sufficient the moment test-swift got its own -derivedDataPath inside
+# the repo: mac-app/build-tests/... and mac-app/build/export/... are equally
+# real registrations of the same bundle id, and this could not see them.
+# Found 2026-09-03 with SIX registrations live at once, three of them stale
+# or pointing at deleted paths, and the desktop widget stuck rendering
+# WidgetKit's placeholder.
+#
+# The build-tests copy is the dangerous one: it is built with
+# CODE_SIGNING_ALLOWED=NO, so its extension has no entitlements and no App
+# Group access. If the widget host binds to that one it can read nothing,
+# which looks exactly like the app being broken.
 # hash (stale or current -- lsregister re-adds the current one cleanly next
 # launch) and unregisters it, then restarts chronod so it drops its cached
 # "ignoring" state. Safe/reversible: LaunchServices re-indexes automatically,
@@ -370,7 +391,7 @@ app-stop:
 # it just relaunches it, same as Dock or Finder.
 widget-reset:
 	@paths=$$($(LSREGISTER) -dump 2>/dev/null \
-		| grep -E '^[[:space:]]*path:.*DerivedData/BluegullAQI-.*/BluegullAQI(Widget\.appex|\.app)( \(0x[0-9a-fA-F]+\))?$$' \
+		| grep -E '^[[:space:]]*path:.*/BluegullAQI(Widget\.appex|\.app)( \(0x[0-9a-fA-F]+\))?$$' \
 		| sed -E 's/^[[:space:]]*path:[[:space:]]+(.*) \(0x[0-9a-fA-F]+\)$$/\1/' \
 		| sort -u); \
 	if [ -z "$$paths" ]; then \
